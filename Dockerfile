@@ -23,14 +23,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 
 COPY . /app
 # 安装项目及运行依赖（显式包含 uvicorn/fastapi 避免运行时缺失）
-# 先安装依赖，保证 pydantic 版本 <2，避免 BaseSettings 兼容问题
-RUN pip install --no-cache-dir "pydantic<2"
+# 先安装核心依赖，固定 pydantic<2 且 fastapi 使用 v1 兼容版本
+RUN pip install --no-cache-dir "pydantic<2" "fastapi==0.109.2"
 
-# 安装项目及运行依赖
+# 安装项目及其余运行依赖
 RUN pip install --no-cache-dir . && \
     pip install --no-cache-dir \
       uvicorn \
-      fastapi \
       sqlalchemy \
       passlib[bcrypt] \
       python-jose \
