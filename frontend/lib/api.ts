@@ -2,21 +2,32 @@ import { Account, Task, TaskLog, TokenResponse } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
 
+const toRecord = (headers?: HeadersInit): Record<string, string> => {
+  if (!headers) return {};
+  if (headers instanceof Headers) {
+    return Object.fromEntries(headers.entries());
+  }
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(headers);
+  }
+  return headers as Record<string, string>;
+};
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
   token?: string | null
 ): Promise<T> {
-  const headers: HeadersInit = {
+  const mergedHeaders: Record<string, string> = {
+    ...toRecord(options.headers),
     "Content-Type": "application/json",
-    ...(options.headers || {}),
   };
   if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+    mergedHeaders["Authorization"] = `Bearer ${token}`;
   }
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers,
+    headers: mergedHeaders,
   });
   if (!res.ok) {
     const text = await res.text();
