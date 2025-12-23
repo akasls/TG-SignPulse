@@ -21,3 +21,4 @@ class TaskLog(Base):
 
     task = relationship("Task", back_populates="logs")
 
+

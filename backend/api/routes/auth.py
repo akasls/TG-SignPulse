@@ -41,3 +41,4 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 def me(current_user: User = Depends(auth_core.get_current_user)):
     return current_user
 
+

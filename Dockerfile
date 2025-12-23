@@ -2,10 +2,12 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /frontend
 
-COPY frontend/package.json frontend/package-lock.json* ./ 2>/dev/null || true
-COPY frontend/ ./
+# 先拷贝依赖清单，避免锁文件不存在导致 COPY 失败，使用通配符覆盖 package.json / package-lock.json
+COPY frontend/package*.json ./
+RUN npm install
 
-RUN npm install && npm run build
+COPY frontend/ ./
+RUN npm run build
 
 
 FROM python:3.12-slim AS app

@@ -20,3 +20,4 @@ def ensure_admin(db: Session, username: str = "admin", password: str = "admin123
     db.refresh(new_user)
     return new_user
 
+

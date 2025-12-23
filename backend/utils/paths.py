@@ -13,3 +13,4 @@ def ensure_data_dirs(settings: Settings) -> None:
     db_path: Path = settings.resolve_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
+
