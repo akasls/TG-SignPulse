@@ -28,15 +28,17 @@ COPY tg_signer/__init__.py ./tg_signer/__init__.py
 # 安装核心依赖，固定 pydantic<2 且 fastapi 使用 v1 兼容版本
 RUN pip install --no-cache-dir "pydantic<2" "fastapi==0.109.2"
 
+# 先安装 bcrypt，确保使用正确的后端
+RUN pip install --no-cache-dir "bcrypt==4.0.1"
+
 # 安装项目及其余运行依赖
 COPY . /app
 RUN pip install --no-cache-dir . && \
     pip install --no-cache-dir \
       uvicorn[standard] \
       sqlalchemy \
-      bcrypt \
-      passlib[bcrypt] \
-      python-jose[cryptography] \
+      "passlib[bcrypt]==1.7.4" \
+      "python-jose[cryptography]" \
       pyotp \
       apscheduler \
       python-multipart
