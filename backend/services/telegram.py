@@ -13,6 +13,9 @@ from backend.core.config import get_settings
 
 settings = get_settings()
 
+# 全局存储临时的登录 session
+_login_sessions = {}
+
 
 class TelegramService:
     """Telegram 服务类"""
@@ -137,7 +140,13 @@ class TelegramService:
             # 发送验证码
             sent_code = await client.send_code(phone_number)
             
-            await client.disconnect()
+            # 保存 client 到全局字典，不要断开连接
+            session_key = f"{account_name}_{phone_number}"
+            _login_sessions[session_key] = {
+                "client": client,
+                "phone_code_hash": sent_code.phone_code_hash,
+                "phone_number": phone_number,
+            }
             
             return {
                 "phone_code_hash": sent_code.phone_code_hash,
@@ -178,7 +187,6 @@ class TelegramService:
         Returns:
             登录结果
         """
-        from pyrogram import Client
         from pyrogram.errors import (
             PhoneCodeInvalid,
             PhoneCodeExpired,
@@ -186,38 +194,21 @@ class TelegramService:
             PasswordHashInvalid,
         )
         
-        api_id = os.getenv("TG_API_ID", "611335")
-        api_hash = os.getenv("TG_API_HASH", "d524b414d21f4d37f08684c1df41ac9c")
+        # 尝试从全局字典获取之前的 client
+        session_key = f"{account_name}_{phone_number}"
+        session_data = _login_sessions.get(session_key)
         
-        # 解析代理
-        proxy_dict = None
-        if proxy:
-            from urllib.parse import urlparse
-            parsed = urlparse(proxy)
-            proxy_dict = {
-                "scheme": parsed.scheme,
-                "hostname": parsed.hostname,
-                "port": parsed.port,
-            }
+        if not session_data:
+            raise ValueError("登录会话已过期，请重新发送验证码")
         
-        # 创建客户端 - 使用相同的 session 路径
-        session_path = str(self.session_dir / account_name)
-        client = Client(
-            name=session_path,
-            api_id=int(api_id),
-            api_hash=api_hash,
-            proxy=proxy_dict,
-            in_memory=False,
-        )
+        client = session_data["client"]
         
         try:
-            await client.connect()
+            # 移除验证码中的空格和横线
+            phone_code = phone_code.strip().replace(" ", "").replace("-", "")
             
             # 尝试使用验证码登录
             try:
-                # 移除验证码中的空格
-                phone_code = phone_code.strip().replace(" ", "").replace("-", "")
-                
                 signed_in = await client.sign_in(
                     phone_number,
                     phone_code_hash,
@@ -227,8 +218,9 @@ class TelegramService:
                 # 登录成功，获取用户信息
                 me = await client.get_me()
                 
-                # 保存 session 并断开连接
+                # 断开连接并清理
                 await client.disconnect()
+                _login_sessions.pop(session_key, None)
                 
                 return {
                     "success": True,
@@ -240,7 +232,7 @@ class TelegramService:
             except SessionPasswordNeeded:
                 # 需要 2FA 密码
                 if not password:
-                    await client.disconnect()
+                    # 不断开连接，等待用户输入 2FA 密码
                     raise ValueError("此账号启用了两步验证，请输入 2FA 密码")
                 
                 # 使用 2FA 密码登录
@@ -248,8 +240,9 @@ class TelegramService:
                     await client.check_password(password)
                     me = await client.get_me()
                     
-                    # 保存 session 并断开连接
+                    # 断开连接并清理
                     await client.disconnect()
+                    _login_sessions.pop(session_key, None)
                     
                     return {
                         "success": True,
@@ -258,33 +251,41 @@ class TelegramService:
                         "username": me.username,
                     }
                 except PasswordHashInvalid:
-                    await client.disconnect()
                     raise ValueError("2FA 密码错误")
                     
         except PhoneCodeInvalid:
+            # 清理 session
             try:
                 await client.disconnect()
             except:
                 pass
+            _login_sessions.pop(session_key, None)
             raise ValueError("验证码错误，请检查验证码是否正确")
         except PhoneCodeExpired:
+            # 清理 session
             try:
                 await client.disconnect()
             except:
                 pass
+            _login_sessions.pop(session_key, None)
             raise ValueError("验证码已过期，请重新获取")
         except ValueError as e:
-            # 重新抛出我们自己的错误
-            try:
-                await client.disconnect()
-            except:
-                pass
+            # 如果是 2FA 错误，不清理 session
+            if "两步验证" not in str(e):
+                try:
+                    await client.disconnect()
+                except:
+                    pass
+                _login_sessions.pop(session_key, None)
             raise e
         except Exception as e:
+            # 清理 session
             try:
                 await client.disconnect()
             except:
                 pass
+            _login_sessions.pop(session_key, None)
+            
             # 更详细的错误信息
             error_msg = str(e)
             if "PHONE_CODE_INVALID" in error_msg:
@@ -295,7 +296,6 @@ class TelegramService:
                 raise ValueError("此账号启用了两步验证，请输入 2FA 密码")
             else:
                 raise ValueError(f"登录失败: {error_msg}")
-
 
     def login_sync(
         self,
