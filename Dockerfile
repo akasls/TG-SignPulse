@@ -31,6 +31,7 @@ RUN pip install --no-cache-dir . && \
     pip install --no-cache-dir \
       uvicorn \
       sqlalchemy \
+      bcrypt \
       passlib[bcrypt] \
       python-jose \
       pyotp \
