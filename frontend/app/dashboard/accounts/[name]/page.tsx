@@ -4,14 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { getToken } from "../../../../lib/auth";
-
-// 添加这个函数以支持静态导出
-export function generateStaticParams() {
-    return [];
-}
-
-export const dynamic = 'force-dynamic';
-export const dynamicParams = true;
 import {
     listSignTasks,
     deleteSignTask,
