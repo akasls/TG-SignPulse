@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, validator
 
 from backend.core.auth import get_current_user
 from backend.services.sign_tasks import sign_task_service
@@ -67,7 +67,7 @@ class SignTaskCreate(BaseModel):
     random_seconds: int = Field(0, description="随机延迟秒数")
     sign_interval: int = Field(1, description="签到间隔秒数")
 
-    @field_validator('name')
+    @validator('name')
     def name_must_be_valid_filename(cls, v):
         import re
         if not v or not v.strip():
@@ -131,7 +131,7 @@ def create_sign_task(
     import traceback
     try:
         # 转换 chats 为字典列表
-        chats_dict = [chat.model_dump() for chat in payload.chats]
+        chats_dict = [chat.dict() for chat in payload.chats]
         
         task = sign_task_service.create_task(
             task_name=payload.name,
@@ -175,7 +175,7 @@ def update_sign_task(
         # 转换 chats 为字典列表
         chats_dict = None
         if payload.chats is not None:
-            chats_dict = [chat.model_dump() for chat in payload.chats]
+            chats_dict = [chat.dict() for chat in payload.chats]
         
         task = sign_task_service.update_task(
             task_name=task_name,
