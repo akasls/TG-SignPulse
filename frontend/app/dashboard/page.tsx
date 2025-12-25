@@ -266,7 +266,7 @@ export default function Dashboard() {
               {accounts.map((account) => (
                 <Link
                   key={account.name}
-                  href={`/dashboard/accounts/${account.name}`}
+                  href={`/dashboard/account-tasks?name=${encodeURIComponent(account.name)}`}
                 >
                   <Card className="card-hover h-full cursor-pointer relative group">
                     <CardContent className="p-6">
