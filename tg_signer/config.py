@@ -52,6 +52,10 @@ class BaseJSONConfig(BaseModel):
     olds: ClassVar[Optional[List[Type["BaseJSONConfig"]]]] = None
     is_current: ClassVar[bool] = False
 
+    class Config:
+        keep_untouched = (cached_property,)
+        arbitrary_types_allowed = True
+
     @classmethod
     def valid(cls, d):
         try:
