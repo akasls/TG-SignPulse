@@ -33,7 +33,7 @@ COPY tg_signer/__init__.py ./tg_signer/__init__.py
 
 # 安装核心依赖
 # fix: pin setuptools<70.0.0 to avoid "AttributeError: cython_sources" in pyrogram/tgcrypto builds
-RUN pip install --no-cache-dir "setuptools<70.0.0" "wheel"
+RUN pip install --no-cache-dir "setuptools<70.0.0" "wheel" "Cython<3"
 # 固定 pydantic<2 且 fastapi 使用 v1 兼容版本
 RUN pip install --no-cache-dir "pydantic<2" "fastapi==0.109.2"
 
@@ -43,7 +43,7 @@ RUN pip install --no-cache-dir "bcrypt==4.0.1"
 # 安装项目及其余运行依赖
 COPY . /app
 # Remove redundant args that are already in pyproject.toml
-RUN pip install --no-cache-dir . && \
+RUN pip install --no-cache-dir --no-build-isolation . && \
   pip install --no-cache-dir \
   uvicorn[standard] \
   "python-jose[cryptography]" \
