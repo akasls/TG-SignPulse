@@ -252,20 +252,24 @@ async def get_account_chats(
                     "type": chat.type.name.lower(),
                     "first_name": None,
                 })
-            # 私聊（包括机器人）
-            elif chat.type == ChatType.PRIVATE:
-                # 判断是否为机器人
-                is_bot = getattr(chat, 'is_bot', False)
+            # 机器人
+            elif chat.type == ChatType.BOT:
                 display_name = chat.first_name or ""
-                if is_bot:
-                    display_name = f"🤖 {display_name}"
-                
                 chats.append({
                     "id": chat.id,
                     "title": None,
                     "username": chat.username,
-                    "type": "bot" if is_bot else "private",
-                    "first_name": display_name,
+                    "type": "bot",
+                    "first_name": f"🤖 {display_name}",
+                })
+            # 私聊
+            elif chat.type == ChatType.PRIVATE:
+                chats.append({
+                    "id": chat.id,
+                    "title": None,
+                    "username": chat.username,
+                    "type": "private",
+                    "first_name": chat.first_name,
                 })
         
         await client.stop()
