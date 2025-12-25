@@ -59,6 +59,9 @@ class SignTaskService:
                 
                 tasks.append(task_info)
             except Exception as e:
+                import traceback
+                print(f"加载任务 {task_dir.name} 失败: {str(e)}")
+                traceback.print_exc()
                 # 跳过无效的配置
                 continue
         
