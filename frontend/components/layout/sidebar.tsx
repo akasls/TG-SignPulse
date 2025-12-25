@@ -7,21 +7,25 @@ import { LayoutDashboard, Users, Settings, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-const sidebarItems = [
-    {
-        title: "Dashboard",
-        href: "/dashboard",
-        icon: LayoutDashboard,
+{
+    title: "Sign Tasks",
+        href: "/dashboard/sign-tasks",
+            icon: LayoutDashboard, // TODO: Find a better icon
     },
-    {
-        title: "Accounts",
+{
+    title: "Account Tasks",
+        href: "/dashboard/account-tasks",
+            icon: LayoutDashboard, // TODO: Find a better icon
+    },
+{
+    title: "Accounts",
         href: "/accounts",
-        icon: Users,
+            icon: Users,
     },
-    {
-        title: "Settings",
+{
+    title: "Settings",
         href: "/settings",
-        icon: Settings,
+            icon: Settings,
     },
 ];
 
