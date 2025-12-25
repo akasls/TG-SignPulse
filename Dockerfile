@@ -50,7 +50,8 @@ RUN pip install --no-cache-dir --no-build-isolation . && \
   pyotp \
   qrcode[pil] \
   apscheduler \
-  python-multipart
+  python-multipart && \
+  pip install --no-cache-dir --upgrade "typing_extensions>=4.8.0"
 
 # 前端静态文件放在 /web，由 FastAPI StaticFiles 托管
 RUN mkdir -p /web

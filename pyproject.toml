@@ -23,7 +23,7 @@ dependencies = [
     "openai",
     "croniter",
     "json_repair",
-    "typing-extensions",
+    "typing-extensions>=4.8.0",
     "httpx",
     "sqlalchemy",
     "passlib",
