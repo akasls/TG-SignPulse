@@ -28,6 +28,7 @@ async function request<T>(
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: mergedHeaders,
+    cache: "no-store", // 禁用缓存，确保获取最新数据
   });
   if (!res.ok) {
     const text = await res.text();
