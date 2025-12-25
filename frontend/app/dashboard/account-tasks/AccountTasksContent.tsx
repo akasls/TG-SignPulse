@@ -380,56 +380,58 @@ export default function AccountTasksContent() {
                                 <div className="border-t pt-4">
                                     <h3 className="font-medium mb-3">Chat 配置</h3>
 
-                                    <div className="space-y-4 mb-4">
-                                        <div>
-                                            <div className="flex items-center justify-between mb-2">
-                                                <Label htmlFor="chatSelect">选择 Chat</Label>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={refreshChats}
-                                                    disabled={loading}
-                                                >
-                                                    🔄 刷新
-                                                </Button>
+                                    <div className="mb-4">
+                                        <Label className="mb-2 block">Chat 配置</Label>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <div className="flex gap-2">
+                                                    <select
+                                                        className="flex-1 p-2 border rounded"
+                                                        value={newTask.chat_id}
+                                                        onChange={(e) => {
+                                                            const chatId = parseInt(e.target.value);
+                                                            const chat = chats.find(c => c.id === chatId);
+                                                            setNewTask({
+                                                                ...newTask,
+                                                                chat_id: chatId,
+                                                                chat_id_manual: "",
+                                                                chat_name: chat?.title || chat?.username || "",
+                                                            });
+                                                        }}
+                                                    >
+                                                        <option value={0}>选择 Chat...</option>
+                                                        {chats.map((chat) => (
+                                                            <option key={chat.id} value={chat.id}>
+                                                                {chat.title || chat.username || chat.first_name || `Chat ${chat.id}`}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={refreshChats}
+                                                        disabled={loading}
+                                                        className="px-3"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                        </svg>
+                                                    </Button>
+                                                </div>
                                             </div>
-                                            <select
-                                                id="chatSelect"
-                                                className="w-full p-2 border rounded"
-                                                value={newTask.chat_id}
-                                                onChange={(e) => {
-                                                    const chatId = parseInt(e.target.value);
-                                                    const chat = chats.find(c => c.id === chatId);
-                                                    setNewTask({
-                                                        ...newTask,
-                                                        chat_id: chatId,
-                                                        chat_id_manual: "",
-                                                        chat_name: chat?.title || chat?.username || "",
-                                                    });
-                                                }}
-                                            >
-                                                <option value={0}>请选择...</option>
-                                                {chats.map((chat) => (
-                                                    <option key={chat.id} value={chat.id}>
-                                                        {chat.title || chat.username || chat.first_name || `Chat ${chat.id}`}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
 
-                                        <div>
-                                            <Label htmlFor="chatManual">或手动输入 Chat ID</Label>
-                                            <Input
-                                                id="chatManual"
-                                                placeholder="输入 Chat ID"
-                                                value={newTask.chat_id_manual}
-                                                onChange={(e) => setNewTask({
-                                                    ...newTask,
-                                                    chat_id_manual: e.target.value,
-                                                    chat_id: 0,
-                                                })}
-                                            />
+                                            <div>
+                                                <Input
+                                                    placeholder="或手动输入 Chat ID"
+                                                    value={newTask.chat_id_manual}
+                                                    onChange={(e) => setNewTask({
+                                                        ...newTask,
+                                                        chat_id_manual: e.target.value,
+                                                        chat_id: 0,
+                                                    })}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 

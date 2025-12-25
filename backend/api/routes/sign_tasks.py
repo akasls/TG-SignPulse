@@ -243,7 +243,7 @@ async def get_account_chats(
         async for dialog in client.get_dialogs():
             chat = dialog.chat
             
-            # 只返回群组和频道
+            # 返回群组、频道、私聊和机器人
             if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP, ChatType.CHANNEL]:
                 chats.append({
                     "id": chat.id,
@@ -252,14 +252,20 @@ async def get_account_chats(
                     "type": chat.type.name.lower(),
                     "first_name": None,
                 })
-            # 也包括私聊
+            # 私聊（包括机器人）
             elif chat.type == ChatType.PRIVATE:
+                # 判断是否为机器人
+                is_bot = getattr(chat, 'is_bot', False)
+                display_name = chat.first_name or ""
+                if is_bot:
+                    display_name = f"🤖 {display_name}"
+                
                 chats.append({
                     "id": chat.id,
                     "title": None,
                     "username": chat.username,
-                    "type": "private",
-                    "first_name": chat.first_name,
+                    "type": "bot" if is_bot else "private",
+                    "first_name": display_name,
                 })
         
         await client.stop()
