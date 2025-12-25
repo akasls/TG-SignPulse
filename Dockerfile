@@ -34,8 +34,8 @@ COPY tg_signer/__init__.py ./tg_signer/__init__.py
 # 安装核心依赖
 # fix: pin setuptools<70.0.0 to avoid "AttributeError: cython_sources" in pyrogram/tgcrypto builds
 RUN pip install --no-cache-dir "setuptools<70.0.0" "wheel" "Cython<3"
-# 固定 pydantic<2 且 fastapi 使用 v1 兼容版本
-RUN pip install --no-cache-dir "pydantic<2" "fastapi==0.109.2"
+# 固定 pydantic<2 且 fastapi 使用 v1 兼容版本. Ensure typing_extensions is new enough for fastapi.
+RUN pip install --no-cache-dir "pydantic<2" "fastapi==0.109.2" "typing_extensions>=4.8.0"
 
 # 先安装 bcrypt，确保使用正确的后端
 RUN pip install --no-cache-dir "bcrypt==4.0.1"
