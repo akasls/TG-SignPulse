@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import secrets
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -10,12 +12,25 @@ except ImportError:
     from pydantic import BaseSettings
 
 
+# 生成或获取持久化的密钥
+def get_default_secret_key() -> str:
+    """获取默认密钥，优先使用环境变量，否则使用固定默认值"""
+    # 如果设置了环境变量，使用环境变量
+    if os.getenv("APP_SECRET_KEY"):
+        return os.getenv("APP_SECRET_KEY", "")
+    
+    # 否则使用固定的默认值（生产环境应该设置环境变量）
+    # 这个默认值确保应用能启动，但不够安全
+    return "tg-signer-default-secret-key-please-change-in-production-2024"
+
+
 class Settings(BaseSettings):
     app_name: str = "tg-signer-panel"
     host: str = "0.0.0.0"
     port: int = 3000
 
-    secret_key: str = "change-me"
+    # 使用函数获取默认密钥
+    secret_key: str = get_default_secret_key()
     access_token_expire_hours: int = 12
 
     data_dir: Path = Path("/data")
