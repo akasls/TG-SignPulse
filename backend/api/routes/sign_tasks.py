@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.core.auth import get_current_user
 from backend.services.sign_tasks import sign_task_service
@@ -67,6 +67,17 @@ class SignTaskCreate(BaseModel):
     random_seconds: int = Field(0, description="随机延迟秒数")
     sign_interval: int = Field(1, description="签到间隔秒数")
 
+    @field_validator('name')
+    def name_must_be_valid_filename(cls, v):
+        import re
+        if not v or not v.strip():
+            raise ValueError('任务名称不能为空')
+        # Windows 文件名非法字符检查
+        invalid_chars = r'[<>:"/\\|?*]'
+        if re.search(invalid_chars, v):
+            raise ValueError('任务名称不能包含特殊字符: < > : " / \\ | ? *')
+        return v
+
 
 class SignTaskUpdate(BaseModel):
     """更新签到任务请求"""
@@ -117,17 +128,23 @@ def create_sign_task(
     current_user=Depends(get_current_user),
 ):
     """创建新的签到任务"""
-    # 转换 chats 为字典列表
-    chats_dict = [chat.model_dump() for chat in payload.chats]
-    
-    task = sign_task_service.create_task(
-        task_name=payload.name,
-        sign_at=payload.sign_at,
-        chats=chats_dict,
-        random_seconds=payload.random_seconds,
-        sign_interval=payload.sign_interval,
-    )
-    return task
+    import traceback
+    try:
+        # 转换 chats 为字典列表
+        chats_dict = [chat.model_dump() for chat in payload.chats]
+        
+        task = sign_task_service.create_task(
+            task_name=payload.name,
+            sign_at=payload.sign_at,
+            chats=chats_dict,
+            random_seconds=payload.random_seconds,
+            sign_interval=payload.sign_interval,
+        )
+        return task
+    except Exception as e:
+        print(f"创建任务失败: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"创建任务失败: {str(e)}")
 
 
 @router.get("/{task_name}", response_model=SignTaskOut)
@@ -149,24 +166,32 @@ def update_sign_task(
     current_user=Depends(get_current_user),
 ):
     """更新签到任务"""
-    # 检查任务是否存在
-    existing = sign_task_service.get_task(task_name)
-    if not existing:
-        raise HTTPException(status_code=404, detail=f"任务 {task_name} 不存在")
-    
-    # 转换 chats 为字典列表
-    chats_dict = None
-    if payload.chats is not None:
-        chats_dict = [chat.model_dump() for chat in payload.chats]
-    
-    task = sign_task_service.update_task(
-        task_name=task_name,
-        sign_at=payload.sign_at,
-        chats=chats_dict,
-        random_seconds=payload.random_seconds,
-        sign_interval=payload.sign_interval,
-    )
-    return task
+    try:
+        # 检查任务是否存在
+        existing = sign_task_service.get_task(task_name)
+        if not existing:
+            raise HTTPException(status_code=404, detail=f"任务 {task_name} 不存在")
+        
+        # 转换 chats 为字典列表
+        chats_dict = None
+        if payload.chats is not None:
+            chats_dict = [chat.model_dump() for chat in payload.chats]
+        
+        task = sign_task_service.update_task(
+            task_name=task_name,
+            sign_at=payload.sign_at,
+            chats=chats_dict,
+            random_seconds=payload.random_seconds,
+            sign_interval=payload.sign_interval,
+        )
+        return task
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"更新任务失败: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"更新任务失败: {str(e)}")
 
 
 @router.delete("/{task_name}", status_code=status.HTTP_204_NO_CONTENT)
@@ -255,21 +280,29 @@ async def get_account_chats(
             # 机器人
             elif chat.type == ChatType.BOT:
                 display_name = chat.first_name or ""
+                if chat.last_name:
+                    display_name += f" {chat.last_name}"
+                
+                full_name = f"🤖 {display_name}"
                 chats.append({
                     "id": chat.id,
-                    "title": None,
+                    "title": full_name,  # 设置 title，前端优先显示
                     "username": chat.username,
                     "type": "bot",
-                    "first_name": f"🤖 {display_name}",
+                    "first_name": display_name,
                 })
             # 私聊
             elif chat.type == ChatType.PRIVATE:
+                display_name = chat.first_name or ""
+                if chat.last_name:
+                    display_name += f" {chat.last_name}"
+                    
                 chats.append({
                     "id": chat.id,
-                    "title": None,
+                    "title": display_name,  # 设置 title，前端优先显示
                     "username": chat.username,
                     "type": "private",
-                    "first_name": chat.first_name,
+                    "first_name": display_name,
                 })
         
         await client.stop()
