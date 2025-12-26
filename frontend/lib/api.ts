@@ -45,8 +45,9 @@ async function request<T>(
       }
     }
 
-    // 如果是认证失败 (401)，清除 token 并跳转到登录页
-    if (res.status === 401) {
+    // 如果是认证失败 (401) 且请求携带了 token，清除 token 并跳转到登录页
+    // 注意：登录相关请求（不带 token）不应触发跳转
+    if (res.status === 401 && token) {
       if (typeof window !== "undefined") {
         localStorage.removeItem("tg-signer-token");
         window.location.href = "/";
