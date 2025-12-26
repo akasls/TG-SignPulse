@@ -319,6 +319,13 @@ class SignTaskService:
                 timeout=300,  # 5 分钟超时
             )
             
+            # 打印 CLI 执行结果，用于调试
+            print(f"DEBUG: CLI 返回码: {result.returncode}")
+            if result.stdout:
+                print(f"DEBUG: CLI stdout:\n{result.stdout}")
+            if result.stderr:
+                print(f"DEBUG: CLI stderr:\n{result.stderr}")
+            
             return {
                 "success": result.returncode == 0,
                 "output": result.stdout,
