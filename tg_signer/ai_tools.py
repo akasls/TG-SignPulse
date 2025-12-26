@@ -5,13 +5,13 @@ import pathlib
 from typing import TYPE_CHECKING, Union
 
 import json_repair
-from pydantic import TypeAdapter
 from typing_extensions import Optional, Required, TypedDict
 
 if TYPE_CHECKING:
     from openai import AsyncOpenAI  # 在性能弱的机器上导入openai包实在有些慢
 
 from tg_signer.utils import UserInput, print_to_user
+
 
 DEFAULT_MODEL = "gpt-4o"
 
@@ -44,7 +44,9 @@ class OpenAIConfigManager:
         if config_file.exists():
             with open(config_file, "r", encoding="utf-8") as fp:
                 c = json.load(fp)
-            return TypeAdapter(OpenAIConfig).validate_python(c)
+            # 简单验证必需字段
+            if "api_key" in c:
+                return c
         return None
 
     def save_config(self, api_key: str, base_url: str = None, model: str = None):
