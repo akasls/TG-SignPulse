@@ -221,7 +221,9 @@ def get_totp_qrcode(
     支持通过 query parameter 传递 token（用于 img src）
     """
     from jose import jwt, JWTError
-    from backend.core.settings import settings
+    from backend.core.config import get_settings
+    
+    settings = get_settings()
     
     # 如果没有通过 header 获取用户，尝试从 query param 获取
     if current_user is None and token:

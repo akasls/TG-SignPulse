@@ -643,6 +643,44 @@ export default function SettingsPage() {
                         </h2>
                         <div className="grid gap-4">
 
+                            {/* 修改用户名 */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>修改用户名</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div>
+                                        <Label htmlFor="newUsername">新用户名</Label>
+                                        <Input
+                                            id="newUsername"
+                                            placeholder="输入新用户名"
+                                            value={usernameForm.newUsername}
+                                            onChange={(e) =>
+                                                setUsernameForm({ ...usernameForm, newUsername: e.target.value })
+                                            }
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <Label htmlFor="usernamePassword">确认密码</Label>
+                                        <Input
+                                            id="usernamePassword"
+                                            type="password"
+                                            placeholder="输入当前密码确认"
+                                            value={usernameForm.password}
+                                            onChange={(e) =>
+                                                setUsernameForm({ ...usernameForm, password: e.target.value })
+                                            }
+                                        />
+                                    </div>
+
+                                    <Button onClick={handleChangeUsername} disabled={loading}>
+                                        {loading ? "修改中..." : "修改用户名"}
+                                    </Button>
+                                </CardContent>
+                            </Card>
+
+                            {/* 修改密码 */}
                             <Card>
                                 <CardHeader>
                                     <CardTitle>修改密码</CardTitle>
@@ -690,43 +728,6 @@ export default function SettingsPage() {
                                 </CardContent>
                             </Card>
 
-                            {/* 修改用户名 */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>修改用户名</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div>
-                                        <Label htmlFor="newUsername">新用户名</Label>
-                                        <Input
-                                            id="newUsername"
-                                            placeholder="输入新用户名"
-                                            value={usernameForm.newUsername}
-                                            onChange={(e) =>
-                                                setUsernameForm({ ...usernameForm, newUsername: e.target.value })
-                                            }
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <Label htmlFor="usernamePassword">确认密码</Label>
-                                        <Input
-                                            id="usernamePassword"
-                                            type="password"
-                                            placeholder="输入当前密码确认"
-                                            value={usernameForm.password}
-                                            onChange={(e) =>
-                                                setUsernameForm({ ...usernameForm, password: e.target.value })
-                                            }
-                                        />
-                                    </div>
-
-                                    <Button onClick={handleChangeUsername} disabled={loading}>
-                                        {loading ? "修改中..." : "修改用户名"}
-                                    </Button>
-                                </CardContent>
-                            </Card>
-
                             {/* 两步验证 */}
                             <Card>
                                 <CardHeader>
@@ -747,7 +748,7 @@ export default function SettingsPage() {
                                         )}
                                     </div>
 
-                                    {showTotpSetup && totpSecret && (
+                                    {showTotpSetup && totpSecret && token && (
                                         <div className="space-y-4 p-4 bg-gray-50 rounded">
                                             <div>
                                                 <p className="font-medium mb-2">1. 扫描二维码</p>
