@@ -590,6 +590,113 @@ export default function SettingsPage() {
                                 </CardContent>
                             </Card>
 
+                            {/* 配置管理 */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>配置管理</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div>
+                                        <p className="font-medium mb-2">导出配置</p>
+                                        <p className="text-sm text-gray-500 mb-3">
+                                            导出所有任务配置，用于备份或迁移
+                                        </p>
+                                        <Button onClick={handleExportConfig} disabled={loading}>
+                                            {loading ? "导出中..." : "导出所有配置"}
+                                        </Button>
+                                    </div>
+
+                                    <hr />
+
+                                    <div>
+                                        <p className="font-medium mb-2">导入配置</p>
+                                        <p className="text-sm text-gray-500 mb-3">
+                                            从备份文件恢复配置
+                                        </p>
+
+                                        <div className="space-y-3">
+                                            <div>
+                                                <Label htmlFor="importFile">选择配置文件</Label>
+                                                <Input
+                                                    id="importFile"
+                                                    type="file"
+                                                    accept=".json"
+                                                    onChange={handleImportFile}
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <Label htmlFor="importConfig">或粘贴配置 JSON</Label>
+                                                <textarea
+                                                    id="importConfig"
+                                                    className="w-full h-32 p-2 border rounded font-mono text-sm"
+                                                    placeholder='{"signs": {...}, "monitors": {...}}'
+                                                    value={importConfig}
+                                                    onChange={(e) => setImportConfig(e.target.value)}
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    id="overwrite"
+                                                    checked={overwriteConfig}
+                                                    onChange={(e) => setOverwriteConfig(e.target.checked)}
+                                                />
+                                                <Label htmlFor="overwrite" className="cursor-pointer">
+                                                    覆盖已存在的配置
+                                                </Label>
+                                            </div>
+
+                                            <Button onClick={handleImportConfig} disabled={loading}>
+                                                {loading ? "导入中..." : "导入配置"}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+
+                    {/* 任务设置区块 */}
+                    <div>
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                            </svg>
+                            任务设置
+                        </h2>
+                        <div className="grid gap-4">
+
+                            {/* 全局设置 */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>任务间隔</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div>
+                                        <Label htmlFor="signInterval">任务间隔（秒）</Label>
+                                        <Input
+                                            id="signInterval"
+                                            type="number"
+                                            placeholder="留空使用随机 1-120 秒"
+                                            value={globalSettings.sign_interval ?? ""}
+                                            onChange={(e) => setGlobalSettings({
+                                                ...globalSettings,
+                                                sign_interval: e.target.value ? parseInt(e.target.value) : null
+                                            })}
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            执行多个任务时，每个任务之间的等待时间。留空则随机 1-120 秒
+                                        </p>
+                                    </div>
+
+                                    <Button onClick={handleSaveGlobalSettings} disabled={loading}>
+                                        {loading ? "保存中..." : "保存设置"}
+                                    </Button>
+                                </CardContent>
+                            </Card>
+
                             {/* AI 配置 */}
                             <Card>
                                 <CardHeader>
@@ -697,103 +804,9 @@ export default function SettingsPage() {
                                     </div>
                                 </CardContent>
                             </Card>
-
-                            {/* 全局设置 */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>全局设置</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div>
-                                        <Label htmlFor="signInterval">任务间隔（秒）</Label>
-                                        <Input
-                                            id="signInterval"
-                                            type="number"
-                                            placeholder="留空使用随机 1-120 秒"
-                                            value={globalSettings.sign_interval ?? ""}
-                                            onChange={(e) => setGlobalSettings({
-                                                ...globalSettings,
-                                                sign_interval: e.target.value ? parseInt(e.target.value) : null
-                                            })}
-                                        />
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            执行多个任务时，每个任务之间的等待时间。留空则随机 1-120 秒
-                                        </p>
-                                    </div>
-
-                                    <Button onClick={handleSaveGlobalSettings} disabled={loading}>
-                                        {loading ? "保存中..." : "保存设置"}
-                                    </Button>
-                                </CardContent>
-                            </Card>
-
-                            {/* 配置管理 */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>配置管理</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div>
-                                        <p className="font-medium mb-2">导出配置</p>
-                                        <p className="text-sm text-gray-500 mb-3">
-                                            导出所有任务配置，用于备份或迁移
-                                        </p>
-                                        <Button onClick={handleExportConfig} disabled={loading}>
-                                            {loading ? "导出中..." : "导出所有配置"}
-                                        </Button>
-                                    </div>
-
-                                    <hr />
-
-                                    <div>
-                                        <p className="font-medium mb-2">导入配置</p>
-                                        <p className="text-sm text-gray-500 mb-3">
-                                            从备份文件恢复配置
-                                        </p>
-
-                                        <div className="space-y-3">
-                                            <div>
-                                                <Label htmlFor="importFile">选择配置文件</Label>
-                                                <Input
-                                                    id="importFile"
-                                                    type="file"
-                                                    accept=".json"
-                                                    onChange={handleImportFile}
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <Label htmlFor="importConfig">或粘贴配置 JSON</Label>
-                                                <textarea
-                                                    id="importConfig"
-                                                    className="w-full h-32 p-2 border rounded font-mono text-sm"
-                                                    placeholder='{"signs": {...}, "monitors": {...}}'
-                                                    value={importConfig}
-                                                    onChange={(e) => setImportConfig(e.target.value)}
-                                                />
-                                            </div>
-
-                                            <div className="flex items-center gap-2">
-                                                <input
-                                                    type="checkbox"
-                                                    id="overwrite"
-                                                    checked={overwriteConfig}
-                                                    onChange={(e) => setOverwriteConfig(e.target.checked)}
-                                                />
-                                                <Label htmlFor="overwrite" className="cursor-pointer">
-                                                    覆盖已存在的配置
-                                                </Label>
-                                            </div>
-
-                                            <Button onClick={handleImportConfig} disabled={loading}>
-                                                {loading ? "导入中..." : "导入配置"}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
                         </div>
                     </div>
+
                 </div>
             </div>
         </div>

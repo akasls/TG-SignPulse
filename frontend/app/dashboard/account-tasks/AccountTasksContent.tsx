@@ -442,7 +442,7 @@ export default function AccountTasksContent() {
                             <CardContent className="p-6">
                                 <h2 className="text-xl font-bold mb-4">创建签到任务</h2>
 
-                                <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                                <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1">
                                     {/* 基本信息 */}
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
