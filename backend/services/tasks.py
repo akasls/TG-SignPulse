@@ -15,11 +15,8 @@ from backend.models.task_log import TaskLog
 settings = get_settings()
 
 
-def list_tasks(db: Session, account_id: Optional[int] = None) -> List[Task]:
-    query = db.query(Task)
-    if account_id is not None:
-        query = query.filter(Task.account_id == account_id)
-    return query.order_by(Task.id.desc()).all()
+def list_tasks(db: Session) -> List[Task]:
+    return db.query(Task).order_by(Task.id.desc()).all()
 
 
 def get_task(db: Session, task_id: int) -> Optional[Task]:

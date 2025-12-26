@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     secret_key: str = get_default_secret_key()
     access_token_expire_hours: int = 12
 
-    data_dir: Path = Path("data")
+    data_dir: Path = Path("/data")
     db_path: Optional[Path] = None
     signer_workdir: Optional[Path] = None
     session_dir: Optional[Path] = None

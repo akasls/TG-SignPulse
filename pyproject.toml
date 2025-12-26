@@ -9,7 +9,7 @@ description = "Automated Telegram tasks (check-ins, sending messages, keyboard c
 authors = [
     { name = "Amchii", email = "finethankuandyou@gmail.com" }
 ]
-license = { text = "BSD-3-Clause" }
+license = "BSD-3-Clause"
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -23,12 +23,8 @@ dependencies = [
     "openai",
     "croniter",
     "json_repair",
-    "typing-extensions>=4.8.0",
+    "typing-extensions",
     "httpx",
-    "sqlalchemy",
-    "passlib",
-    "bcrypt==4.0.1",
-    "pyjwt",
 ]
 
 [dependency-groups]

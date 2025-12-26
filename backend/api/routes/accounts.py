@@ -10,12 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from backend.core.auth import get_current_user
-from backend.core.database import get_db
-from backend.models.account import Account
 from backend.models.user import User
-from backend.schemas.account import AccountOut
 from backend.services.telegram import telegram_service
-from sqlalchemy.orm import Session
 
 router = APIRouter()
 
@@ -206,24 +202,6 @@ def delete_account(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"删除账号失败: {str(e)}"
         )
-
-
-@router.get("/{account_name}", response_model=AccountOut)
-def get_account_details(
-    account_name: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    获取账号详情 (包含 DB ID)
-    """
-    account = db.query(Account).filter(Account.account_name == account_name).first()
-    if not account:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Account {account_name} not found in database"
-        )
-    return account
 
 
 @router.get("/{account_name}/exists")
