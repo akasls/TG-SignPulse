@@ -106,8 +106,27 @@ export default function CreateSignTaskPage() {
             return;
         }
 
+        // 验证每个动作的内容
+        for (let i = 0; i < editingChat.actions.length; i++) {
+            const action = editingChat.actions[i];
+            if (action.action === 1 && !action.text) {
+                setError(`动作 ${i + 1}: 发送文本需要填写文本内容`);
+                return;
+            }
+            if (action.action === 2 && !action.dice) {
+                setError(`动作 ${i + 1}: 发送骰子需要填写骰子表情（如 🎲）`);
+                return;
+            }
+            if (action.action === 3 && !action.text) {
+                setError(`动作 ${i + 1}: 点击按钮需要填写按钮文本`);
+                return;
+            }
+            // action 4 和 5 不需要额外参数
+        }
+
         setChats([...chats, editingChat]);
         setEditingChat(null);
+        setError("");
     };
 
     const handleRemoveChat = (index: number) => {
