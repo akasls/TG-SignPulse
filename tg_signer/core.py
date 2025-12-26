@@ -554,15 +554,9 @@ class UserSignerWorkerContext(BaseModel):
         arbitrary_types_allowed = True
 
     waiter: Waiter
-    sign_chats: defaultdict[int, list[SignChatV3]]  # 签到配置列表
-    chat_messages: defaultdict[
-        int,
-        Annotated[
-            dict[int, Optional[Message]],
-            Field(default_factory=dict),
-        ],
-    ]  # 收到的消息，key为chat id
-    waiting_message: Optional[Message]  # 正在处理的消息
+    sign_chats: dict  # 签到配置列表, int -> list[SignChatV3]
+    chat_messages: dict  # 收到的消息, int -> dict[int, Optional[Message]]
+    waiting_message: Optional[Message] = None  # 正在处理的消息
 
 
 class UserSigner(BaseUserWorker[SignConfigV3]):
