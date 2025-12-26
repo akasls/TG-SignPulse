@@ -254,6 +254,12 @@ export const disableTOTP = (token: string, totpCode: string) =>
     body: JSON.stringify({ totp_code: totpCode }),
   }, token);
 
+export const changeUsername = (token: string, newUsername: string, password: string) =>
+  request<{ success: boolean; message: string }>("/user/username", {
+    method: "PUT",
+    body: JSON.stringify({ new_username: newUsername, password: password }),
+  }, token);
+
 // ============ AI 配置 ============
 
 export interface AIConfig {

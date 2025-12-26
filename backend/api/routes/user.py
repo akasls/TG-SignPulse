@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.core.auth import get_current_user
+from backend.core.auth import get_current_user, get_current_user_optional
 from backend.core.database import get_db
 from backend.core.security import hash_password, verify_password
 from backend.models.user import User
@@ -32,6 +32,18 @@ class ChangePasswordRequest(BaseModel):
 
 class ChangePasswordResponse(BaseModel):
     """修改密码响应"""
+    success: bool
+    message: str
+
+
+class ChangeUsernameRequest(BaseModel):
+    """修改用户名请求"""
+    new_username: str
+    password: str  # 需要密码确认
+
+
+class ChangeUsernameResponse(BaseModel):
+    """修改用户名响应"""
     success: bool
     message: str
 
@@ -101,6 +113,56 @@ def change_password(
     )
 
 
+@router.put("/username", response_model=ChangeUsernameResponse)
+def change_username(
+    request: ChangeUsernameRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    修改用户名
+    
+    需要提供密码进行验证
+    """
+    # 验证密码
+    if not verify_password(request.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="密码错误"
+        )
+    
+    # 验证新用户名
+    new_username = request.new_username.strip()
+    if len(new_username) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="用户名长度至少为 3 个字符"
+        )
+    
+    if len(new_username) > 50:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="用户名长度最多为 50 个字符"
+        )
+    
+    # 检查用户名是否已存在
+    existing_user = db.query(User).filter(User.username == new_username).first()
+    if existing_user and existing_user.id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该用户名已被使用"
+        )
+    
+    # 更新用户名
+    current_user.username = new_username
+    db.commit()
+    
+    return ChangeUsernameResponse(
+        success=True,
+        message="用户名修改成功"
+    )
+
+
 @router.get("/totp/status", response_model=TOTPStatusResponse)
 def get_totp_status(current_user: User = Depends(get_current_user)):
     """
@@ -147,12 +209,36 @@ def setup_totp(
 
 
 @router.get("/totp/qrcode")
-def get_totp_qrcode(current_user: User = Depends(get_current_user)):
+def get_totp_qrcode(
+    token: Optional[str] = None,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
     """
     获取2FA二维码
     
     返回二维码图片（PNG 格式）
+    支持通过 query parameter 传递 token（用于 img src）
     """
+    from jose import jwt, JWTError
+    from backend.core.settings import settings
+    
+    # 如果没有通过 header 获取用户，尝试从 query param 获取
+    if current_user is None and token:
+        try:
+            payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+            username: str = payload.get("sub")
+            if username:
+                current_user = db.query(User).filter(User.username == username).first()
+        except JWTError:
+            pass
+    
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="认证失败"
+        )
+    
     # 优先使用待验证的 secret，否则使用已启用的 secret
     secret = _pending_totp_secrets.get(current_user.id) or current_user.totp_secret
     

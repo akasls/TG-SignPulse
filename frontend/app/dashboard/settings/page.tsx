@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getToken } from "../../../lib/auth";
 import {
     changePassword,
+    changeUsername,
     getTOTPStatus,
     setupTOTP,
     getTOTPQRCode,
@@ -32,6 +33,12 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
+
+    // 用户名修改
+    const [usernameForm, setUsernameForm] = useState({
+        newUsername: "",
+        password: "",
+    });
 
     // 密码修改
     const [passwordForm, setPasswordForm] = useState({
@@ -62,6 +69,7 @@ export default function SettingsPage() {
 
     // 全局设置
     const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({ sign_interval: null });
+
 
     useEffect(() => {
         const t = getToken();
@@ -161,6 +169,41 @@ export default function SettingsPage() {
             });
         } catch (err: any) {
             setError(err.message || "修改密码失败");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleChangeUsername = async () => {
+        if (!token) return;
+
+        if (!usernameForm.newUsername || !usernameForm.password) {
+            setError("请填写新用户名和密码");
+            return;
+        }
+
+        if (usernameForm.newUsername.length < 3) {
+            setError("用户名长度至少为 3 个字符");
+            return;
+        }
+
+        try {
+            setLoading(true);
+            setError("");
+
+            const result = await changeUsername(
+                token,
+                usernameForm.newUsername,
+                usernameForm.password
+            );
+
+            setSuccess(result.message);
+            setUsernameForm({
+                newUsername: "",
+                password: "",
+            });
+        } catch (err: any) {
+            setError(err.message || "修改用户名失败");
         } finally {
             setLoading(false);
         }
@@ -440,6 +483,155 @@ export default function SettingsPage() {
                         </div>
                     )}
 
+                    {/* 任务设置区块 - 放在最上面 */}
+                    <div>
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                            </svg>
+                            任务设置
+                        </h2>
+                        <div className="grid gap-4">
+
+                            {/* 任务间隔 */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>任务间隔</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div>
+                                        <Label htmlFor="signInterval">任务间隔（秒）</Label>
+                                        <Input
+                                            id="signInterval"
+                                            type="number"
+                                            placeholder="留空使用随机 1-120 秒"
+                                            value={globalSettings.sign_interval ?? ""}
+                                            onChange={(e) => setGlobalSettings({
+                                                ...globalSettings,
+                                                sign_interval: e.target.value ? parseInt(e.target.value) : null
+                                            })}
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            执行多个任务时，每个任务之间的等待时间。留空则随机 1-120 秒
+                                        </p>
+                                    </div>
+
+                                    <Button onClick={handleSaveGlobalSettings} disabled={loading}>
+                                        {loading ? "保存中..." : "保存设置"}
+                                    </Button>
+                                </CardContent>
+                            </Card>
+
+                            {/* AI 配置 */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>AI 配置</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="font-medium">配置状态</p>
+                                            <p className="text-sm text-gray-500">
+                                                {aiConfig?.has_config ? "✅ 已配置" : "❌ 未配置"}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {aiConfig?.has_config && (
+                                        <div className="p-3 bg-gray-50 rounded text-sm">
+                                            <p><span className="text-gray-500">API Key:</span> {aiConfig.api_key_masked}</p>
+                                            {aiConfig.base_url && (
+                                                <p><span className="text-gray-500">Base URL:</span> {aiConfig.base_url}</p>
+                                            )}
+                                            {aiConfig.model && (
+                                                <p><span className="text-gray-500">Model:</span> {aiConfig.model}</p>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-3 p-4 bg-gray-50 rounded">
+                                        <p className="font-medium text-sm">
+                                            {aiConfig?.has_config ? "更新配置" : "添加配置"}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                            用于 AI 图片识别和 AI 计算题功能，需要 OpenAI 兼容的 API
+                                        </p>
+
+                                        <div>
+                                            <Label htmlFor="aiApiKey">API Key *</Label>
+                                            <Input
+                                                id="aiApiKey"
+                                                type="password"
+                                                placeholder="sk-..."
+                                                value={aiForm.api_key}
+                                                onChange={(e) => setAIForm({ ...aiForm, api_key: e.target.value })}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <Label htmlFor="aiBaseUrl">Base URL（可选）</Label>
+                                            <Input
+                                                id="aiBaseUrl"
+                                                placeholder="https://api.openai.com/v1"
+                                                value={aiForm.base_url}
+                                                onChange={(e) => setAIForm({ ...aiForm, base_url: e.target.value })}
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                留空使用 OpenAI 官方地址，可填写兼容 API 地址
+                                            </p>
+                                        </div>
+
+                                        <div>
+                                            <Label htmlFor="aiModel">Model（可选）</Label>
+                                            <Input
+                                                id="aiModel"
+                                                placeholder="gpt-4o"
+                                                value={aiForm.model}
+                                                onChange={(e) => setAIForm({ ...aiForm, model: e.target.value })}
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                默认 gpt-4o，图片识别需要支持 vision 的模型
+                                            </p>
+                                        </div>
+
+                                        <div className="flex gap-2">
+                                            <Button onClick={handleSaveAIConfig} disabled={loading}>
+                                                {loading ? "保存中..." : "保存配置"}
+                                            </Button>
+                                            {aiConfig?.has_config && (
+                                                <>
+                                                    <Button
+                                                        variant="secondary"
+                                                        onClick={handleTestAIConnection}
+                                                        disabled={aiTesting}
+                                                    >
+                                                        {aiTesting ? "测试中..." : "测试连接"}
+                                                    </Button>
+                                                    <Button
+                                                        variant="destructive"
+                                                        onClick={handleDeleteAIConfig}
+                                                        disabled={loading}
+                                                    >
+                                                        删除配置
+                                                    </Button>
+                                                </>
+                                            )}
+                                        </div>
+
+                                        {aiTestResult && (
+                                            <div className={`p-3 rounded text-sm ${aiTestResult.startsWith("✅")
+                                                ? "bg-green-50 text-green-700 border border-green-200"
+                                                : "bg-red-50 text-red-700 border border-red-200"
+                                                }`}>
+                                                {aiTestResult}
+                                            </div>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+
                     {/* 系统设置区块 */}
                     <div>
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -494,6 +686,43 @@ export default function SettingsPage() {
 
                                     <Button onClick={handleChangePassword} disabled={loading}>
                                         {loading ? "修改中..." : "修改密码"}
+                                    </Button>
+                                </CardContent>
+                            </Card>
+
+                            {/* 修改用户名 */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>修改用户名</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div>
+                                        <Label htmlFor="newUsername">新用户名</Label>
+                                        <Input
+                                            id="newUsername"
+                                            placeholder="输入新用户名"
+                                            value={usernameForm.newUsername}
+                                            onChange={(e) =>
+                                                setUsernameForm({ ...usernameForm, newUsername: e.target.value })
+                                            }
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <Label htmlFor="usernamePassword">确认密码</Label>
+                                        <Input
+                                            id="usernamePassword"
+                                            type="password"
+                                            placeholder="输入当前密码确认"
+                                            value={usernameForm.password}
+                                            onChange={(e) =>
+                                                setUsernameForm({ ...usernameForm, password: e.target.value })
+                                            }
+                                        />
+                                    </div>
+
+                                    <Button onClick={handleChangeUsername} disabled={loading}>
+                                        {loading ? "修改中..." : "修改用户名"}
                                     </Button>
                                 </CardContent>
                             </Card>
@@ -652,155 +881,6 @@ export default function SettingsPage() {
                                                 {loading ? "导入中..." : "导入配置"}
                                             </Button>
                                         </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </div>
-                    </div>
-
-                    {/* 任务设置区块 */}
-                    <div>
-                        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                            </svg>
-                            任务设置
-                        </h2>
-                        <div className="grid gap-4">
-
-                            {/* 全局设置 */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>任务间隔</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div>
-                                        <Label htmlFor="signInterval">任务间隔（秒）</Label>
-                                        <Input
-                                            id="signInterval"
-                                            type="number"
-                                            placeholder="留空使用随机 1-120 秒"
-                                            value={globalSettings.sign_interval ?? ""}
-                                            onChange={(e) => setGlobalSettings({
-                                                ...globalSettings,
-                                                sign_interval: e.target.value ? parseInt(e.target.value) : null
-                                            })}
-                                        />
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            执行多个任务时，每个任务之间的等待时间。留空则随机 1-120 秒
-                                        </p>
-                                    </div>
-
-                                    <Button onClick={handleSaveGlobalSettings} disabled={loading}>
-                                        {loading ? "保存中..." : "保存设置"}
-                                    </Button>
-                                </CardContent>
-                            </Card>
-
-                            {/* AI 配置 */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>AI 配置</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="font-medium">配置状态</p>
-                                            <p className="text-sm text-gray-500">
-                                                {aiConfig?.has_config ? "✅ 已配置" : "❌ 未配置"}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {aiConfig?.has_config && (
-                                        <div className="p-3 bg-gray-50 rounded text-sm">
-                                            <p><span className="text-gray-500">API Key:</span> {aiConfig.api_key_masked}</p>
-                                            {aiConfig.base_url && (
-                                                <p><span className="text-gray-500">Base URL:</span> {aiConfig.base_url}</p>
-                                            )}
-                                            {aiConfig.model && (
-                                                <p><span className="text-gray-500">Model:</span> {aiConfig.model}</p>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    <div className="space-y-3 p-4 bg-gray-50 rounded">
-                                        <p className="font-medium text-sm">
-                                            {aiConfig?.has_config ? "更新配置" : "添加配置"}
-                                        </p>
-                                        <p className="text-xs text-gray-500">
-                                            用于 AI 图片识别和 AI 计算题功能，需要 OpenAI 兼容的 API
-                                        </p>
-
-                                        <div>
-                                            <Label htmlFor="aiApiKey">API Key *</Label>
-                                            <Input
-                                                id="aiApiKey"
-                                                type="password"
-                                                placeholder="sk-..."
-                                                value={aiForm.api_key}
-                                                onChange={(e) => setAIForm({ ...aiForm, api_key: e.target.value })}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <Label htmlFor="aiBaseUrl">Base URL（可选）</Label>
-                                            <Input
-                                                id="aiBaseUrl"
-                                                placeholder="https://api.openai.com/v1"
-                                                value={aiForm.base_url}
-                                                onChange={(e) => setAIForm({ ...aiForm, base_url: e.target.value })}
-                                            />
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                留空使用 OpenAI 官方地址，可填写兼容 API 地址
-                                            </p>
-                                        </div>
-
-                                        <div>
-                                            <Label htmlFor="aiModel">Model（可选）</Label>
-                                            <Input
-                                                id="aiModel"
-                                                placeholder="gpt-4o"
-                                                value={aiForm.model}
-                                                onChange={(e) => setAIForm({ ...aiForm, model: e.target.value })}
-                                            />
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                默认 gpt-4o，图片识别需要支持 vision 的模型
-                                            </p>
-                                        </div>
-
-                                        <div className="flex gap-2">
-                                            <Button onClick={handleSaveAIConfig} disabled={loading}>
-                                                {loading ? "保存中..." : "保存配置"}
-                                            </Button>
-                                            {aiConfig?.has_config && (
-                                                <>
-                                                    <Button
-                                                        variant="secondary"
-                                                        onClick={handleTestAIConnection}
-                                                        disabled={aiTesting}
-                                                    >
-                                                        {aiTesting ? "测试中..." : "测试连接"}
-                                                    </Button>
-                                                    <Button
-                                                        variant="destructive"
-                                                        onClick={handleDeleteAIConfig}
-                                                        disabled={loading}
-                                                    >
-                                                        删除配置
-                                                    </Button>
-                                                </>
-                                            )}
-                                        </div>
-
-                                        {aiTestResult && (
-                                            <div className={`p-3 rounded text-sm ${aiTestResult.startsWith("✅")
-                                                ? "bg-green-50 text-green-700 border border-green-200"
-                                                : "bg-red-50 text-red-700 border border-red-200"
-                                                }`}>
-                                                {aiTestResult}
-                                            </div>
-                                        )}
                                     </div>
                                 </CardContent>
                             </Card>

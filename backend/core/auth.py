@@ -68,3 +68,23 @@ def get_current_user(
         raise credentials_exception
     return user
 
+
+# OAuth2 scheme that doesn't auto-error on missing token
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+
+def get_current_user_optional(
+    token: Optional[str] = Depends(oauth2_scheme_optional), db: Session = Depends(get_db)
+) -> Optional[User]:
+    """获取当前用户，如果无法认证则返回 None（不抛出异常）"""
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        username: str = payload.get("sub")  # type: ignore[assignment]
+        if username is None:
+            return None
+    except JWTError:
+        return None
+    user = db.query(User).filter(User.username == username).first()
+    return user
