@@ -12,9 +12,11 @@
 
 body {
   background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+  background-attachment: fixed;
   color: #e2e8f0;
   min-height: 100vh;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
 }
 
 /* ========== Glassmorphism 核心样式 ========== */
@@ -69,6 +71,71 @@ body {
 
 .glass-input::placeholder {
   color: rgba(226, 232, 240, 0.4);
+}
+
+/* ========== Select 下拉组件样式 ========== */
+
+select {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  border-radius: 12px;
+  padding: 0.5rem 2rem 0.5rem 1rem;
+  font-size: 0.875rem;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23a0aec0'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 1.25rem;
+}
+
+select:focus {
+  border-color: var(--aurora-1);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+  outline: none;
+}
+
+select option {
+  background: #1a1a2e;
+  color: #e2e8f0;
+  padding: 0.5rem;
+}
+
+/* ========== File Input 文件选择样式 ========== */
+
+input[type="file"] {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #e2e8f0;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+input[type="file"]:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+input[type="file"]::file-selector-button {
+  background: linear-gradient(135deg, var(--aurora-2), var(--aurora-3));
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  margin-right: 0.75rem;
+  transition: all 0.3s ease;
+}
+
+input[type="file"]::file-selector-button:hover {
+  opacity: 0.9;
 }
 
 /* ========== Aurora 渐变效果 ========== */

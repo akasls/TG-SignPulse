@@ -350,7 +350,7 @@ export default function AccountTasksContent() {
                         {/* 右边：新增任务图标 */}
                         <button
                             onClick={() => setShowCreateDialog(true)}
-                            className="p-2.5 hover:bg-white/10 rounded-xl transition-all text-cyan-400 hover:text-cyan-300"
+                            className="p-2.5 hover:bg-white/10 rounded-xl transition-all text-white/70 hover:text-white"
                             title="新增任务"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -398,42 +398,68 @@ export default function AccountTasksContent() {
                         {tasks.map((task) => (
                             <Card key={task.name} className="card-hover">
                                 <CardContent className="p-4">
-                                    {/* 移动端：垂直布局，桌面端：水平布局 */}
-                                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                                        {/* 任务信息网格 - 移动端 2 列，桌面端 4 列 */}
-                                        <div className="flex-1 grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-                                            {/* 任务名称 */}
-                                            <div>
-                                                <div className="text-xs text-white/50 mb-1">任务名称</div>
-                                                <div className="font-medium truncate">{task.name}</div>
-                                            </div>
+                                    {/* 新的移动端优化布局 */}
+                                    <div className="grid grid-cols-[1fr_auto] lg:grid-cols-[1fr_1fr_1fr_1fr_auto] gap-3 lg:gap-4 items-start lg:items-center">
+                                        {/* 任务名称 */}
+                                        <div>
+                                            <div className="text-xs text-white/50 mb-1">任务名称</div>
+                                            <div className="font-medium truncate text-white">{task.name}</div>
+                                        </div>
 
-                                            {/* Chat ID */}
-                                            <div>
+                                        {/* Chat ID + 编辑按钮(移动端) */}
+                                        <div className="flex items-start gap-2">
+                                            <div className="flex-1">
                                                 <div className="text-xs text-white/50 mb-1">Chat ID</div>
-                                                <div className="font-mono text-sm truncate">
+                                                <div className="font-mono text-sm truncate text-white/80">
                                                     {task.chats[0]?.chat_id || "-"}
                                                 </div>
                                             </div>
+                                            {/* 编辑按钮 - 移动端显示在右上 */}
+                                            <button
+                                                onClick={() => handleEditTask(task)}
+                                                disabled={loading}
+                                                className="lg:hidden p-2 text-white/60 hover:text-cyan-400 hover:bg-white/5 rounded-lg transition-all"
+                                                title="编辑"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                            </button>
+                                        </div>
 
-                                            {/* 签到时间 */}
-                                            <div>
+                                        {/* 签到时间 + 运行按钮(移动端) */}
+                                        <div className="flex items-start gap-2">
+                                            <div className="flex-1">
                                                 <div className="text-xs text-white/50 mb-1">签到时间</div>
-                                                <div className="font-mono text-sm">{task.sign_at}</div>
+                                                <div className="font-mono text-sm text-white/80">{task.sign_at}</div>
                                                 {task.random_seconds > 0 && (
-                                                    <div className="text-xs text-gray-400">+随机{Math.round(task.random_seconds / 60)}分钟</div>
+                                                    <div className="text-xs text-white/40">+随机{Math.round(task.random_seconds / 60)}分钟</div>
                                                 )}
                                             </div>
+                                            {/* 运行按钮 - 移动端 */}
+                                            <button
+                                                onClick={() => handleRunTask(task.name)}
+                                                disabled={loading}
+                                                className="lg:hidden p-2 text-white/60 hover:text-emerald-400 hover:bg-white/5 rounded-lg transition-all"
+                                                title="运行"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            </button>
+                                        </div>
 
-                                            {/* 最后执行 */}
-                                            <div>
+                                        {/* 最后执行 + 删除按钮(移动端) */}
+                                        <div className="flex items-start gap-2">
+                                            <div className="flex-1">
                                                 <div className="text-xs text-white/50 mb-1">最后执行</div>
                                                 {task.last_run ? (
                                                     <div>
-                                                        <div className={`text-sm ${task.last_run.success ? 'text-green-600' : 'text-red-600'}`}>
+                                                        <div className={`text-sm ${task.last_run.success ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                             {task.last_run.success ? '✓ 成功' : '✗ 失败'}
                                                         </div>
-                                                        <div className="text-xs text-gray-400">
+                                                        <div className="text-xs text-white/40">
                                                             {new Date(task.last_run.time).toLocaleString('zh-CN', {
                                                                 month: '2-digit',
                                                                 day: '2-digit',
@@ -443,37 +469,55 @@ export default function AccountTasksContent() {
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div className="text-sm text-gray-400">从未执行</div>
+                                                    <div className="text-sm text-white/40">从未执行</div>
                                                 )}
                                             </div>
-                                        </div>
-
-                                        {/* 操作按钮 - 移动端：水平排列居中，桌面端：右侧 */}
-                                        <div className="flex gap-2 justify-center lg:justify-end lg:ml-4 flex-shrink-0">
-                                            <Button
-                                                variant="secondary"
-                                                size="sm"
-                                                onClick={() => handleEditTask(task)}
-                                                disabled={loading}
-                                            >
-                                                编辑
-                                            </Button>
-                                            <Button
-                                                variant="secondary"
-                                                size="sm"
-                                                onClick={() => handleRunTask(task.name)}
-                                                disabled={loading}
-                                            >
-                                                运行
-                                            </Button>
-                                            <Button
-                                                variant="destructive"
-                                                size="sm"
+                                            {/* 删除按钮 - 移动端 */}
+                                            <button
                                                 onClick={() => handleDeleteTask(task.name)}
                                                 disabled={loading}
+                                                className="lg:hidden p-2 text-white/60 hover:text-rose-400 hover:bg-white/5 rounded-lg transition-all"
+                                                title="删除"
                                             >
-                                                删除
-                                            </Button>
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
+
+                                        {/* 桌面端操作按钮 */}
+                                        <div className="hidden lg:flex gap-1 flex-shrink-0">
+                                            <button
+                                                onClick={() => handleEditTask(task)}
+                                                disabled={loading}
+                                                className="p-2 text-white/60 hover:text-cyan-400 hover:bg-white/10 rounded-lg transition-all"
+                                                title="编辑"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                onClick={() => handleRunTask(task.name)}
+                                                disabled={loading}
+                                                className="p-2 text-white/60 hover:text-emerald-400 hover:bg-white/10 rounded-lg transition-all"
+                                                title="运行"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteTask(task.name)}
+                                                disabled={loading}
+                                                className="p-2 text-white/60 hover:text-rose-400 hover:bg-white/10 rounded-lg transition-all"
+                                                title="删除"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
                                         </div>
                                     </div>
                                 </CardContent>

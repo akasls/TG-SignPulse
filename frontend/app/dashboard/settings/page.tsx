@@ -559,7 +559,7 @@ export default function SettingsPage() {
                                     )}
 
                                     <div className="space-y-3 p-4 bg-white/5 rounded">
-                                        <p className="font-medium text-sm">
+                                        <p className="font-medium text-sm text-white">
                                             {aiConfig?.has_config ? "更新配置" : "添加配置"}
                                         </p>
                                         <p className="text-xs text-white/50">
