@@ -210,18 +210,18 @@ export default function AccountTasksContent() {
         loadData(t);
     }, [accountName]);
 
-    const loadData = async (t: string) => {
+    const loadData = async (tokenStr: string) => {
         try {
             setLoading(true);
             const [tasksData, chatsData] = await Promise.all([
-                listSignTasks(t, accountName),  // 按账号名筛选任务
-                getAccountChats(t, accountName),
+                listSignTasks(tokenStr, accountName),  // 按账号名筛选任务
+                getAccountChats(tokenStr, accountName),
             ]);
 
             setTasks(tasksData);
             setChats(chatsData);
         } catch (err: any) {
-            addToast(err.message || "加载数据失败", "error");
+            addToast(err.message || t("login_failed"), "error");
         } finally {
             setLoading(false);
         }

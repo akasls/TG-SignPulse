@@ -101,16 +101,16 @@ export default function SettingsPage() {
         loadTelegramConfig(t);
     }, []);
 
-    const loadTOTPStatus = async (t: string) => {
+    const loadTOTPStatus = async (tokenStr: string) => {
         try {
-            const res = await getTOTPStatus(t);
+            const res = await getTOTPStatus(tokenStr);
             setTotpEnabled(res.enabled);
         } catch (err) { }
     };
 
-    const loadAIConfig = async (t: string) => {
+    const loadAIConfig = async (tokenStr: string) => {
         try {
-            const config = await getAIConfig(t);
+            const config = await getAIConfig(tokenStr);
             setAIConfigState(config);
             if (config) {
                 setAIForm({
@@ -122,16 +122,16 @@ export default function SettingsPage() {
         } catch (err) { }
     };
 
-    const loadGlobalSettings = async (t: string) => {
+    const loadGlobalSettings = async (tokenStr: string) => {
         try {
-            const settings = await getGlobalSettings(t);
+            const settings = await getGlobalSettings(tokenStr);
             setGlobalSettings(settings);
         } catch (err) { }
     };
 
-    const loadTelegramConfig = async (t: string) => {
+    const loadTelegramConfig = async (tokenStr: string) => {
         try {
-            const config = await getTelegramConfig(t);
+            const config = await getTelegramConfig(tokenStr);
             setTelegramConfig(config);
             if (config) {
                 setTelegramForm({
