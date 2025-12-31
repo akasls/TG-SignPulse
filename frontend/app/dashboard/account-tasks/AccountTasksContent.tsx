@@ -196,8 +196,8 @@ export default function AccountTasksContent() {
     const [checking, setChecking] = useState(true);
 
     useEffect(() => {
-        const t = getToken();
-        if (!t) {
+        const tokenStr = getToken();
+        if (!tokenStr) {
             window.location.replace("/");
             return;
         }
@@ -205,9 +205,9 @@ export default function AccountTasksContent() {
             window.location.replace("/dashboard");
             return;
         }
-        setLocalToken(t);
+        setLocalToken(tokenStr);
         setChecking(false);
-        loadData(t);
+        loadData(tokenStr);
     }, [accountName]);
 
     const loadData = async (tokenStr: string) => {
