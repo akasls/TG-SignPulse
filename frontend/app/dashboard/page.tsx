@@ -10,6 +10,7 @@ import {
   verifyAccountLogin,
   deleteAccount,
   getAccountLogs,
+  listSignTasks,
   AccountInfo,
   AccountLog,
   SignTask,
