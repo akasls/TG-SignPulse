@@ -269,6 +269,12 @@ export interface AIConfig {
   api_key_masked?: string;
 }
 
+export interface ChangeUsernameResponse {
+  success: boolean;
+  message: string;
+  access_token?: string;
+}
+
 export interface AITestResult {
   success: boolean;
   message: string;

@@ -46,6 +46,7 @@ class ChangeUsernameResponse(BaseModel):
     """修改用户名响应"""
     success: bool
     message: str
+    access_token: Optional[str] = None
 
 
 class EnableTOTPRequest(BaseModel):
@@ -157,9 +158,14 @@ def change_username(
     current_user.username = new_username
     db.commit()
     
+    # 生成新 Token，因为原来的 Token 基于旧用户名
+    from backend.core.auth import create_access_token
+    new_token = create_access_token(data={"sub": new_username})
+    
     return ChangeUsernameResponse(
         success=True,
-        message="用户名修改成功"
+        message="用户名修改成功",
+        access_token=new_token
     )
 
 

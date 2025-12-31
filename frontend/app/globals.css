@@ -3,6 +3,13 @@
 @tailwind utilities;
 
 :root {
+  --background: #0f0f23;
+  --foreground: #e2e8f0;
+  --card: rgba(255, 255, 255, 0.05);
+  --card-foreground: #ffffff;
+  --border: rgba(255, 255, 255, 0.1);
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
   color-scheme: dark;
   --aurora-1: #00d4ff;
   --aurora-2: #7c3aed;
@@ -10,25 +17,33 @@
   --glow-color: rgba(0, 212, 255, 0.3);
 }
 
+.light {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: rgba(255, 255, 255, 0.8);
+  --card-foreground: #0f172a;
+  --border: rgba(0, 0, 0, 0.1);
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+}
+
 body {
-  background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
-  background-attachment: fixed;
-  color: #e2e8f0;
+  background: var(--background);
+  color: var(--foreground);
   min-height: 100vh;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow-x: hidden;
+  scrollbar-gutter: stable;
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 /* ========== Glassmorphism 核心样式 ========== */
 
 .glass {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  background: var(--card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
 }
 
 /* 导航栏固定时确保宽度正确 */
@@ -301,14 +316,17 @@ textarea::placeholder {
 
 .animate-glow-move {
   animation: glow-move 15s ease-in-out infinite;
+  will-change: transform, opacity;
 }
 
 .animate-glow-move-reverse {
   animation: glow-move-reverse 18s ease-in-out infinite;
+  will-change: transform, opacity;
 }
 
 .animate-glow-pulse {
   animation: glow-pulse 10s ease-in-out infinite;
+  will-change: transform, opacity;
 }
 
 /* ========== 动画 ========== */

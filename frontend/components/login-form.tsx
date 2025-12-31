@@ -8,33 +8,39 @@ import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { useToast } from "./ui/toast";
 
 export default function LoginForm() {
   const router = useRouter();
+  const { addToast } = useToast();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("admin123");
   const [totp, setTotp] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [showTotpHelp, setShowTotpHelp] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
-    setSuccess(null);
     try {
       const res = await login({ username, password, totp_code: totp || undefined });
       setToken(res.access_token);
+      addToast("登录成功", "success");
       router.push("/dashboard");
     } catch (err: any) {
       const errMsg = err?.message || "登录失败";
-      setError(errMsg);
-      // 如果是 TOTP 相关错误，显示帮助提示
-      if (errMsg.includes("TOTP") || errMsg.includes("totp")) {
+      // 常见错误中文转换
+      let displayMsg = errMsg;
+      if (errMsg.includes("Invalid credentials") || errMsg.includes("Invalid username or password")) {
+        displayMsg = "用户名或密码错误";
+      } else if (errMsg.includes("TOTP code required") || errMsg.includes("Invalid TOTP code")) {
+        displayMsg = "两步验证码错误或已过期";
         setShowTotpHelp(true);
+      } else if (errMsg.includes("Could not validate credentials")) {
+        displayMsg = "认证失败，请重新登录";
       }
+
+      addToast(displayMsg, "error");
     } finally {
       setLoading(false);
     }
@@ -42,20 +48,18 @@ export default function LoginForm() {
 
   const handleResetTOTP = async () => {
     if (!username || !password) {
-      setError("请先填写用户名和密码");
+      addToast("请先填写用户名和密码", "error");
       return;
     }
 
     setLoading(true);
-    setError(null);
-    setSuccess(null);
     try {
       const res = await resetTOTP({ username, password });
-      setSuccess(res.message);
+      addToast(res.message || "重置成功", "success");
       setShowTotpHelp(false);
       setTotp("");
     } catch (err: any) {
-      setError(err?.message || "重置失败");
+      addToast(err?.message || "重置失败", "error");
     } finally {
       setLoading(false);
     }
@@ -63,15 +67,6 @@ export default function LoginForm() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      {/* 动态流光背景 */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-0 w-full h-full">
-          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-violet-600/30 rounded-full blur-[120px] animate-glow-move"></div>
-          <div className="absolute bottom-1/3 right-1/4 w-[400px] h-[400px] bg-cyan-500/25 rounded-full blur-[100px] animate-glow-move-reverse"></div>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-pink-500/15 rounded-full blur-[150px] animate-glow-pulse"></div>
-        </div>
-      </div>
-
       <Card className="w-full max-w-xl relative animate-scale-in">
         <CardContent className="p-8 sm:p-12">
           {/* Logo 和标题 */}
@@ -88,6 +83,7 @@ export default function LoginForm() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="请输入用户名"
+                className="glass-input"
               />
             </div>
             <div className="space-y-2">
@@ -97,6 +93,7 @@ export default function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="请输入密码"
+                className="glass-input"
               />
             </div>
             <div className="space-y-2">
@@ -105,41 +102,11 @@ export default function LoginForm() {
                 value={totp}
                 onChange={(e) => setTotp(e.target.value)}
                 placeholder="如未启用两步验证，请留空"
+                className="glass-input"
               />
             </div>
 
-            {error && (
-              <div className="text-sm text-rose-300 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl">
-                {error}
-              </div>
-            )}
-
-            {success && (
-              <div className="text-sm text-emerald-300 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                {success}
-              </div>
-            )}
-
-            {showTotpHelp && (
-              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                <p className="font-medium text-amber-300 mb-2">无法登录？</p>
-                <p className="text-amber-200/70 text-sm mb-3">
-                  如果您未完成两步验证设置但系统要求输入验证码，可以点击下方按钮重置。
-                </p>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleResetTOTP}
-                  disabled={loading}
-                  className="w-full"
-                >
-                  {loading ? "重置中..." : "重置两步验证"}
-                </Button>
-              </div>
-            )}
-
-            <Button className="w-full" type="submit" disabled={loading}>
+            <Button className="w-full btn-primary" type="submit" disabled={loading}>
               {loading ? (
                 <span className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>

@@ -1,24 +1,32 @@
+```typescript
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "../context/ThemeContext";
+import { LanguageProvider } from "../context/LanguageContext";
+
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "tg-signer 控制台",
-  description: "Telegram 自动化签到工具 - 现代化 Web 管理界面",
-  icons: {
-    icon: '/favicon.svg',
-  },
+  title: "TG SignPulse - Telegram 自动签到控制台",
+  description: "现代化、高效的 Telegram 自动签到管理工具",
 };
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
-    <html lang="zh-CN">
-      <body>{children}</body>
+    <html lang="zh">
+      <body className={inter.className}>
+        <LanguageProvider>
+          <ThemeProvider>
+            {children}
+          </ThemeProvider>
+        </LanguageProvider>
+      </body>
     </html>
   );
 }
-
-
+```

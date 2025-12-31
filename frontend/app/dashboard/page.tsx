@@ -22,9 +22,12 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { ToastContainer, useToast } from "../../components/ui/toast";
+import { ThemeLanguageToggle } from "../../components/ThemeLanguageToggle";
+import { useLanguage } from "../../context/LanguageContext";
 
 export default function Dashboard() {
   const router = useRouter();
+  const { t } = useLanguage();
   const { toasts, addToast, removeToast } = useToast();
   const [token, setLocalToken] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<AccountInfo[]>([]);
@@ -52,14 +55,11 @@ export default function Dashboard() {
     phone_code_hash: "",
   });
 
-
-
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
     const t = getToken();
     if (!t) {
-      // 如果没有 token，重定向到登录页
       window.location.replace("/");
       return;
     }
@@ -78,40 +78,34 @@ export default function Dashboard() {
       setAccounts(accountsData.accounts);
       setTasks(tasksData);
     } catch (err: any) {
-      addToast(err.message || "加载数据失败", "error");
+      addToast(err.message || t("login_failed"), "error");
     } finally {
       setLoading(false);
     }
   };
 
   const getAccountTaskCount = (accountName: string) => {
-    // 根据任务的 account_name 筛选属于该账号的任务
     return tasks.filter(task => task.account_name === accountName).length;
   };
 
   const handleStartLogin = async () => {
     if (!token) return;
-
     if (!loginData.account_name || !loginData.phone_number) {
       addToast("请填写账号名称和手机号", "error");
       return;
     }
-
     try {
       setLoading(true);
-
-      const request: LoginStartRequest = {
+      const res = await startAccountLogin(token, {
         account_name: loginData.account_name,
         phone_number: loginData.phone_number,
         proxy: loginData.proxy || undefined,
-      };
-
-      const result = await startAccountLogin(token, request);
-      setLoginData(prev => ({ ...prev, phone_code_hash: result.phone_code_hash }));
-      addToast(result.message, "success");
+      });
+      setLoginData({ ...loginData, phone_code_hash: res.phone_code_hash });
       setLoginStep("verify");
+      addToast("验证码已发送", "success");
     } catch (err: any) {
-      addToast(err.message || "发送验证码失败", "error");
+      addToast(err.message || "发送失败", "error");
     } finally {
       setLoading(false);
     }
@@ -119,70 +113,51 @@ export default function Dashboard() {
 
   const handleVerifyLogin = async () => {
     if (!token) return;
-
     if (!loginData.phone_code) {
       addToast("请输入验证码", "error");
       return;
     }
-
     try {
       setLoading(true);
-
-      const request: LoginVerifyRequest = {
+      await verifyAccountLogin(token, {
         account_name: loginData.account_name,
         phone_number: loginData.phone_number,
         phone_code: loginData.phone_code,
         phone_code_hash: loginData.phone_code_hash,
         password: loginData.password || undefined,
-        proxy: loginData.proxy || undefined,
-      };
-
-      const result = await verifyAccountLogin(token, request);
-      addToast(result.message, "success");
-      setShowAddDialog(false);
-      setLoginStep("input");
-      setLoginData({
-        account_name: "",
-        phone_number: "",
-        proxy: "",
-        phone_code: "",
-        password: "",
-        phone_code_hash: "",
       });
-      await loadData(token);
+      addToast("登录成功", "success");
+      setShowAddDialog(false);
+      loadData(token);
     } catch (err: any) {
-      addToast(err.message || "验证登录失败", "error");
+      addToast(err.message || "验证失败", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteAccount = async (accountName: string) => {
+  const handleDeleteAccount = async (name: string) => {
     if (!token) return;
-
-    if (!confirm(`确定要删除账号 ${accountName} 及其所有任务吗？此操作无法撤销！`)) {
-      return;
-    }
-
+    if (!confirm(t("confirm_delete"))) return;
     try {
       setLoading(true);
-      await deleteAccount(token, accountName);
-      addToast(`账号 ${accountName} 已删除`, "success");
-      await loadData(token);
+      await deleteAccount(token, name);
+      addToast("账号已删除", "success");
+      loadData(token);
     } catch (err: any) {
-      addToast(err.message || "删除账号失败", "error");
+      addToast(err.message || "删除失败", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleShowLogs = async (accountName: string) => {
+  const handleShowLogs = async (name: string) => {
     if (!token) return;
-    setLogsAccountName(accountName);
+    setLogsAccountName(name);
     setShowLogsDialog(true);
     setLogsLoading(true);
     try {
-      const logs = await getAccountLogs(token, accountName, 50);
+      const logs = await getAccountLogs(token, name);
       setAccountLogs(logs);
     } catch (err: any) {
       addToast(err.message || "获取日志失败", "error");
@@ -192,9 +167,8 @@ export default function Dashboard() {
   };
 
   const handleLogout = () => {
-    if (confirm("确定要退出登录吗？")) {
-      logout();
-    }
+    logout();
+    router.push("/");
   };
 
   if (!token || checking) {
@@ -203,246 +177,217 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen">
-      {/* 动态流光背景 */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-violet-600/20 rounded-full blur-[120px] animate-glow-move"></div>
-        <div className="absolute bottom-1/3 right-1/4 w-[400px] h-[400px] bg-cyan-500/15 rounded-full blur-[100px] animate-glow-move-reverse"></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-pink-500/10 rounded-full blur-[150px] animate-glow-pulse"></div>
-      </div>
-
-      {/* 导航栏 */}
       <nav className="glass border-b border-white/10 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            {/* 左侧：网站名称 */}
             <div className="flex items-center gap-3">
-              <div className="text-2xl animate-pulse-glow rounded-full p-1">⚡</div>
-              <h1 className="text-xl font-bold aurora-text">
-                TG SignPulse
-              </h1>
+              <div className="text-3xl animate-pulse-glow bg-white/5 p-2 rounded-xl">⚡</div>
+              <div>
+                <h1 className="text-xl font-bold aurora-text">TG SignPulse</h1>
+                <p className="text-[10px] text-white/40 tracking-widest uppercase">Management System</p>
+              </div>
             </div>
 
-            {/* 右侧：GitHub + 设置 */}
             <div className="flex items-center gap-2">
-              <a
-                href="https://github.com/akasls/tg-signer"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-2.5 hover:bg-white/10 rounded-xl transition-all text-white/70 hover:text-white"
-                title="GitHub"
-              >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
-                </svg>
-              </a>
+              <ThemeLanguageToggle />
+              <div className="w-px h-6 bg-white/10 mx-2 hidden sm:block"></div>
 
-              <Link
-                href="/dashboard/settings"
-                className="p-2.5 hover:bg-white/10 rounded-xl transition-all text-white/70 hover:text-white"
-                title="设置"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </Link>
+              <div className="relative">
+                <button
+                  onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                  className="p-2.5 hover:bg-white/10 rounded-xl transition-all text-white/70 hover:text-white"
+                  title={t("sidebar_settings")}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                  </svg>
+                </button>
+
+                {showSettingsMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowSettingsMenu(false)}></div>
+                    <div className="absolute right-0 mt-2 w-48 glass rounded-xl shadow-2xl z-20 overflow-hidden animate-scale-in">
+                      <Link href="/dashboard/settings" className="flex items-center gap-2 px-4 py-3 text-sm text-white/70 hover:text-white hover:bg-white/10 transition-colors">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {t("sidebar_settings")}
+                      </Link>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-rose-400 hover:bg-rose-500/10 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        {t("logout")}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </nav>
 
+      <div className="max-w-7xl mx-auto px-6 py-8 relative z-0">
+        <header className="flex justify-between items-center mb-10">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">{t("sidebar_accounts")}</h1>
+            <p className="text-white/50">{t("sidebar_accounts")} 列表 ({accounts.length})</p>
+          </div>
+          <Button onClick={() => { setLoginStep("input"); setShowAddDialog(true); }} className="btn-primary gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            {t("add_account")}
+          </Button>
+        </header>
 
-      {/* 主内容 */}
-      <div className="max-w-7xl mx-auto px-6 py-8 page-transition">
-        {/* 账号列表 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {loading && accounts.length === 0 ? (
-            <div className="col-span-full flex flex-col items-center justify-center py-16">
-              <div className="loading-spinner mb-4"></div>
-              <span className="text-white/50">加载中...</span>
-            </div>
-          ) : (
-            <>
-              {accounts.map((account, index) => (
-                <Link
-                  key={account.name}
-                  href={`/dashboard/account-tasks?name=${encodeURIComponent(account.name)}`}
-                  style={{ animationDelay: `${index * 0.1}s` }}
-                  className="animate-fade-in-up opacity-0"
-                >
-                  <Card className="card-hover h-full cursor-pointer relative overflow-hidden">
-                    <CardContent className="p-6 pb-14">
-                      {/* 左上角：账号名称 */}
-                      <div className="font-bold text-lg mb-4 text-white">{account.name}</div>
-
-                      {/* 右上角：任务数量 */}
-                      <div className="absolute top-6 right-6 bg-gradient-to-r from-cyan-500/20 to-violet-500/20 text-cyan-300 px-3 py-1 rounded-full text-sm font-medium border border-cyan-500/30">
-                        {getAccountTaskCount(account.name)} 个任务
+        {loading && accounts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="loading-spinner mb-4"></div>
+            <span className="text-white/50">加载中...</span>
+          </div>
+        ) : accounts.length === 0 ? (
+          <Card className="border-dashed border-white/10 bg-transparent">
+            <CardContent className="py-20 text-center">
+              <div className="text-6xl mb-6">📱</div>
+              <h3 className="text-xl font-medium text-white mb-2">暂无 Telegram 账号</h3>
+              <p className="text-white/40 mb-8">添加您的第一个账号以开始自动化签到</p>
+              <Button onClick={() => setShowAddDialog(true)} variant="outline">
+                立即添加
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {accounts.map((acc) => (
+              <Card key={acc.name} className="card-hover overflow-hidden group">
+                <CardContent className="p-0">
+                  <div className="p-6">
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">
+                        👤
                       </div>
-
-                      {/* 底部：时间和操作按钮对齐 */}
-                      <div className="absolute bottom-4 left-6 right-6 flex items-center justify-between">
-                        {/* 左下角：添加时间 */}
-                        <div className="text-xs text-white/40">
-                          {new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '/')}
-                        </div>
-
-                        {/* 右下角：日志和删除按钮 - 始终显示 */}
-                        <div className="flex gap-1">
-                          {/* 日志按钮 */}
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleShowLogs(account.name);
-                            }}
-                            className="p-2 text-cyan-400 hover:bg-cyan-500/20 rounded-lg transition-all"
-                            title="查看日志"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                          </button>
-                          {/* 删除按钮 */}
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleDeleteAccount(account.name);
-                            }}
-                            className="p-2 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-all"
-                            title="删除账号"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => handleShowLogs(acc.name)} className="p-2 hover:bg-white/10 rounded-lg text-white/50 hover:text-cyan-400 transition-colors" title="查看日志">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </button>
+                        <button onClick={() => handleDeleteAccount(acc.name)} className="p-2 hover:bg-white/10 rounded-lg text-white/50 hover:text-rose-400 transition-colors" title={t("delete")}>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </div>
-                    </CardContent>
-
-                    {/* 装饰性渐变 */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent pointer-events-none"></div>
-                  </Card>
-                </Link>
-              ))}
-
-              {/* 添加账号方块 */}
-              <div
-                className="animate-fade-in-up opacity-0"
-                style={{ animationDelay: `${accounts.length * 0.1}s` }}
-              >
-                <Card
-                  className="card-hover h-full cursor-pointer border-2 border-dashed border-white/20 hover:border-violet-500/50 transition-all bg-transparent hover:bg-white/5"
-                  onClick={() => setShowAddDialog(true)}
-                >
-                  <CardContent className="p-6 flex flex-col items-center justify-center h-full min-h-[150px]">
-                    <div className="text-4xl mb-2 text-white/50">+</div>
-                    <div className="text-white/50 font-medium">添加账号</div>
-                  </CardContent>
-                </Card>
-              </div>
-            </>
-          )}
-        </div>
+                    </div>
+                    <div className="mb-6">
+                      <h3 className="text-xl font-bold text-white mb-1">{acc.name}</h3>
+                      <p className="text-sm font-mono text-white/40">{acc.phone}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-white/5 rounded-xl border border-white/5">
+                        <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1">活跃任务</div>
+                        <div className="text-lg font-bold text-indigo-400">{getAccountTaskCount(acc.name)}</div>
+                      </div>
+                      <div className="p-3 bg-white/5 rounded-xl border border-white/5">
+                        <div className="text-[10px] text-white/30 uppercase tracking-wider mb-1">今日运行</div>
+                        <div className="text-lg font-bold text-emerald-400">-</div>
+                      </div>
+                    </div>
+                  </div>
+                  <Link
+                    href={`/dashboard/account-tasks?name=${acc.name}`}
+                    className="w-full block py-4 text-center bg-white/5 hover:bg-white/10 text-white/70 hover:text-white font-medium transition-all group-hover:bg-primary group-hover:text-white"
+                  >
+                    {t("sidebar_tasks")}
+                  </Link>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* 添加账号对话框 */}
       {showAddDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-md">
-            <CardContent className="p-6">
-              <h2 className="text-xl font-bold mb-4">
-                {loginStep === "input" ? "添加 Telegram 账号" : "验证登录"}
-              </h2>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <Card className="w-full max-w-lg shadow-2xl animate-scale-in">
+            <CardContent className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-white">{loginStep === "input" ? t("add_account") : "安全验证"}</h2>
+                <button onClick={() => setShowAddDialog(false)} className="p-2 hover:bg-white/10 rounded-lg text-white/30 hover:text-white transition-colors">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
 
               {loginStep === "input" ? (
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="account_name">账号名称</Label>
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <Label>{t("username")} (唯一标识)</Label>
                     <Input
-                      id="account_name"
-                      placeholder="例如: my_account"
+                      placeholder="例如: work_account"
+                      className="glass-input"
                       value={loginData.account_name}
                       onChange={(e) => setLoginData({ ...loginData, account_name: e.target.value })}
                     />
                   </div>
-
-                  <div>
-                    <Label htmlFor="phone_number">手机号</Label>
+                  <div className="space-y-2">
+                    <Label>手机号 (带国家码)</Label>
                     <Input
-                      id="phone_number"
-                      placeholder="+8613800138000"
+                      placeholder="+86138..."
+                      className="glass-input"
                       value={loginData.phone_number}
                       onChange={(e) => setLoginData({ ...loginData, phone_number: e.target.value })}
                     />
                   </div>
-
-                  <div>
-                    <Label htmlFor="proxy">代理（可选）</Label>
+                  <div className="space-y-2">
+                    <Label>代理设置 (可选)</Label>
                     <Input
-                      id="proxy"
-                      placeholder="socks5://127.0.0.1:1080"
+                      placeholder="socks5://user:pass@host:port"
+                      className="glass-input"
                       value={loginData.proxy}
                       onChange={(e) => setLoginData({ ...loginData, proxy: e.target.value })}
                     />
                   </div>
-
-                  <div className="flex gap-2 pt-4">
-                    <Button
-                      variant="secondary"
-                      onClick={() => setShowAddDialog(false)}
-                      className="flex-1"
-                    >
-                      取消
-                    </Button>
-                    <Button
-                      onClick={handleStartLogin}
-                      disabled={loading}
-                      className="flex-1"
-                    >
-                      {loading ? "发送中..." : "发送验证码"}
-                    </Button>
-                  </div>
+                  <Button onClick={handleStartLogin} className="w-full btn-primary h-12" disabled={loading}>
+                    {loading ? "发送请求中..." : "获取验证码"}
+                  </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="phone_code">验证码</Label>
-                    <Input
-                      id="phone_code"
-                      placeholder="输入收到的验证码"
-                      value={loginData.phone_code}
-                      onChange={(e) => setLoginData({ ...loginData, phone_code: e.target.value })}
-                    />
+                <div className="space-y-5 text-center">
+                  <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-2 text-4xl">📩</div>
+                  <p className="text-white/60 text-sm mb-4">验证码已发送至您的手机/Telegram 客户端</p>
+                  <div className="space-y-4 text-left">
+                    <div className="space-y-2">
+                      <Label>验证码</Label>
+                      <Input
+                        placeholder="请输入 5 位数字"
+                        className="glass-input text-center text-xl tracking-[1em]"
+                        value={loginData.phone_code}
+                        onChange={(e) => setLoginData({ ...loginData, phone_code: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>两步验证密码 (如未开启请留空)</Label>
+                      <Input
+                        type="password"
+                        placeholder="请输入密码"
+                        className="glass-input"
+                        value={loginData.password}
+                        onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                      />
+                    </div>
                   </div>
-
-                  <div>
-                    <Label htmlFor="password">2FA 密码（可选）</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="如果启用了两步验证，请输入密码"
-                      value={loginData.password}
-                      onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="flex gap-2 pt-4">
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setLoginStep("input");
-                        setLoginData({ ...loginData, phone_code: "", password: "" });
-                      }}
-                      className="flex-1"
-                    >
-                      返回
-                    </Button>
-                    <Button
-                      onClick={handleVerifyLogin}
-                      disabled={loading}
-                      className="flex-1"
-                    >
-                      {loading ? "验证中..." : "验证登录"}
+                  <div className="flex gap-3">
+                    <Button variant="outline" className="flex-1 h-12" onClick={() => setLoginStep("input")}>返回</Button>
+                    <Button onClick={handleVerifyLogin} className="flex-[2] btn-primary h-12" disabled={loading}>
+                      {loading ? "正在验证..." : "完成登录"}
                     </Button>
                   </div>
                 </div>
@@ -450,75 +395,62 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
-      )
-      }
+      )}
 
-      {/* 日志弹窗 */}
-      {
-        showLogsDialog && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
-              <CardContent className="p-6 flex flex-col h-full">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold">账号日志 - {logsAccountName}</h2>
-                  <button
-                    onClick={() => setShowLogsDialog(false)}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+      {showLogsDialog && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+          <Card className="w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-scale-in">
+            <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-cyan-500/10 rounded-lg text-cyan-400">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
                 </div>
-
-                <div className="flex-1 overflow-y-auto">
-                  {logsLoading ? (
-                    <div className="text-center py-8 text-gray-500">加载中...</div>
-                  ) : accountLogs.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">暂无日志记录</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {accountLogs.map((log) => (
-                        <div
-                          key={log.id}
-                          className={`p-3 rounded-lg border ${log.success
-                            ? 'bg-green-50 border-green-200'
-                            : 'bg-red-50 border-red-200'
-                            }`}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-medium text-sm">{log.task_name}</span>
-                            <span className="text-xs text-gray-500">
-                              {new Date(log.created_at).toLocaleString('zh-CN')}
-                            </span>
-                          </div>
-                          <div className={`text-sm ${log.success ? 'text-green-700' : 'text-red-700'}`}>
-                            {log.success ? '✓' : '✗'} {log.message}
-                          </div>
-                        </div>
-                      ))}
+                <h2 className="text-xl font-bold text-white">{logsAccountName} 运行日志</h2>
+              </div>
+              <button onClick={() => setShowLogsDialog(false)} className="p-2 hover:bg-white/10 rounded-lg text-white/30 hover:text-white transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <CardContent className="flex-1 overflow-y-auto p-4 font-mono text-sm bg-black/20">
+              {logsLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 text-white/30">
+                  <div className="loading-spinner mb-4 border-cyan-500/30 border-t-cyan-500"></div>
+                  读取中...
+                </div>
+              ) : accountLogs.length === 0 ? (
+                <div className="text-center py-20 text-white/20">暂无运行日志</div>
+              ) : (
+                <div className="space-y-4">
+                  {accountLogs.map((log, i) => (
+                    <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+                      <div className="flex justify-between items-center mb-3 text-xs">
+                        <span className="text-white/30">{new Date(log.time).toLocaleString()}</span>
+                        <span className={`px-2 py-0.5 rounded-full ${log.success ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                          {log.success ? 'SUCCESS' : 'FAILURE'}
+                        </span>
+                      </div>
+                      <pre className="whitespace-pre-wrap text-white/70 leading-relaxed overflow-x-auto max-h-[200px] scrollbar-thin">
+                        {log.output}
+                      </pre>
                     </div>
-                  )}
+                  ))}
                 </div>
+              )}
+            </CardContent>
+            <div className="p-4 border-t border-white/10 text-center bg-white/5">
+              <Button variant="secondary" onClick={() => setShowLogsDialog(false)} className="px-10">
+                关闭
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
 
-                <div className="mt-4 pt-4 border-t border-white/10">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setShowLogsDialog(false)}
-                    className="w-full"
-                  >
-                    关闭
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )
-      }
-
-      {/* Toast 通知容器 */}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
-    </div >
+    </div>
   );
 }
-
