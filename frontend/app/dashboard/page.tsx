@@ -68,12 +68,12 @@ export default function Dashboard() {
     loadData(t);
   }, []);
 
-  const loadData = async (t: string) => {
+  const loadData = async (tokenStr: string) => {
     try {
       setLoading(true);
       const [accountsData, tasksData] = await Promise.all([
-        listAccounts(t),
-        listSignTasks(t),
+        listAccounts(tokenStr),
+        listSignTasks(tokenStr),
       ]);
       setAccounts(accountsData.accounts);
       setTasks(tasksData);
