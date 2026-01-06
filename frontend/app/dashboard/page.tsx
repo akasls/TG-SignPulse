@@ -24,7 +24,8 @@ import {
   Spinner,
   X,
   PaperPlaneRight,
-  Trash
+  Trash,
+  GithubLogo
 } from "@phosphor-icons/react";
 import { ToastContainer, useToast } from "../../components/ui/toast";
 import { ThemeLanguageToggle } from "../../components/ThemeLanguageToggle";

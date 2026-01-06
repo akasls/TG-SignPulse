@@ -17,7 +17,6 @@ export function ThemeLanguageToggle() {
                 title={language === 'zh' ? 'Switch to English' : '切换至中文'}
             >
                 <Translate weight="bold" />
-                <span className="ml-1 text-xs font-bold">{language === 'zh' ? 'ZH' : 'EN'}</span>
             </button>
 
             {/* 主题切换 */}

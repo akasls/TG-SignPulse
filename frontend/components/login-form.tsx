@@ -45,8 +45,8 @@ export default function LoginForm() {
   };
 
   return (
-    <div id="login-view" className="w-full h-screen flex flex-col justify-center items-center relative py-8 px-4 overflow-y-auto custom-scrollbar bg-black/5 dark:bg-black/20">
-      <div className="glass-panel w-full max-w-[420px] p-8 md:p-10 my-auto text-center animate-float-up border border-black/5 dark:border-white/5">
+    <div id="login-view" className="w-full h-[100dvh] flex flex-col justify-center items-center relative p-4 overflow-hidden bg-black/5 dark:bg-black/20">
+      <div className="glass-panel w-full max-w-[420px] p-8 md:p-10 text-center animate-float-up border border-black/5 dark:border-white/5 relative z-10">
         <div className="mb-6">
           <Lightning
             weight="fill"
@@ -54,38 +54,44 @@ export default function LoginForm() {
             style={{ fontSize: '48px', color: '#fcd34d', filter: 'drop-shadow(0 0 10px rgba(252, 211, 77, 0.4))' }}
           />
           <div className="brand-text-grad mt-2">TG SignPulse</div>
-          <p className="text-[#9496a1] text-[11px] mt-1">{t("settings_desc")}</p>
+          <p className="text-[#9496a1] text-[11px] mt-1 leading-relaxed px-4">{t("settings_desc")}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="text-left">
+        <form onSubmit={handleSubmit} className="text-left" autoComplete="off">
           <div className="mb-4">
             <label className="text-[12px] mb-1.5 font-bold text-main/60">{t("username")}</label>
             <input
               type="text"
+              name="username"
               className="!py-3 !px-4 bg-white/5 dark:bg-white/5 border border-black/5 dark:border-white/10"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder={t("username")}
+              autoComplete="off"
             />
           </div>
           <div className="mb-4">
             <label className="text-[12px] mb-1.5 font-bold text-main/60">{t("password")}</label>
             <input
               type="password"
+              name="password"
               className="!py-3 !px-4 bg-white/5 dark:bg-white/5 border border-black/5 dark:border-white/10"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder={t("password")}
+              autoComplete="new-password"
             />
           </div>
-          <div className="mb-4">
+          <div className="mb-5">
             <label className="text-[12px] mb-1.5 font-bold text-main/60">{t("totp")}</label>
             <input
               type="text"
+              name="totp"
               className="!py-3 !px-4 text-center tracking-[4px] bg-white/5 dark:bg-white/5 border border-black/5 dark:border-white/10 font-bold"
               value={totp}
               onChange={(e) => setTotp(e.target.value)}
               placeholder={language === "zh" ? "留空即跳过" : "Skip if disabled"}
+              autoComplete="off"
             />
           </div>
 
@@ -109,9 +115,8 @@ export default function LoginForm() {
 
         <div className="login-footer-icons !mt-8 !pt-6 border-t border-black/5 dark:border-white/5 flex items-center justify-center gap-6">
           <ThemeLanguageToggle />
-          <div className="w-px h-4 bg-black/10 dark:bg-white/10"></div>
           <a
-            href="https://github.com/akasls/tg-signer"
+            href="https://github.com/akasls/TG-SignPulse"
             target="_blank"
             rel="noreferrer"
             className="action-btn !w-9 !h-9 !text-xl"

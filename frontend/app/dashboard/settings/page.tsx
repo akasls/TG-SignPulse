@@ -42,7 +42,8 @@ import {
     WarningCircle,
     Trash,
     Robot as BotIcon,
-    Terminal
+    Terminal,
+    GithubLogo
 } from "@phosphor-icons/react";
 import { ToastContainer, useToast } from "../../../components/ui/toast";
 import { ThemeLanguageToggle } from "../../../components/ThemeLanguageToggle";
@@ -394,17 +395,24 @@ export default function SettingsPage() {
     return (
         <div id="settings-view" className="w-full h-full flex flex-col">
             <nav className="navbar">
-                <div className="nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <Link href="/dashboard" className="action-btn !w-8 !h-8" title={t("sidebar_home")}>
-                        <CaretLeft weight="bold" size={18} />
-                    </Link>
-                    <div className="flex items-center gap-2 text-sm">
-                        <span className="text-main/40 uppercase tracking-widest text-[11px] font-medium">{t("sidebar_home")}</span>
-                        <span className="text-main/20">/</span>
-                        <span className="text-main uppercase tracking-widest text-[11px] font-bold">{t("sidebar_settings")}</span>
+                <div className="nav-brand">
+                    <div className="flex items-center gap-4">
+                        <Link href="/dashboard" className="action-btn !w-8 !h-8" title={t("sidebar_home")}>
+                            <CaretLeft weight="bold" size={18} />
+                        </Link>
+                        <h1 className="text-lg font-bold tracking-tight">{t("sidebar_settings")}</h1>
                     </div>
                 </div>
                 <div className="top-right-actions">
+                    <a
+                        href="https://github.com/akasls/TG-SignPulse"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="action-btn"
+                        title="GitHub Repository"
+                    >
+                        <GithubLogo weight="bold" />
+                    </a>
                     <div
                         className="action-btn !text-rose-400 hover:bg-rose-500/10"
                         title={t("logout")}
@@ -558,16 +566,16 @@ export default function SettingsPage() {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="space-y-2 w-full max-w-md">
-                                    <label className="text-[11px] font-bold text-main/60">{t("verify_code")}</label>
+                                <div className="space-y-3 w-full max-w-lg">
+                                    <label className="text-[11px] font-bold text-main/60 uppercase tracking-widest">{t("verify_code")}</label>
                                     <div className="flex gap-4">
                                         <input
                                             value={totpCode}
                                             onChange={(e) => setTotpCode(e.target.value)}
                                             placeholder="6 digits"
-                                            className="text-center text-2xl tracking-[0.6em] h-12 !py-0 flex-1 border-2 border-white/10 dark:border-white/10 focus:border-[#8a3ffc]/50 bg-white/5 dark:bg-white/5 rounded-xl font-bold"
+                                            className="text-center text-3xl tracking-[0.8em] h-14 !py-0 flex-1 border-2 border-black/10 dark:border-white/10 focus:border-[#8a3ffc]/50 bg-white/5 dark:bg-white/5 rounded-xl font-bold transition-all shadow-inner"
                                         />
-                                        <button onClick={handleEnableTOTP} className="btn-gradient px-8 shrink-0 h-12 !text-xs font-bold" disabled={loading}>
+                                        <button onClick={handleEnableTOTP} className="btn-gradient px-10 shrink-0 h-14 !text-sm font-bold shadow-lg" disabled={loading}>
                                             {t("verify")}
                                         </button>
                                     </div>
