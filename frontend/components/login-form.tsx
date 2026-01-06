@@ -45,8 +45,8 @@ export default function LoginForm() {
   };
 
   return (
-    <div id="login-view" className="w-full min-h-screen flex justify-center items-center relative py-12 px-4 overflow-y-auto custom-scrollbar">
-      <div className="glass-panel w-full max-w-[400px] p-8 md:p-10 my-auto text-center animate-float-up">
+    <div id="login-view" className="w-full h-screen flex flex-col justify-center items-center relative py-8 px-4 overflow-y-auto custom-scrollbar bg-black/5 dark:bg-black/20">
+      <div className="glass-panel w-full max-w-[420px] p-8 md:p-10 my-auto text-center animate-float-up border border-black/5 dark:border-white/5">
         <div className="mb-6">
           <Lightning
             weight="fill"
@@ -54,62 +54,62 @@ export default function LoginForm() {
             style={{ fontSize: '48px', color: '#fcd34d', filter: 'drop-shadow(0 0 10px rgba(252, 211, 77, 0.4))' }}
           />
           <div className="brand-text-grad mt-2">TG SignPulse</div>
-          <p className="text-[#9496a1] text-[11px] mt-1">{language === "zh" ? "Telegram 自动签到控制台" : "Telegram Auto Sign-in Dashboard"}</p>
+          <p className="text-[#9496a1] text-[11px] mt-1">{t("settings_desc")}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="text-left">
           <div className="mb-4">
-            <label className="text-[12px] mb-1.5">{t("username")}</label>
+            <label className="text-[12px] mb-1.5 font-bold text-main/60">{t("username")}</label>
             <input
               type="text"
-              className="!py-3 !px-4"
+              className="!py-3 !px-4 bg-white/5 dark:bg-white/5 border border-black/5 dark:border-white/10"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder={language === "zh" ? "请输入用户名" : "Enter username"}
+              placeholder={t("username")}
             />
           </div>
           <div className="mb-4">
-            <label className="text-[12px] mb-1.5">{t("password")}</label>
+            <label className="text-[12px] mb-1.5 font-bold text-main/60">{t("password")}</label>
             <input
               type="password"
-              className="!py-3 !px-4"
+              className="!py-3 !px-4 bg-white/5 dark:bg-white/5 border border-black/5 dark:border-white/10"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={language === "zh" ? "请输入密码" : "Enter password"}
+              placeholder={t("password")}
             />
           </div>
           <div className="mb-4">
-            <label className="text-[12px] mb-1.5">{t("totp")}</label>
+            <label className="text-[12px] mb-1.5 font-bold text-main/60">{t("totp")}</label>
             <input
               type="text"
-              className="!py-3 !px-4 text-center tracking-[2px]"
+              className="!py-3 !px-4 text-center tracking-[4px] bg-white/5 dark:bg-white/5 border border-black/5 dark:border-white/10 font-bold"
               value={totp}
               onChange={(e) => setTotp(e.target.value)}
-              placeholder={language === "zh" ? "如未启用请留空" : "Leave blank if disabled"}
+              placeholder={language === "zh" ? "留空即跳过" : "Skip if disabled"}
             />
           </div>
 
           {errorMsg && (
-            <div className="text-[#ff4757] text-[11px] mb-4 text-center bg-[#ff4757]/10 p-2 rounded-lg">
+            <div className="text-[#ff4757] text-[11px] mb-4 text-center bg-[#ff4757]/10 p-2 rounded-lg font-medium border border-[#ff4757]/20">
               {errorMsg}
             </div>
           )}
 
-          <button className="btn-gradient w-full !py-3.5" type="submit" disabled={loading}>
+          <button className="btn-gradient w-full !py-3.5 font-bold shadow-lg" type="submit" disabled={loading}>
             {loading ? (
-              <>
+              <div className="flex items-center justify-center gap-2">
                 <Spinner className="animate-spin" size={18} />
-                {language === "zh" ? "正在安全验证..." : "Verifying..."}
-              </>
+                <span>{t("login_loading")}</span>
+              </div>
             ) : (
-              language === "zh" ? "进入控制台" : "Access Console"
+              t("login")
             )}
           </button>
         </form>
 
-        <div className="login-footer-icons !mt-6 !pt-5 border-t border-white/5 flex items-center justify-center gap-6">
+        <div className="login-footer-icons !mt-8 !pt-6 border-t border-black/5 dark:border-white/5 flex items-center justify-center gap-6">
           <ThemeLanguageToggle />
-          <div className="w-px h-4 bg-white/10"></div>
+          <div className="w-px h-4 bg-black/10 dark:bg-white/10"></div>
           <a
             href="https://github.com/akasls/tg-signer"
             target="_blank"

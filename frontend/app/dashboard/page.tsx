@@ -179,7 +179,6 @@ export default function Dashboard() {
         </div>
         <div className="top-right-actions">
           <ThemeLanguageToggle />
-          <div className="w-px h-4 bg-white/10 mx-1"></div>
           <Link href="/dashboard/settings" title={t("sidebar_settings")} className="action-btn">
             <Gear weight="bold" />
           </Link>
@@ -187,11 +186,6 @@ export default function Dashboard() {
       </nav>
 
       <main className="main-content">
-        <header className="mb-8 overflow-hidden">
-          <h1 className="text-2xl font-bold tracking-tight mb-1">{t("dashboard_title")}</h1>
-          <p className="text-[#9496a1] text-xs">{t("dashboard_desc")}</p>
-        </header>
-
         {loading && accounts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-main/30">
             <Spinner className="animate-spin mb-4" size={32} />

@@ -398,10 +398,10 @@ export default function SettingsPage() {
                     <Link href="/dashboard" className="action-btn !w-8 !h-8" title={t("sidebar_home")}>
                         <CaretLeft weight="bold" size={18} />
                     </Link>
-                    <div className="flex items-center gap-2 text-sm font-bold">
-                        <span className="text-main/40 uppercase tracking-widest text-[11px]">{t("sidebar_home")}</span>
+                    <div className="flex items-center gap-2 text-sm">
+                        <span className="text-main/40 uppercase tracking-widest text-[11px] font-medium">{t("sidebar_home")}</span>
                         <span className="text-main/20">/</span>
-                        <span className="text-main uppercase tracking-widest text-[11px]">{t("sidebar_settings")}</span>
+                        <span className="text-main uppercase tracking-widest text-[11px] font-bold">{t("sidebar_settings")}</span>
                     </div>
                 </div>
                 <div className="top-right-actions">
@@ -558,16 +558,16 @@ export default function SettingsPage() {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="space-y-2 max-w-sm">
-                                    <label className="text-[11px]">{t("verify_code")}</label>
-                                    <div className="flex gap-3">
+                                <div className="space-y-2 w-full max-w-md">
+                                    <label className="text-[11px] font-bold text-main/60">{t("verify_code")}</label>
+                                    <div className="flex gap-4">
                                         <input
                                             value={totpCode}
                                             onChange={(e) => setTotpCode(e.target.value)}
                                             placeholder="6 digits"
-                                            className="text-center text-xl tracking-[0.5em] h-11 !py-0 flex-1 border-2 border-white/10 focus:border-[#8a3ffc]/50"
+                                            className="text-center text-2xl tracking-[0.6em] h-12 !py-0 flex-1 border-2 border-white/10 dark:border-white/10 focus:border-[#8a3ffc]/50 bg-white/5 dark:bg-white/5 rounded-xl font-bold"
                                         />
-                                        <button onClick={handleEnableTOTP} className="btn-gradient px-6 shrink-0 h-11 !text-xs" disabled={loading}>
+                                        <button onClick={handleEnableTOTP} className="btn-gradient px-8 shrink-0 h-12 !text-xs font-bold" disabled={loading}>
                                             {t("verify")}
                                         </button>
                                     </div>
@@ -638,9 +638,9 @@ export default function SettingsPage() {
                         </div>
 
                         {aiTestResult && (
-                            <div className={`mt-4 p-3 rounded-xl text-[11px] border ${aiTestResult.includes("成功") || aiTestResult.includes("Success") ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/10' : 'bg-rose-500/5 text-rose-400 border-rose-500/10'} animate-float-up`}>
+                            <div className={`mt-4 p-3 rounded-xl text-[11px] border ${aiTestResult.includes("成功") || aiTestResult.includes("Success") ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'} animate-float-up`}>
                                 <div className="flex items-center gap-2 font-bold mb-0.5 uppercase tracking-wider text-[9px]">
-                                    {aiTestResult.includes("成功") || aiTestResult.includes("Success") ? "Process Successful" : "Process Error"}
+                                    {aiTestResult.includes("成功") || aiTestResult.includes("Success") ? t("process_successful") : t("process_error")}
                                 </div>
                                 {aiTestResult}
                             </div>
@@ -720,10 +720,10 @@ export default function SettingsPage() {
                         <button className="btn-gradient w-fit px-5 !py-2 !text-[11px]" onClick={handleSaveTelegram} disabled={loading}>
                             {loading ? <Spinner className="animate-spin" /> : t("apply_api_config")}
                         </button>
-                        <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-600 dark:text-amber-200/60 leading-relaxed shadow-sm">
-                            <div className="flex items-center gap-2 mb-1">
-                                <Terminal weight="bold" className="text-amber-500 dark:text-amber-400" size={12} />
-                                <span className="font-bold uppercase tracking-wider text-amber-500 dark:text-amber-400">Warning Notice</span>
+                        <div className="mt-4 p-3.5 rounded-xl bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/30 dark:border-amber-500/20 text-[10px] text-amber-700 dark:text-amber-200/60 leading-relaxed shadow-sm font-medium">
+                            <div className="flex items-center gap-2 mb-1.5">
+                                <Terminal weight="bold" className="text-amber-600 dark:text-amber-400" size={12} />
+                                <span className="font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">{t("warning_notice")}</span>
                             </div>
                             {t("tg_config_warning")}
                         </div>
@@ -753,8 +753,8 @@ export default function SettingsPage() {
                             <div className="flex-1 flex flex-col">
                                 <div className="flex justify-between items-center mb-2">
                                     <label className="text-[11px]">{t("import_config")}</label>
-                                    <label className="text-[10px] text-[#8a3ffc] cursor-pointer hover:underline">
-                                        {language === "zh" ? "上传 JSON 文件" : "Upload JSON File"}
+                                    <label className="text-[10px] text-[#8a3ffc] dark:text-[#b57dff] cursor-pointer hover:underline font-bold">
+                                        {t("upload_json")}
                                         <input
                                             type="file"
                                             accept=".json"
@@ -780,14 +780,13 @@ export default function SettingsPage() {
                                     onChange={(e) => setImportConfig(e.target.value)}
                                 ></textarea>
 
-                                <div className="flex items-center gap-3 mt-3 mb-4">
+                                <div className="flex items-center gap-3 mt-3 mb-4 group cursor-pointer" onClick={() => setOverwriteConfig(!overwriteConfig)}>
                                     <div
-                                        className={`w-8 h-5 rounded-full relative cursor-pointer transition-all ${overwriteConfig ? 'bg-[#8a3ffc]' : 'bg-white/10 border border-white/10'}`}
-                                        onClick={() => setOverwriteConfig(!overwriteConfig)}
+                                        className={`w-9 h-5 rounded-full relative transition-all shadow-sm ${overwriteConfig ? 'bg-[#8a3ffc]' : 'bg-black/10 dark:bg-white/10 border border-black/5 dark:border-white/10'}`}
                                     >
-                                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${overwriteConfig ? 'left-3.5' : 'left-0.5'}`}></div>
+                                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-sm ${overwriteConfig ? 'left-4.5' : 'left-0.5'}`}></div>
                                     </div>
-                                    <span className="text-[11px] text-main/50 cursor-pointer" onClick={() => setOverwriteConfig(!overwriteConfig)}>
+                                    <span className={`text-[11px] cursor-pointer select-none transition-colors ${overwriteConfig ? 'text-main font-bold' : 'text-main/40'}`}>
                                         {t("overwrite_conflict")}
                                     </span>
                                 </div>
