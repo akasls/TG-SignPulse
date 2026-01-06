@@ -427,13 +427,8 @@ export default function SettingsPage() {
                 </div>
             </nav>
 
-            <main className="main-content !py-4 !max-w-[1000px]">
-                <header className="mb-4">
-                    <h1 className="text-xl font-bold tracking-tight mb-0.5">{t("settings_title")}</h1>
-                    <p className="text-[#9496a1] text-[10px]">{t("settings_desc")}</p>
-                </header>
-
-                <div className="flex flex-col gap-4">
+            <main className="main-content">
+                <div className="space-y-6 animate-float-up pb-10">
                     {/* 用户名修改 */}
                     <div className="glass-panel p-4">
                         <div className="flex items-center gap-3 mb-4">
@@ -566,16 +561,16 @@ export default function SettingsPage() {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="space-y-3 w-full max-w-lg">
-                                    <label className="text-[11px] font-bold text-main/60 uppercase tracking-widest">{t("verify_code")}</label>
-                                    <div className="flex gap-4">
+                                <div className="space-y-4 w-full">
+                                    <label className="text-[12px] font-bold text-main/60 uppercase tracking-widest">{t("verify_code")}</label>
+                                    <div className="flex gap-5">
                                         <input
                                             value={totpCode}
                                             onChange={(e) => setTotpCode(e.target.value)}
                                             placeholder="6 digits"
-                                            className="text-center text-3xl tracking-[0.8em] h-14 !py-0 flex-1 border-2 border-black/10 dark:border-white/10 focus:border-[#8a3ffc]/50 bg-white/5 dark:bg-white/5 rounded-xl font-bold transition-all shadow-inner"
+                                            className="text-center text-4xl tracking-[1.2em] h-20 !py-0 flex-1 border-2 border-black/10 dark:border-white/10 focus:border-[#8a3ffc]/50 bg-white/5 dark:bg-white/5 rounded-2xl font-bold transition-all shadow-inner"
                                         />
-                                        <button onClick={handleEnableTOTP} className="btn-gradient px-10 shrink-0 h-14 !text-sm font-bold shadow-lg" disabled={loading}>
+                                        <button onClick={handleEnableTOTP} className="btn-gradient px-14 shrink-0 h-20 !text-lg font-bold shadow-lg" disabled={loading}>
                                             {t("verify")}
                                         </button>
                                     </div>
@@ -614,7 +609,7 @@ export default function SettingsPage() {
                                     className="!py-2 !px-4"
                                     value={aiForm.api_key}
                                     onChange={(e) => setAIForm({ ...aiForm, api_key: e.target.value })}
-                                    placeholder={aiConfig ? "******** (已保存)" : "sk-..."}
+                                    placeholder={t("api_key")}
                                 />
                             </div>
                             <div>
@@ -790,11 +785,11 @@ export default function SettingsPage() {
 
                                 <div className="flex items-center gap-3 mt-3 mb-4 group cursor-pointer" onClick={() => setOverwriteConfig(!overwriteConfig)}>
                                     <div
-                                        className={`w-9 h-5 rounded-full relative transition-all shadow-sm ${overwriteConfig ? 'bg-[#8a3ffc]' : 'bg-black/10 dark:bg-white/10 border border-black/5 dark:border-white/10'}`}
+                                        className={`w-12 h-7 rounded-full relative transition-all shadow-sm border-2 ${overwriteConfig ? 'bg-[#8a3ffc] border-[#8a3ffc]' : 'bg-black/20 dark:bg-white/10 border-black/10 dark:border-white/30'}`}
                                     >
-                                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-sm ${overwriteConfig ? 'left-4.5' : 'left-0.5'}`}></div>
+                                        <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all shadow-md ${overwriteConfig ? 'left-6' : 'left-0.5'}`}></div>
                                     </div>
-                                    <span className={`text-[11px] cursor-pointer select-none transition-colors ${overwriteConfig ? 'text-main font-bold' : 'text-main/40'}`}>
+                                    <span className={`text-[13px] cursor-pointer select-none transition-colors ${overwriteConfig ? 'text-main font-bold' : 'text-main/40'}`}>
                                         {t("overwrite_conflict")}
                                     </span>
                                 </div>
