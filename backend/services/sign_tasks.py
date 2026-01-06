@@ -355,12 +355,22 @@ class SignTaskService:
         
         print(f"DEBUG: 执行命令: {' '.join(cmd)}")
         
+        # 获取环境变量并注入 Telegram API 凭据
+        env = os.environ.copy()
+        from backend.services.config import config_service
+        tg_config = config_service.get_telegram_config()
+        if tg_config.get("api_id"):
+            env["TG_API_ID"] = str(tg_config["api_id"])
+        if tg_config.get("api_hash"):
+            env["TG_API_HASH"] = tg_config["api_hash"]
+
         try:
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5 分钟超时
+                env=env,
             )
             
             # 打印 CLI 执行结果，用于调试

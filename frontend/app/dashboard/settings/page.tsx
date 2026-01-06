@@ -32,7 +32,6 @@ import {
     User,
     Lock,
     ShieldCheck,
-    Robot,
     Gear,
     Cpu,
     DownloadSimple,
@@ -42,7 +41,8 @@ import {
     FloppyDisk,
     WarningCircle,
     Trash,
-    Robot as BotIcon
+    Robot as BotIcon,
+    Terminal
 } from "@phosphor-icons/react";
 import { ToastContainer, useToast } from "../../../components/ui/toast";
 import { ThemeLanguageToggle } from "../../../components/ThemeLanguageToggle";
@@ -381,7 +381,7 @@ export default function SettingsPage() {
             addToast(language === "zh" ? "配置已重置" : "Config reset", "success");
             loadTelegramConfig(token);
         } catch (err: any) {
-            addToast(err.message || (t("zh") === "zh" ? "操作失败" : "Operation failed"), "error");
+            addToast(err.message || (language === "zh" ? "操作失败" : "Operation failed"), "error");
         } finally {
             setLoading(false);
         }
@@ -395,17 +395,16 @@ export default function SettingsPage() {
         <div id="settings-view" className="w-full h-full flex flex-col">
             <nav className="navbar">
                 <div className="nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <Link href="/dashboard" className="action-btn" title={t("sidebar_home")}>
-                        <CaretLeft weight="bold" />
+                    <Link href="/dashboard" className="action-btn !w-8 !h-8" title={t("sidebar_home")}>
+                        <CaretLeft weight="bold" size={18} />
                     </Link>
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                        <span className="text-main/40 uppercase tracking-widest text-[10px]">{t("sidebar_home")}</span>
+                    <div className="flex items-center gap-2 text-sm font-bold">
+                        <span className="text-main/40 uppercase tracking-widest text-[11px]">{t("sidebar_home")}</span>
                         <span className="text-main/20">/</span>
-                        <span className="text-main uppercase tracking-widest text-[10px]">{t("sidebar_settings")}</span>
+                        <span className="text-main uppercase tracking-widest text-[11px]">{t("sidebar_settings")}</span>
                     </div>
                 </div>
                 <div className="top-right-actions">
-                    <ThemeLanguageToggle />
                     <div
                         className="action-btn !text-rose-400 hover:bg-rose-500/10"
                         title={t("logout")}
@@ -420,111 +419,116 @@ export default function SettingsPage() {
                 </div>
             </nav>
 
-            <main className="main-content">
-                <header className="mb-8">
-                    <h1 className="text-3xl font-bold tracking-tight mb-2">{t("settings_title")}</h1>
-                    <p className="text-[#9496a1] text-sm">{t("settings_desc")}</p>
+            <main className="main-content !py-4 !max-w-[1000px]">
+                <header className="mb-4">
+                    <h1 className="text-xl font-bold tracking-tight mb-0.5">{t("settings_title")}</h1>
+                    <p className="text-[#9496a1] text-[10px]">{t("settings_desc")}</p>
                 </header>
 
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-4">
                     {/* 用户名修改 */}
-                    <div className="glass-panel p-6">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2.5 bg-blue-500/10 rounded-xl text-blue-400">
-                                <User weight="bold" size={20} />
+                    <div className="glass-panel p-4">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-blue-500/10 rounded-xl text-blue-400">
+                                <User weight="bold" size={18} />
                             </div>
-                            <h2 className="text-xl font-bold">{t("username")}</h2>
+                            <h2 className="text-lg font-bold">{t("username")}</h2>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
                             <div>
-                                <label>{t("new_username")}</label>
+                                <label className="text-[12px] mb-1.5">{t("new_username")}</label>
                                 <input
                                     type="text"
+                                    className="!py-2.5 !px-4"
                                     placeholder="New Username"
                                     value={usernameForm.newUsername}
                                     onChange={(e) => setUsernameForm({ ...usernameForm, newUsername: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label>{t("current_password")}</label>
+                                <label className="text-[12px] mb-1.5">{t("current_password")}</label>
                                 <input
                                     type="password"
+                                    className="!py-2.5 !px-4"
                                     placeholder="Verify Current Password"
                                     value={usernameForm.password}
                                     onChange={(e) => setUsernameForm({ ...usernameForm, password: e.target.value })}
                                 />
                             </div>
                         </div>
-                        <button className="btn-gradient w-fit px-8" onClick={handleChangeUsername} disabled={loading}>
+                        <button className="btn-gradient w-fit px-6 !py-2.5 !text-xs" onClick={handleChangeUsername} disabled={loading}>
                             {loading ? <Spinner className="animate-spin" /> : t("change_username")}
                         </button>
                     </div>
 
                     {/* 密码修改 */}
-                    <div className="glass-panel p-6">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2.5 bg-amber-500/10 rounded-xl text-amber-400">
-                                <Lock weight="bold" size={20} />
+                    <div className="glass-panel p-4">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-amber-500/10 rounded-xl text-amber-400">
+                                <Lock weight="bold" size={18} />
                             </div>
-                            <h2 className="text-xl font-bold">{t("change_password")}</h2>
+                            <h2 className="text-lg font-bold">{t("change_password")}</h2>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-5">
                             <div>
-                                <label>{t("old_password")}</label>
+                                <label className="text-[12px] mb-1.5">{t("old_password")}</label>
                                 <input
                                     type="password"
+                                    className="!py-2.5 !px-4"
                                     value={passwordForm.oldPassword}
                                     onChange={(e) => setPasswordForm({ ...passwordForm, oldPassword: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label>{t("new_password")}</label>
+                                <label className="text-[12px] mb-1.5">{t("new_password")}</label>
                                 <input
                                     type="password"
+                                    className="!py-2.5 !px-4"
                                     value={passwordForm.newPassword}
                                     onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label>{t("confirm_new_password")}</label>
+                                <label className="text-[12px] mb-1.5">{t("confirm_new_password")}</label>
                                 <input
                                     type="password"
+                                    className="!py-2.5 !px-4"
                                     value={passwordForm.confirmPassword}
                                     onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
                                 />
                             </div>
                         </div>
-                        <button className="btn-gradient w-fit px-8" onClick={handleChangePassword} disabled={loading}>
+                        <button className="btn-gradient w-fit px-6 !py-2.5 !text-xs" onClick={handleChangePassword} disabled={loading}>
                             {loading ? <Spinner className="animate-spin" /> : t("change_password")}
                         </button>
                     </div>
 
                     {/* 2FA 设置 */}
-                    <div className="glass-panel p-6 overflow-hidden">
-                        <div className="flex justify-between items-center mb-6">
+                    <div className="glass-panel p-4 overflow-hidden">
+                        <div className="flex justify-between items-center mb-4">
                             <div className="flex items-center gap-3">
-                                <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400">
-                                    <ShieldCheck weight="bold" size={20} />
+                                <div className="p-2 bg-emerald-500/10 rounded-xl text-emerald-400">
+                                    <ShieldCheck weight="bold" size={18} />
                                 </div>
-                                <h2 className="text-xl font-bold">{t("2fa_settings")}</h2>
+                                <h2 className="text-lg font-bold">{t("2fa_settings")}</h2>
                             </div>
-                            <div className={`shrink-0 bg-${totpEnabled ? 'emerald' : 'rose'}-500/10 border border-${totpEnabled ? 'emerald' : 'rose'}-500/20 text-${totpEnabled ? 'emerald' : 'rose'}-400 px-4 py-1 rounded-full text-xs font-bold`}>
+                            <div className={`shrink-0 bg-${totpEnabled ? 'emerald' : 'rose'}-500/10 border border-${totpEnabled ? 'emerald' : 'rose'}-500/20 text-${totpEnabled ? 'emerald' : 'rose'}-400 px-3 py-0.5 rounded-full text-[10px] font-bold`}>
                                 {totpEnabled ? "ENABLED" : "DISABLED"}
                             </div>
                         </div>
 
                         {!totpEnabled && !showTotpSetup && (
-                            <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-2xl p-6 flex gap-6 items-start">
+                            <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-4 flex gap-4 items-start">
                                 <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
-                                    <WarningCircle weight="bold" size={24} />
+                                    <WarningCircle weight="bold" size={18} />
                                 </div>
                                 <div>
-                                    <p className="text-sm text-main/70 leading-relaxed max-w-2xl">
+                                    <p className="text-[11px] text-main/70 leading-relaxed max-w-2xl">
                                         {t("2fa_enable_desc")}
                                     </p>
-                                    <button onClick={handleSetupTOTP} className="btn-secondary mt-6 w-fit h-10 px-6 text-sm" disabled={loading}>
+                                    <button onClick={handleSetupTOTP} className="btn-secondary mt-3 w-fit h-8 px-4 text-[11px]" disabled={loading}>
                                         {t("start_setup")}
                                     </button>
                                 </div>
@@ -532,38 +536,38 @@ export default function SettingsPage() {
                         )}
 
                         {showTotpSetup && (
-                            <div className="animate-float-up space-y-6">
-                                <div className="flex flex-col md:flex-row gap-6 items-center md:items-start p-6 bg-white/2 rounded-2xl border border-white/5 shadow-inner">
-                                    <div className="bg-white p-4 rounded-xl shrink-0">
+                            <div className="animate-float-up space-y-4">
+                                <div className="flex flex-col md:flex-row gap-4 items-center md:items-start p-4 bg-white/2 rounded-xl border border-white/5 shadow-inner">
+                                    <div className="bg-white p-2 rounded-lg shrink-0">
                                         <img
-                                            src={`/api/user/totp/qrcode?secret=${totpSecret}`}
+                                            src={`/api/user/totp/qrcode?token=${token}`}
                                             alt="QR Code"
-                                            className="w-40 h-40"
+                                            className="w-28 h-28"
                                         />
                                     </div>
-                                    <div className="flex-1 space-y-6">
+                                    <div className="flex-1 space-y-3">
                                         <div>
-                                            <h4 className="font-bold text-main mb-2">{t("scan_qr")}</h4>
-                                            <p className="text-sm text-[#9496a1]">{t("scan_qr_desc")}</p>
+                                            <h4 className="font-bold text-xs text-main mb-1">{t("scan_qr")}</h4>
+                                            <p className="text-[10px] text-[#9496a1]">{t("scan_qr_desc")}</p>
                                         </div>
                                         <div>
-                                            <h4 className="font-bold text-main mb-2">{t("backup_secret")}</h4>
-                                            <div className="p-4 bg-white/2 border border-white/8 rounded-xl text-[13px] break-all font-mono text-[#b57dff]">
+                                            <h4 className="font-bold text-xs text-main mb-1">{t("backup_secret")}</h4>
+                                            <div className="p-2.5 bg-white/2 border border-white/8 rounded-lg text-[10px] break-all font-mono text-[#b57dff]">
                                                 {totpSecret}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="space-y-4 max-w-xs">
-                                    <label>{t("verify_code")}</label>
+                                <div className="space-y-2 max-w-sm">
+                                    <label className="text-[11px]">{t("verify_code")}</label>
                                     <div className="flex gap-3">
                                         <input
                                             value={totpCode}
                                             onChange={(e) => setTotpCode(e.target.value)}
-                                            placeholder="6 位数字代码"
-                                            className="text-center text-lg tracking-widest h-12"
+                                            placeholder="6 digits"
+                                            className="text-center text-xl tracking-[0.5em] h-11 !py-0 flex-1 border-2 border-white/10 focus:border-[#8a3ffc]/50"
                                         />
-                                        <button onClick={handleEnableTOTP} className="btn-gradient px-6 shrink-0 h-12" disabled={loading}>
+                                        <button onClick={handleEnableTOTP} className="btn-gradient px-6 shrink-0 h-11 !text-xs" disabled={loading}>
                                             {t("verify")}
                                         </button>
                                     </div>
@@ -572,67 +576,70 @@ export default function SettingsPage() {
                         )}
 
                         {totpEnabled && (
-                            <button onClick={handleDisableTOTP} className="btn-secondary !text-rose-400 hover:bg-rose-500/10 w-fit px-8" disabled={loading}>
+                            <button onClick={handleDisableTOTP} className="btn-secondary !text-rose-400 hover:bg-rose-500/10 w-fit px-6 !py-2.5 !text-xs" disabled={loading}>
                                 {t("disable_2fa")}
                             </button>
                         )}
                     </div>
 
                     {/* AI 配置 */}
-                    <div className="glass-panel p-6">
-                        <div className="flex justify-between items-center mb-6">
+                    <div className="glass-panel p-4">
+                        <div className="flex justify-between items-center mb-4">
                             <div className="flex items-center gap-3">
-                                <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400">
-                                    <BotIcon weight="bold" size={20} />
+                                <div className="p-2 bg-indigo-500/10 rounded-xl text-indigo-400">
+                                    <BotIcon weight="bold" size={18} />
                                 </div>
-                                <h2 className="text-xl font-bold">{t("ai_config")}</h2>
+                                <h2 className="text-lg font-bold">{t("ai_config")}</h2>
                             </div>
                             {aiConfig && (
-                                <button onClick={handleDeleteAI} className="action-btn !text-rose-400" title="删除 AI 配置">
-                                    <Trash weight="bold" />
+                                <button onClick={handleDeleteAI} className="action-btn !w-8 !h-8 !text-rose-400" title="删除 AI 配置">
+                                    <Trash weight="bold" size={16} />
                                 </button>
                             )}
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div className="md:col-span-2">
-                                <label>{t("api_key")}</label>
+                                <label className="text-[11px] mb-1">{t("api_key")}</label>
                                 <input
                                     type="password"
+                                    className="!py-2 !px-4"
                                     value={aiForm.api_key}
                                     onChange={(e) => setAIForm({ ...aiForm, api_key: e.target.value })}
                                     placeholder={aiConfig ? "******** (已保存)" : "sk-..."}
                                 />
                             </div>
                             <div>
-                                <label>{t("base_url")}</label>
+                                <label className="text-[11px] mb-1">{t("base_url")}</label>
                                 <input
+                                    className="!py-2 !px-4"
                                     value={aiForm.base_url}
                                     onChange={(e) => setAIForm({ ...aiForm, base_url: e.target.value })}
                                     placeholder="https://api.openai.com/v1"
                                 />
                             </div>
                             <div>
-                                <label>{t("model")}</label>
+                                <label className="text-[11px] mb-1">{t("model")}</label>
                                 <input
+                                    className="!py-2 !px-4"
                                     value={aiForm.model}
                                     onChange={(e) => setAIForm({ ...aiForm, model: e.target.value })}
                                 />
                             </div>
                         </div>
 
-                        <div className="flex gap-4">
-                            <button onClick={handleSaveAI} className="btn-gradient w-fit px-8" disabled={loading}>
+                        <div className="flex gap-3">
+                            <button onClick={handleSaveAI} className="btn-gradient w-fit px-5 !py-2 !text-[11px]" disabled={loading}>
                                 {loading ? <Spinner className="animate-spin" /> : t("save")}
                             </button>
-                            <button onClick={handleTestAI} className="btn-secondary w-fit px-8" disabled={aiTesting || !aiConfig}>
+                            <button onClick={handleTestAI} className="btn-secondary w-fit px-5 !py-2 !text-[11px]" disabled={aiTesting || !aiConfig}>
                                 {aiTesting ? <Spinner className="animate-spin" /> : t("test_connection")}
                             </button>
                         </div>
 
                         {aiTestResult && (
-                            <div className={`mt-6 p-5 rounded-2xl text-sm border ${aiTestResult.includes("成功") || aiTestResult.includes("Success") ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/10' : 'bg-rose-500/5 text-rose-400 border-rose-500/10'} animate-float-up`}>
-                                <div className="flex items-center gap-2 font-bold mb-1 uppercase tracking-wider text-[10px]">
+                            <div className={`mt-4 p-3 rounded-xl text-[11px] border ${aiTestResult.includes("成功") || aiTestResult.includes("Success") ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/10' : 'bg-rose-500/5 text-rose-400 border-rose-500/10'} animate-float-up`}>
+                                <div className="flex items-center gap-2 font-bold mb-0.5 uppercase tracking-wider text-[9px]">
                                     {aiTestResult.includes("成功") || aiTestResult.includes("Success") ? "Process Successful" : "Process Error"}
                                 </div>
                                 {aiTestResult}
@@ -641,94 +648,101 @@ export default function SettingsPage() {
                     </div>
 
                     {/* 全局设置 */}
-                    <div className="glass-panel p-6">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2.5 bg-violet-500/10 rounded-xl text-violet-400">
-                                <Gear weight="bold" size={20} />
+                    <div className="glass-panel p-4">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-violet-500/10 rounded-xl text-violet-400">
+                                <Gear weight="bold" size={18} />
                             </div>
-                            <h2 className="text-xl font-bold">{t("global_settings")}</h2>
+                            <h2 className="text-lg font-bold">{t("global_settings")}</h2>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <label>{t("sign_interval")}</label>
+                                <label className="text-[11px] mb-1">{t("sign_interval")}</label>
                                 <input
                                     type="number"
+                                    className="!py-2 !px-4"
                                     value={globalSettings.sign_interval === null ? "" : globalSettings.sign_interval}
                                     onChange={(e) => setGlobalSettings({ ...globalSettings, sign_interval: e.target.value ? parseInt(e.target.value) : null })}
                                     placeholder="留空则随机 1-120 秒"
                                 />
-                                <p className="mt-2 text-[11px] text-[#9496a1]">{t("sign_interval_desc")}</p>
+                                <p className="mt-1 text-[9px] text-[#9496a1]">{t("sign_interval_desc")}</p>
                             </div>
                             <div>
-                                <label>{t("log_retention")}</label>
+                                <label className="text-[11px] mb-1">{t("log_retention")}</label>
                                 <input
                                     type="number"
+                                    className="!py-2 !px-4"
                                     value={globalSettings.log_retention_days}
                                     onChange={(e) => setGlobalSettings({ ...globalSettings, log_retention_days: parseInt(e.target.value) || 0 })}
                                 />
                             </div>
                         </div>
-                        <button className="btn-gradient w-fit px-8" onClick={handleSaveGlobal} disabled={loading}>
+                        <button className="btn-gradient w-fit px-5 !py-2 !text-[11px]" onClick={handleSaveGlobal} disabled={loading}>
                             {loading ? <Spinner className="animate-spin" /> : t("save_global_params")}
                         </button>
                     </div>
 
                     {/* Telegram API 配置 */}
-                    <div className="glass-panel p-6">
-                        <div className="flex justify-between items-center mb-6">
+                    <div className="glass-panel p-4">
+                        <div className="flex justify-between items-center mb-4">
                             <div className="flex items-center gap-3">
-                                <div className="p-2.5 bg-sky-500/10 rounded-xl text-sky-400">
-                                    <Cpu weight="bold" size={20} />
+                                <div className="p-2 bg-sky-500/10 rounded-xl text-sky-400">
+                                    <Cpu weight="bold" size={18} />
                                 </div>
-                                <h2 className="text-xl font-bold">{t("tg_api_config")}</h2>
+                                <h2 className="text-lg font-bold">{t("tg_api_config")}</h2>
                             </div>
-                            <button onClick={handleResetTelegram} className="action-btn" title={t("restore_default")}>
-                                <ArrowUDownLeft weight="bold" />
+                            <button onClick={handleResetTelegram} className="action-btn !w-8 !h-8" title={t("restore_default")}>
+                                <ArrowUDownLeft weight="bold" size={16} />
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <label>{t("api_id")}</label>
+                                <label className="text-[11px] mb-1">{t("api_id")}</label>
                                 <input
+                                    className="!py-2 !px-4"
                                     value={telegramForm.api_id}
                                     onChange={(e) => setTelegramForm({ ...telegramForm, api_id: e.target.value })}
                                     placeholder="From my.telegram.org"
                                 />
                             </div>
                             <div>
-                                <label>{t("api_hash")}</label>
+                                <label className="text-[11px] mb-1">{t("api_hash")}</label>
                                 <input
+                                    className="!py-2 !px-4"
                                     value={telegramForm.api_hash}
                                     onChange={(e) => setTelegramForm({ ...telegramForm, api_hash: e.target.value })}
                                     placeholder="From my.telegram.org"
                                 />
                             </div>
                         </div>
-                        <button className="btn-gradient w-fit px-8" onClick={handleSaveTelegram} disabled={loading}>
+                        <button className="btn-gradient w-fit px-5 !py-2 !text-[11px]" onClick={handleSaveTelegram} disabled={loading}>
                             {loading ? <Spinner className="animate-spin" /> : t("apply_api_config")}
                         </button>
-                        <p className="mt-6 p-4 rounded-xl bg-amber-500/5 border border-amber-500/10 text-[11px] text-amber-200/50 leading-relaxed">
-                            <span className="font-bold text-amber-400 block mb-1">WARNING</span>
+                        <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-600 dark:text-amber-200/60 leading-relaxed shadow-sm">
+                            <div className="flex items-center gap-2 mb-1">
+                                <Terminal weight="bold" className="text-amber-500 dark:text-amber-400" size={12} />
+                                <span className="font-bold uppercase tracking-wider text-amber-500 dark:text-amber-400">Warning Notice</span>
+                            </div>
                             {t("tg_config_warning")}
-                        </p>
+                        </div>
                     </div>
 
                     {/* 配置导出导入 */}
-                    <div className="glass-panel p-6">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2.5 bg-pink-500/10 rounded-xl text-pink-400">
-                                <DownloadSimple weight="bold" size={20} />
+                    <div className="glass-panel p-4">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-pink-500/10 rounded-xl text-pink-400">
+                                <DownloadSimple weight="bold" size={18} />
                             </div>
-                            <h2 className="text-xl font-bold">{t("backup_migration")}</h2>
+                            <h2 className="text-lg font-bold">{t("backup_migration")}</h2>
                         </div>
 
-                        <div className="flex flex-col md:flex-row gap-10">
+                        <div className="flex flex-col md:flex-row gap-6">
                             <div className="flex-1">
-                                <label className="mb-4">{t("export_config")}</label>
-                                <p className="text-xs text-[#9496a1] mb-6 leading-relaxed">{t("export_desc")}</p>
-                                <button onClick={handleExport} className="btn-secondary w-full flex items-center justify-center gap-2 h-12" disabled={loading}>
+                                <label className="mb-2 text-[11px]">{t("export_config")}</label>
+                                <p className="text-[10px] text-[#9496a1] mb-3 leading-relaxed">{t("export_desc")}</p>
+                                <button onClick={handleExport} className="btn-secondary w-full flex items-center justify-center gap-2 h-9 !text-[11px]" disabled={loading}>
                                     <FloppyDisk weight="bold" />
                                     {t("download_json")}
                                 </button>
@@ -737,27 +751,48 @@ export default function SettingsPage() {
                             <div className="w-px bg-white/5 self-stretch hidden md:block"></div>
 
                             <div className="flex-1 flex flex-col">
-                                <label className="mb-4">{t("import_config")}</label>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-[11px]">{t("import_config")}</label>
+                                    <label className="text-[10px] text-[#8a3ffc] cursor-pointer hover:underline">
+                                        {language === "zh" ? "上传 JSON 文件" : "Upload JSON File"}
+                                        <input
+                                            type="file"
+                                            accept=".json"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) {
+                                                    const reader = new FileReader();
+                                                    reader.onload = (ev) => {
+                                                        const content = ev.target?.result as string;
+                                                        setImportConfig(content);
+                                                    };
+                                                    reader.readAsText(file);
+                                                }
+                                            }}
+                                        />
+                                    </label>
+                                </div>
                                 <textarea
-                                    className="w-full flex-1 min-h-[120px] bg-white/2 rounded-2xl p-4 text-xs font-mono text-main/60 border border-white/5 focus:border-[#8a3ffc]/30 outline-none transition-all placeholder:text-main/20 custom-scrollbar"
+                                    className="w-full flex-1 min-h-[80px] bg-white/2 rounded-xl p-3 text-[10px] font-mono text-main/60 border border-white/5 focus:border-[#8a3ffc]/30 outline-none transition-all placeholder:text-main/20 custom-scrollbar"
                                     placeholder={t("paste_json")}
                                     value={importConfig}
                                     onChange={(e) => setImportConfig(e.target.value)}
                                 ></textarea>
 
-                                <div className="flex items-center gap-3 mt-4 mb-6">
+                                <div className="flex items-center gap-3 mt-3 mb-4">
                                     <div
-                                        className={`w-10 h-6 rounded-full relative cursor-pointer transition-all ${overwriteConfig ? 'bg-[#8a3ffc]' : 'bg-white/10 border border-white/10'}`}
+                                        className={`w-8 h-5 rounded-full relative cursor-pointer transition-all ${overwriteConfig ? 'bg-[#8a3ffc]' : 'bg-white/10 border border-white/10'}`}
                                         onClick={() => setOverwriteConfig(!overwriteConfig)}
                                     >
-                                        <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${overwriteConfig ? 'left-5' : 'left-1'}`}></div>
+                                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${overwriteConfig ? 'left-3.5' : 'left-0.5'}`}></div>
                                     </div>
-                                    <span className="text-xs text-main/50 cursor-pointer" onClick={() => setOverwriteConfig(!overwriteConfig)}>
+                                    <span className="text-[11px] text-main/50 cursor-pointer" onClick={() => setOverwriteConfig(!overwriteConfig)}>
                                         {t("overwrite_conflict")}
                                     </span>
                                 </div>
 
-                                <button onClick={handleImport} className="btn-gradient w-full h-12" disabled={loading}>
+                                <button onClick={handleImport} className="btn-gradient w-full h-10 !text-xs" disabled={loading}>
                                     {loading ? <Spinner className="animate-spin" /> : t("execute_import")}
                                 </button>
                             </div>
