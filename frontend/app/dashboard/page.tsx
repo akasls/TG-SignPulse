@@ -10,6 +10,7 @@ import {
   verifyAccountLogin,
   deleteAccount,
   getAccountLogs,
+  exportAccountLogs,
   listSignTasks,
   AccountInfo,
   AccountLog,
@@ -25,7 +26,8 @@ import {
   X,
   PaperPlaneRight,
   Trash,
-  GithubLogo
+  GithubLogo,
+  DownloadSimple
 } from "@phosphor-icons/react";
 import { ToastContainer, useToast } from "../../components/ui/toast";
 import { ThemeLanguageToggle } from "../../components/ThemeLanguageToggle";
@@ -158,12 +160,25 @@ export default function Dashboard() {
     setShowLogsDialog(true);
     setLogsLoading(true);
     try {
-      const logs = await getAccountLogs(token, name);
+      const logs = await getAccountLogs(token, name, 100);
       setAccountLogs(logs);
     } catch (err: any) {
       addToast(err.message || (language === "zh" ? "获取日志失败" : "Failed to get logs"), "error");
     } finally {
       setLogsLoading(false);
+    }
+  };
+
+  const handleExportLogs = async () => {
+    if (!token || !logsAccountName) return;
+    try {
+      setLoading(true);
+      await exportAccountLogs(token, logsAccountName);
+      addToast(language === "zh" ? "日志导出成功" : "Logs exported", "success");
+    } catch (err: any) {
+      addToast(err.message || "Export failed", "error");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -338,6 +353,22 @@ export default function Dashboard() {
                 <div className="font-bold text-lg">{logsAccountName} {t("running_logs")}</div>
               </div>
               <div className="modal-close" onClick={() => setShowLogsDialog(false)}><X weight="bold" /></div>
+            </div>
+
+            <div className="px-5 py-3 border-b border-white/5 flex justify-between items-center bg-white/2">
+              <div className="text-[10px] text-main/30 font-bold uppercase tracking-wider">
+                Showing last {accountLogs.length} entries (3 Days History)
+              </div>
+              {accountLogs.length > 0 && (
+                <button
+                  onClick={handleExportLogs}
+                  disabled={loading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#8a3ffc]/10 text-[#8a3ffc] text-[10px] font-bold hover:bg-[#8a3ffc]/20 transition-all disabled:opacity-50"
+                >
+                  <DownloadSimple weight="bold" size={14} />
+                  {language === "zh" ? "导出日志" : "Export Logs"}
+                </button>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 font-mono text-[13px] bg-black/10 custom-scrollbar">

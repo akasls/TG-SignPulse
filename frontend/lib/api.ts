@@ -360,8 +360,26 @@ export interface AccountLog {
   created_at: string;
 }
 
-export const getAccountLogs = (token: string, accountName: string, limit: number = 50) =>
+export const getAccountLogs = (token: string, accountName: string, limit: number = 100) =>
   request<AccountLog[]>(`/accounts/${accountName}/logs?limit=${limit}`, {}, token);
+
+export const exportAccountLogs = async (token: string, accountName: string) => {
+  const res = await fetch(`${API_BASE}/accounts/${accountName}/logs/export`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) throw new Error("Export failed");
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `logs_${accountName}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
 
 // ============ 签到任务管理 ============
 

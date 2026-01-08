@@ -13,6 +13,17 @@ from backend.services.tasks import run_task_once
 scheduler: BackgroundScheduler | None = None
 
 
+def time_to_cron(time_str: str) -> str:
+    """将 HH:MM 格式转换为 Cron 表达式 (0 MM HH * * *)"""
+    if ":" not in time_str:
+        return time_str  # 如果已经是 cron 格式则返回
+    try:
+        hour, minute = time_str.split(":")
+        return f"{int(minute)} {int(hour)} * * *"
+    except Exception:
+        return time_str
+
+
 def _job_run_task(task_id: int) -> None:
     db: Session = SessionLocal()
     try:
@@ -86,7 +97,8 @@ def sync_jobs() -> None:
                 continue
             
             try:
-                trigger = CronTrigger.from_crontab(st['sign_at'])
+                cron = time_to_cron(st['sign_at'])
+                trigger = CronTrigger.from_crontab(cron)
                 if job_id in existing_ids:
                     scheduler.reschedule_job(job_id, trigger=trigger)
                 else:

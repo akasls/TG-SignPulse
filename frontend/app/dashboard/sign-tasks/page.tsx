@@ -161,7 +161,11 @@ export default function SignTasksPage() {
                     >
                         <ArrowClockwise weight="bold" size={18} className={loading ? 'animate-spin' : ''} />
                     </button>
-                    <Link href="/dashboard/sign-tasks/create" className="action-btn !w-8 !h-8 !text-[#8a3ffc] hover:bg-[#8a3ffc]/10" title={t("add_task")}>
+                    <Link
+                        href="/dashboard/sign-tasks/create"
+                        className={`action-btn !w-8 !h-8 !text-[#8a3ffc] hover:bg-[#8a3ffc]/10 ${loading ? 'pointer-events-none opacity-20' : ''}`}
+                        title={t("add_task")}
+                    >
                         <Plus weight="bold" size={18} />
                     </Link>
                 </div>
@@ -223,18 +227,24 @@ export default function SignTasksPage() {
                                     <div className="flex items-center gap-2">
                                         <button
                                             onClick={() => handleRun(task.name)}
-                                            className="action-btn !text-emerald-400 hover:bg-emerald-500/10"
+                                            disabled={loading}
+                                            className="action-btn !text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-20 disabled:cursor-not-allowed"
                                             title={t("run")}
                                         >
                                             <Play weight="fill" />
                                         </button>
-                                        <Link href={`/dashboard/account-tasks/AccountTasksContent?name=${task.name}`} className="action-btn" title={t("edit")}>
+                                        <Link
+                                            href={`/dashboard/account-tasks/AccountTasksContent?name=${task.name}`}
+                                            className={`action-btn ${loading ? 'pointer-events-none opacity-20' : ''}`}
+                                            title={t("edit")}
+                                        >
                                             <PencilSimple weight="bold" />
                                         </Link>
                                     </div>
                                     <button
                                         onClick={() => handleDelete(task.name)}
-                                        className="action-btn !text-rose-400 hover:bg-rose-500/10"
+                                        disabled={loading}
+                                        className="action-btn !text-rose-400 hover:bg-rose-500/10 disabled:opacity-20 disabled:cursor-not-allowed"
                                         title={t("delete")}
                                     >
                                         <Trash weight="bold" />

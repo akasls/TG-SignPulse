@@ -227,36 +227,54 @@ class AccountLogItem(BaseModel):
 @router.get("/{account_name}/logs", response_model=list[AccountLogItem])
 def get_account_logs(
     account_name: str,
-    limit: int = 50,
+    limit: int = 100,
     current_user: User = Depends(get_current_user)
 ):
-    """
-    获取账号的任务执行日志
-    基于签到任务的 last_run 信息
-    """
+    """获取账号的任务执行历史日志"""
     from backend.services.sign_tasks import sign_task_service
     
-    # 获取该账号的所有任务
-    all_tasks = sign_task_service.list_tasks()
-    account_tasks = [t for t in all_tasks if t.get("account_name") == account_name]
+    history = sign_task_service.get_account_history_logs(account_name)
     
     logs = []
-    log_id = 1
+    for i, item in enumerate(history[:limit]):
+        logs.append(AccountLogItem(
+            id=i + 1,
+            account_name=account_name,
+            task_name=item.get("task_name", "未知任务"),
+            message=item.get("message") or ("执行成功" if item.get("success") else "执行失败"),
+            success=item.get("success", False),
+            created_at=item.get("time", "")
+        ))
     
-    for task in account_tasks:
-        last_run = task.get("last_run")
-        if last_run:
-            logs.append(AccountLogItem(
-                id=log_id,
-                account_name=account_name,
-                task_name=task.get("name", "未知任务"),
-                message=last_run.get("message", "执行完成" if last_run.get("success") else "执行失败"),
-                success=last_run.get("success", False),
-                created_at=last_run.get("time", "")
-            ))
-            log_id += 1
+    return logs
+
+
+@router.get("/{account_name}/logs/export")
+def export_account_logs(
+    account_name: str,
+    current_user: User = Depends(get_current_user)
+):
+    """导出账号日志为 txt 文件"""
+    from fastapi.responses import Response
+    from backend.services.sign_tasks import sign_task_service
     
-    # 按时间倒序排列
-    logs.sort(key=lambda x: x.created_at, reverse=True)
+    history = sign_task_service.get_account_history_logs(account_name)
     
-    return logs[:limit]
+    content = f"Account Logs for: {account_name}\n"
+    content += "="*40 + "\n\n"
+    
+    for item in history:
+        time_str = item.get("time", "").replace("T", " ")[:19]
+        status = "SUCCESS" if item.get("success") else "FAILED"
+        content += f"[{time_str}] Task: {item.get('task_name')} | Status: {status}\n"
+        if item.get("message"):
+            content += f"Message: {item.get('message')}\n"
+        content += "-"*20 + "\n"
+    
+    return Response(
+        content=content,
+        media_type="text/plain",
+        headers={
+            "Content-Disposition": f"attachment; filename=logs_{account_name}.txt"
+        }
+    )

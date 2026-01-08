@@ -26,13 +26,49 @@ class SignTaskService:
         print(f"DEBUG: 初始化 SignTaskService, signs_dir={self.signs_dir}, exists={self.signs_dir.exists()}")
         self._active_logs: Dict[str, List[str]] = {}  # 存储正在运行任务的实时日志
         self._active_tasks: Dict[str, bool] = {}     # 记录正在运行的任务
+        self._cleanup_old_logs()
+
+    def _cleanup_old_logs(self):
+        """清理超过 3 天的日志"""
+        from datetime import datetime, timedelta
+        import time
+        
+        cutoff = time.time() - (3 * 24 * 3600)
+        try:
+            for log_file in self.run_history_dir.glob("*.json"):
+                if log_file.stat().st_mtime < cutoff:
+                    log_file.unlink()
+        except Exception:
+            pass
+
+    def get_account_history_logs(self, account_name: str) -> List[Dict[str, Any]]:
+        """获取某账号下所有任务的最近历史日志"""
+        all_history = []
+        for history_file in self.run_history_dir.glob("*.json"):
+            try:
+                with open(history_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    # data 现在是一个列表
+                    if isinstance(data, list):
+                        for item in data:
+                            if item.get("account_name") == account_name:
+                                item["task_name"] = history_file.stem
+                                all_history.append(item)
+                    elif isinstance(data, dict):
+                        # 兼容旧格式
+                        if data.get("account_name") == account_name:
+                            data["task_name"] = history_file.stem
+                            all_history.append(data)
+            except Exception:
+                continue
+        
+        # 按时间倒序
+        all_history.sort(key=lambda x: x.get("time", ""), reverse=True)
+        return all_history
 
     def _get_last_run_info(self, task_dir: Path) -> Optional[Dict[str, Any]]:
         """
         获取任务的最后执行信息
-        
-        Returns:
-            包含 time, success, message 的字典，如果没有记录则返回 None
         """
         history_file = self.run_history_dir / f"{task_dir.name}.json"
         
@@ -41,25 +77,47 @@ class SignTaskService:
         
         try:
             with open(history_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
+                data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    return data[0] # 最近的一条
+                elif isinstance(data, dict):
+                    return data
+                return None
+        except Exception:
             return None
     
-    def _save_run_info(self, task_name: str, success: bool, message: str = ""):
-        """保存任务执行信息"""
+    def _save_run_info(self, task_name: str, success: bool, message: str = "", account_name: str = ""):
+        """保存任务执行历史 (保留列表)"""
         from datetime import datetime
         
         history_file = self.run_history_dir / f"{task_name}.json"
         
-        info = {
+        new_entry = {
             "time": datetime.now().isoformat(),
             "success": success,
-            "message": message
+            "message": message,
+            "account_name": account_name
         }
+        
+        history = []
+        if history_file.exists():
+            try:
+                with open(history_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        history = data
+                    else:
+                        history = [data]
+            except Exception:
+                history = []
+        
+        history.insert(0, new_entry)
+        # 只保留最近 100 条或最近 3 天的 (此处简单保留数量)
+        history = history[:100]
         
         try:
             with open(history_file, "w", encoding="utf-8") as f:
-                json.dump(info, f, ensure_ascii=False, indent=2)
+                json.dump(history, f, ensure_ascii=False, indent=2)
         except OSError:
             pass
 
@@ -403,7 +461,7 @@ class SignTaskService:
             }
         except Exception as e:
             # 保存错误记录
-            self._save_run_info(task_name, False, str(e))
+            self._save_run_info(task_name, False, str(e), account_name)
             return {
                 "success": False,
                 "output": "",
@@ -472,7 +530,7 @@ class SignTaskService:
             success = process.returncode == 0
             output_str = "\n".join(full_output)
             
-            self._save_run_info(task_name, success, "" if success else "执行失败")
+            self._save_run_info(task_name, success, "" if success else "执行失败", account_name)
             
             return {
                 "success": success,
@@ -482,7 +540,7 @@ class SignTaskService:
         except Exception as e:
             msg = f"运行时发生异常: {str(e)}"
             self._active_logs[task_name].append(msg)
-            self._save_run_info(task_name, False, msg)
+            self._save_run_info(task_name, False, msg, account_name)
             return {"success": False, "output": "", "error": msg}
         finally:
             self._active_tasks[task_name] = False
