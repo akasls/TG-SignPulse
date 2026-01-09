@@ -25,6 +25,16 @@ dependencies = [
     "json_repair",
     "typing-extensions",
     "httpx",
+    "fastapi>=0.109.2",
+    "uvicorn[standard]",
+    "sqlalchemy",
+    "apscheduler",
+    "python-jose[cryptography]",
+    "python-multipart",
+    "pyotp",
+    "passlib[bcrypt]",
+    "bcrypt",
+    "qrcode[pil]",
 ]
 
 [dependency-groups]
