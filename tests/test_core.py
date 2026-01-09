@@ -70,10 +70,18 @@ async def test_client_context_manager_reference_counting_and_start_stop(
         start_stop_calls.append("stop")
         self._fake_started = False
 
+    async def fake_connect(self):
+        await asyncio.sleep(0)
+
+    async def fake_get_me(self):
+        await asyncio.sleep(0)
+        # return a dummy object if needed, but for now just success is enough
+        return type("User", (), {"id": 12345})()
+
     monkeypatch.setattr(core.Client, "start", fake_start)
     monkeypatch.setattr(core.Client, "stop", fake_stop)
-    monkeypatch.setattr(core.Client, "connect", fake_start)  # Reuse fake_start or simple pass
-    monkeypatch.setattr(core.Client, "get_me", fake_start)   # Reuse fake_start ensures it is awaitable
+    monkeypatch.setattr(core.Client, "connect", fake_connect)
+    monkeypatch.setattr(core.Client, "get_me", fake_get_me)
 
     name = "acct"
     client = get_client(
