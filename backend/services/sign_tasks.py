@@ -428,7 +428,7 @@ class SignTaskService:
             name=session_path,
             api_id=int(api_id),
             api_hash=api_hash,
-            in_memory=True, # 使用内存会话，避免锁定文件
+            in_memory=False, # 必须为 False 才能加载本地 session 文件
         )
 
         chats = []
