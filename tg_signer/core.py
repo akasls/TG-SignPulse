@@ -144,7 +144,7 @@ class Client(BaseClient):
                     except Exception as e:
                         # Prevent interactive login attempt
                         raise ConnectionError(f"Session invalid: {e}")
-                    
+
                     await self.start()
                     # Enable WAL mode after start
                     if hasattr(self, "storage") and hasattr(self.storage, "conn"):
