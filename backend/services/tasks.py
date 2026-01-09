@@ -1,19 +1,18 @@
 from __future__ import annotations
-
-from datetime import datetime
+import asyncio
+import os
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from backend.cli.tasks import run_task_cli
+from backend.cli.tasks import async_run_task_cli
 from backend.core.config import get_settings
 from backend.models.account import Account
 from backend.models.task import Task
 from backend.models.task_log import TaskLog
-
-import time
-import os
 
 settings = get_settings()
 
@@ -34,11 +33,11 @@ def list_tasks(db: Session) -> List[Task]:
 
 def cleanup_old_logs(db: Session, days: int = 3) -> int:
     """清理超过指定天数的任务日志和文件"""
-    cutoff = datetime.utcnow().timestamp() - (days * 24 * 3600)
+    cutoff = datetime.utcnow() - timedelta(days=days)
     
     # 获取旧日志
     old_logs = db.query(TaskLog).filter(
-        TaskLog.started_at < datetime.fromtimestamp(cutoff)
+        TaskLog.started_at < cutoff
     ).all()
     
     count = 0
@@ -112,7 +111,7 @@ def _create_log_file(task: Task) -> Path:
     return logs_dir / f"task_{task.id}_{ts}.log"
 
 
-from backend.cli.tasks import async_run_task_cli
+
 
 async def run_task_once(db: Session, task: Task) -> TaskLog:
     if is_task_running(task.id):
@@ -177,7 +176,6 @@ async def run_task_once(db: Session, task: Task) -> TaskLog:
     finally:
         _active_tasks[task.id] = False
         # 延迟清理日志
-        import asyncio
         async def cleanup():
             await asyncio.sleep(60)
             if not is_task_running(task.id):

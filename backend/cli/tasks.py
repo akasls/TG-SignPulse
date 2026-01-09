@@ -1,7 +1,7 @@
 from __future__ import annotations
-
+import asyncio
 import subprocess
-from typing import Optional
+from typing import Optional, Callable
 
 from backend.core.config import get_settings
 
@@ -30,7 +30,6 @@ async def async_run_task_cli(
     Asynchronously run a tg-signer sign task using CLI.
     Returns (returncode, stdout, stderr)
     """
-    import asyncio
     args = _base_args(account_name) + [
         "run",
         task_name,
