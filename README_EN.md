@@ -26,9 +26,21 @@ Or for performance optimization:
 pip install "tg-signer[speedup]"
 ```
 
-#### Docker
+#### Docker (Recommended)
+You can directly pull the pre-built image from GitHub Packages:
 
-No pre-built image is provided. You can build your own image using the Dockerfile and [README](./docker/README.md) in the [docker](./docker) directory.
+```bash
+docker run -d \
+  --name tg-signpulse \
+  -p 8080:8080 \
+  -e TZ=Asia/Hong_Kong \
+  -e SECRET_KEY=your_secret_key \
+  -v /opt/tg-signpulse/data:/data \
+  --restart always \
+  ghcr.io/akasls/tg-signpulse:latest
+```
+
+Automated builds are performed via GitHub Actions on every push to the `main` branch.
 
 ### Usage
 
