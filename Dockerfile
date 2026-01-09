@@ -42,7 +42,8 @@ RUN pip install --no-cache-dir . && \
       pyotp \
       qrcode[pil] \
       apscheduler \
-      python-multipart
+      python-multipart \
+      tgcrypto
 
 # 前端静态文件放在 /web，由 FastAPI StaticFiles 托管
 RUN mkdir -p /web

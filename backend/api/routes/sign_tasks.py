@@ -291,9 +291,11 @@ async def get_account_chats(
             detail=f"账号 {account_name} 不存在或未登录"
         )
     
-    # 从环境变量获取 API credentials
-    api_id = os.getenv("TG_API_ID", "611335")
-    api_hash = os.getenv("TG_API_HASH", "d524b414d21f4d37f08684c1df41ac9c")
+    # 从配置服务或环境变量获取 API credentials
+    from backend.services.config import config_service
+    tg_config = config_service.get_telegram_config()
+    api_id = os.getenv("TG_API_ID", tg_config.get("api_id"))
+    api_hash = os.getenv("TG_API_HASH", tg_config.get("api_hash"))
     
     # 创建客户端
     client = Client(

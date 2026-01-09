@@ -45,6 +45,26 @@ def _job_run_sign_task(account_name: str, task_name: str) -> None:
         print(f"Scheduler: 运行签到任务 {task_name} 失败: {e}")
 
 
+def _job_maintenance() -> None:
+    """每日维护任务：清理旧日志等"""
+    db: Session = SessionLocal()
+    try:
+        from backend.services.tasks import cleanup_old_logs
+        from backend.services.sign_tasks import sign_task_service
+        
+        # 清理数据库任务日志
+        count = cleanup_old_logs(db, days=3)
+        print(f"Maintenance: 已清理 {count} 条数据库任务日志")
+        
+        # 清理签到任务日志 (SignTaskService 内部已有清理逻辑，但可以在此触发)
+        sign_task_service._cleanup_old_logs()
+        print("Maintenance: 已执行签到任务日志清理")
+    except Exception as e:
+        print(f"Maintenance Error: {e}")
+    finally:
+        db.close()
+
+
 def sync_jobs() -> None:
     """
     Sync APScheduler jobs from DB tasks table and file-based sign tasks.
@@ -127,6 +147,15 @@ def init_scheduler() -> BackgroundScheduler:
         settings = get_settings()
         scheduler = BackgroundScheduler(timezone=settings.timezone)
         scheduler.start()
+        
+        # 添加每日凌晨 3 点执行的维护任务
+        scheduler.add_job(
+            _job_maintenance,
+            trigger=CronTrigger.from_crontab("0 3 * * *"),
+            id="system-maintenance",
+            replace_existing=True
+        )
+        
         sync_jobs()
     return scheduler
 

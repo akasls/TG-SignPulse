@@ -398,33 +398,37 @@ class SignTaskService:
         Returns:
             执行结果
         """
-        # 调用 CLI 命令执行任务
-        import subprocess
+        if self.is_task_running(task_name):
+            return {"success": False, "error": "任务已经在运行中", "output": ""}
         
-        # 构建命令: tg-signer --workdir <workdir> --session_dir <session_dir> --account <account> run-once <task>
-        session_dir = str(Path(settings.data_dir) / "sessions")
-        
-        cmd = [
-            "tg-signer",
-            "--workdir", str(self.workdir),
-            "--session_dir", session_dir,
-            "--account", account_name,
-            "run-once",  # 使用 run-once 来运行一次
-            task_name,
-        ]
-        
-        print(f"DEBUG: 执行命令: {' '.join(cmd)}")
-        
-        # 获取环境变量并注入 Telegram API 凭据
-        env = os.environ.copy()
-        from backend.services.config import config_service
-        tg_config = config_service.get_telegram_config()
-        if tg_config.get("api_id"):
-            env["TG_API_ID"] = str(tg_config["api_id"])
-        if tg_config.get("api_hash"):
-            env["TG_API_HASH"] = tg_config["api_hash"]
-
+        self._active_tasks[task_name] = True
         try:
+            # 调用 CLI 命令执行任务
+            import subprocess
+            
+            # 构建命令: tg-signer --workdir <workdir> --session_dir <session_dir> --account <account> run-once <task>
+            session_dir = str(Path(settings.data_dir) / "sessions")
+            
+            cmd = [
+                "tg-signer",
+                "--workdir", str(self.workdir),
+                "--session_dir", session_dir,
+                "--account", account_name,
+                "run-once",  # 使用 run-once 来运行一次
+                task_name,
+            ]
+            
+            print(f"DEBUG: 执行命令: {' '.join(cmd)}")
+            
+            # 获取环境变量并注入 Telegram API 凭据
+            env = os.environ.copy()
+            from backend.services.config import config_service
+            tg_config = config_service.get_telegram_config()
+            if tg_config.get("api_id"):
+                env["TG_API_ID"] = str(tg_config["api_id"])
+            if tg_config.get("api_hash"):
+                env["TG_API_HASH"] = tg_config["api_hash"]
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -467,6 +471,8 @@ class SignTaskService:
                 "output": "",
                 "error": str(e),
             }
+        finally:
+            self._active_tasks[task_name] = False
 
     def get_active_logs(self, task_name: str) -> List[str]:
         """获取正在运行任务的日志"""

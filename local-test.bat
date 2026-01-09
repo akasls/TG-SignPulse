@@ -49,7 +49,7 @@ REM 运行容器
 echo 4. 启动容器...
 docker run -d ^
   --name %CONTAINER_NAME% ^
-  -p %PORT%:3000 ^
+  -p %PORT%:8080 ^
   -e APP_SECRET_KEY=test-secret-key-for-local-development ^
   -v "%cd%\%DATA_DIR%:/data" ^
   %IMAGE_NAME%

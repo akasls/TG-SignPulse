@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 import json
 import logging
 import os
@@ -60,6 +61,16 @@ from tg_signer.config import (
 from .ai_tools import AITools, OpenAIConfigManager
 from .notification.server_chan import sc_send
 from .utils import UserInput, print_to_user
+
+# Monkeypatch sqlite3.connect to increase default timeout
+_original_sqlite3_connect = sqlite3.connect
+
+def _patched_sqlite3_connect(*args, **kwargs):
+    if "timeout" not in kwargs:
+        kwargs["timeout"] = 30  # Default to 30 seconds
+    return _original_sqlite3_connect(*args, **kwargs)
+
+sqlite3.connect = _patched_sqlite3_connect
 
 logger = logging.getLogger("tg-signer")
 
@@ -130,6 +141,12 @@ class Client(BaseClient):
             if _CLIENT_REFS[self.key] == 1:
                 try:
                     await self.start()
+                    # Enable WAL mode after start
+                    if hasattr(self, "storage") and hasattr(self.storage, "conn"):
+                        try:
+                            self.storage.conn.execute("PRAGMA journal_mode=WAL")
+                        except Exception as e:
+                            logger.error(f"Failed to enable WAL mode: {e}")
                 except ConnectionError:
                     pass
             return self

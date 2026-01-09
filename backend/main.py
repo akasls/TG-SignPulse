@@ -6,12 +6,32 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+import logging
+import sqlite3
+
+# Monkeypatch sqlite3.connect to increase default timeout
+_original_sqlite3_connect = sqlite3.connect
+
+def _patched_sqlite3_connect(*args, **kwargs):
+    if "timeout" not in kwargs:
+        kwargs["timeout"] = 30  # Default to 30 seconds
+    return _original_sqlite3_connect(*args, **kwargs)
+
+sqlite3.connect = _patched_sqlite3_connect
+
 from backend.api import router as api_router
 from backend.core.config import get_settings
 from backend.core.database import Base, SessionLocal, engine
 from backend.utils.paths import ensure_data_dirs
 from backend.services.users import ensure_admin
 from backend.scheduler import init_scheduler, shutdown_scheduler
+
+# Silence /health check logs
+class HealthCheckFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.getMessage().find("/health") == -1
+
+logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
 
 settings = get_settings()
 

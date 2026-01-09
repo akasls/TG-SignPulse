@@ -51,7 +51,7 @@ echo ""
 echo -e "${YELLOW}4. 启动容器...${NC}"
 docker run -d \
   --name $CONTAINER_NAME \
-  -p $PORT:3000 \
+  -p $PORT:8080 \
   -e APP_SECRET_KEY=test-secret-key-for-local-development \
   -v "$(pwd)/$DATA_DIR:/data" \
   $IMAGE_NAME

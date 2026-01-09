@@ -12,11 +12,42 @@ from backend.models.account import Account
 from backend.models.task import Task
 from backend.models.task_log import TaskLog
 
+import time
+import os
+
 settings = get_settings()
 
 
 def list_tasks(db: Session) -> List[Task]:
     return db.query(Task).order_by(Task.id.desc()).all()
+
+
+def cleanup_old_logs(db: Session, days: int = 3) -> int:
+    """清理超过指定天数的任务日志和文件"""
+    cutoff = datetime.utcnow().timestamp() - (days * 24 * 3600)
+    
+    # 获取旧日志
+    old_logs = db.query(TaskLog).filter(
+        TaskLog.started_at < datetime.fromtimestamp(cutoff)
+    ).all()
+    
+    count = 0
+    for log in old_logs:
+        # 删除文件
+        if log.log_path:
+            try:
+                p = Path(log.log_path)
+                if p.exists():
+                    p.unlink()
+            except Exception:
+                pass
+        # 从数据库删除
+        db.delete(log)
+        count += 1
+    
+    if count > 0:
+        db.commit()
+    return count
 
 
 def get_task(db: Session, task_id: int) -> Optional[Task]:
