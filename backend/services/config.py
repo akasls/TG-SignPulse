@@ -220,9 +220,6 @@ class ConfigService:
     def export_all_configs(self) -> str:
         """
         导出所有配置
-
-        Returns:
-            包含所有配置的 JSON 字符串
         """
         all_configs = {
             "signs": {},
@@ -230,10 +227,49 @@ class ConfigService:
         }
 
         # 导出所有签到任务
-        for task_name in self.list_sign_tasks():
-            config = self.get_sign_config(task_name)
-            if config:
-                all_configs["signs"][task_name] = config
+        # 直接遍历目录以确保涵盖所有任务，包括同名的
+        if self.signs_dir.exists():
+            # 1. 扫描顶层 (旧版)
+            for path in self.signs_dir.iterdir():
+                if path.is_dir() and (path / "config.json").exists():
+                    try:
+                        with open(path / "config.json", "r", encoding="utf-8") as f:
+                            config = json.load(f)
+                            # 使用 name 作为 key，如果有同名这会覆盖，但这种情况在同一目录下不应该发生
+                            # 为了防止跨目录同名覆盖，我们检查一下
+                            key = path.name
+                            if key in all_configs["signs"]:
+                                key = f"{key}_{config.get('account_name', 'default')}"
+                            all_configs["signs"][key] = config
+                    except Exception:
+                        pass
+                
+                # 2. 扫描账号层
+                if path.is_dir():
+                    for task_dir in path.iterdir():
+                        if task_dir.is_dir() and (task_dir / "config.json").exists():
+                            try:
+                                with open(task_dir / "config.json", "r", encoding="utf-8") as f:
+                                    config = json.load(f)
+                                    # 构造唯一 key: 任务名_账号名
+                                    key = f"{task_dir.name}_{path.name}"
+                                    # 如果原来的 key 已经被占用了 (e.g. 顶层有个叫 TaskA)，这里 TaskA_AccA 不会冲突
+                                    # 但是为了整洁，我们统一一下策略？
+                                    # 策略：如果有 account_name，key = task_name@account_name，否则 key = task_name
+                                    account_name = config.get("account_name")
+                                    if account_name:
+                                        key = f"{config.get('name', task_dir.name)}@{account_name}"
+                                    else:
+                                        key = config.get("name", task_dir.name)
+                                    
+                                    #此时如果还有冲突（极小概率），加随机后缀
+                                    if key in all_configs["signs"]:
+                                        import uuid
+                                        key = f"{key}_{str(uuid.uuid4())[:8]}"
+
+                                    all_configs["signs"][key] = config
+                            except Exception:
+                                pass
 
         # 导出所有监控任务
         for task_name in self.list_monitor_tasks():
@@ -252,13 +288,6 @@ class ConfigService:
     ) -> Dict[str, Any]:
         """
         导入所有配置
-
-        Args:
-            json_str: JSON 字符串
-            overwrite: 是否覆盖已存在的配置
-
-        Returns:
-            导入结果统计
         """
         result = {
             "signs_imported": 0,
@@ -272,10 +301,30 @@ class ConfigService:
             data = json.loads(json_str)
 
             # 导入签到任务
-            for task_name, config in data.get("signs", {}).items():
+            for key, config in data.get("signs", {}).items():
+                # 优先使用配置中的 name，如果没有则使用 key (并去除可能的唯一后缀)
+                task_name = config.get("name")
+                if not task_name:
+                    task_name = key.split("@")[0] # 简单尝试还原
+
                 if not overwrite and self.get_sign_config(task_name):
-                    result["signs_skipped"] += 1
-                    continue
+                    # 注意：get_sign_config 可能会找到其他账号下的同名任务，导致误判 "已存在"
+                    # 如果我们要精确判断，应该结合 account_name
+                    # 但 get_sign_config 目前逻辑是 "只要找到一个就返回"
+                    
+                    # 改进：如果 config 中有 account_name，我们应该检查特定路径是否存在
+                    account_name = config.get("account_name")
+                    exists = False
+                    if account_name:
+                         if (self.signs_dir / account_name / task_name).exists():
+                             exists = True
+                    else:
+                         if (self.signs_dir / task_name).exists():
+                             exists = True
+                    
+                    if exists:
+                        result["signs_skipped"] += 1
+                        continue
 
                 if self.save_sign_config(task_name, config):
                     result["signs_imported"] += 1
