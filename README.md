@@ -54,6 +54,19 @@ services:
 docker-compose up -d
 ```
 
+```
+
+### 方式三：Zeabur 一键部署
+
+1.  在 Zeabur 控制台创建新项目。
+2.  选择 **Deploy New Service** -> **GitHub** -> 选择本仓库。
+3.  服务创建后，进入 **Settings** -> **Volumes**（持久化存储）：
+    *   **Mount Path**: `/data`
+    *   这是一定要做的，否则重启后数据丢失。
+4.  **Networking**：
+    *   确保 Port 设置为 `8080`（Zeabur 通常会自动检测）。
+    *   创建 Domain 以访问服务。
+
 ## 开发
 
 本项目后端基于 Python (FastAPI)，前端基于 TypeScript (Next.js)。
