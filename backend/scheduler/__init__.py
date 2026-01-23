@@ -168,7 +168,7 @@ async def sync_jobs() -> None:
         # 使用缓存的任务列表，减少 I/O
         sign_tasks = sign_task_service.list_tasks(force_refresh=False)
         for st in sign_tasks:
-            job_id = f"sign-{st['name']}"
+            job_id = f"sign-{st['account_name']}-{st['name']}"
             desired_ids.add(job_id)
 
             # SignTask 目前默认都是启用的，或者根据 st['enabled']
@@ -179,6 +179,9 @@ async def sync_jobs() -> None:
 
             try:
                 cron = time_to_cron(st["sign_at"])
+                if st.get("execution_mode") == "range" and st.get("range_start"):
+                    cron = time_to_cron(st["range_start"])
+
                 trigger = CronTrigger.from_crontab(cron)
                 if job_id in existing_ids:
                     scheduler.reschedule_job(job_id, trigger=trigger)
@@ -212,7 +215,7 @@ async def init_scheduler() -> AsyncIOScheduler:
             job_defaults={
                 "misfire_grace_time": 3600,  # 允许任务延迟 1 小时执行
                 "coalesce": True,  # 合并积压的执行
-                "max_instances": 1,  # 每个任务同一时间只运行实例
+                "max_instances": 10,  # 增加并发实例数，避免多账号任务相互阻塞
             },
         )
         scheduler.start()
@@ -244,7 +247,7 @@ def add_or_update_sign_task_job(
     if not scheduler:
         return
 
-    job_id = f"sign-{task_name}"
+    job_id = f"sign-{account_name}-{task_name}"
 
     if not enabled:
         remove_sign_task_job(account_name, task_name)
@@ -273,7 +276,7 @@ def remove_sign_task_job(account_name: str, task_name: str) -> None:
     if not scheduler:
         return
 
-    job_id = f"sign-{task_name}"
+    job_id = f"sign-{account_name}-{task_name}"
     try:
         if scheduler.get_job(job_id):
             scheduler.remove_job(job_id)
