@@ -2,6 +2,7 @@
 Telegram 服务层
 提供 Telegram 账号管理和操作的核心功能
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -45,12 +46,16 @@ class TelegramService:
             for session_file in self.session_dir.glob("*.session"):
                 account_name = session_file.stem  # 文件名（不含扩展名）
 
-                accounts.append({
-                    "name": account_name,
-                    "session_file": str(session_file),
-                    "exists": session_file.exists(),
-                    "size": session_file.stat().st_size if session_file.exists() else 0,
-                })
+                accounts.append(
+                    {
+                        "name": account_name,
+                        "session_file": str(session_file),
+                        "exists": session_file.exists(),
+                        "size": session_file.stat().st_size
+                        if session_file.exists()
+                        else 0,
+                    }
+                )
 
             self._accounts_cache = sorted(accounts, key=lambda x: x["name"])
             return self._accounts_cache
@@ -61,15 +66,15 @@ class TelegramService:
         """检查账号是否存在"""
         # 优先查缓存
         if self._accounts_cache is not None:
-             for acc in self._accounts_cache:
-                 if acc["name"] == account_name:
-                     return True
-             # 如果缓存里没有，可能是缓存过期，也可是真的没有
-             # 保险起见，如果没有找到，还是查一下文件，或者信任缓存？
-             # 考虑到 start_login 会更新缓存，应该可以信任。
-             # 但为了稳妥，如果缓存没命中，再查文件
-             pass
-        
+            for acc in self._accounts_cache:
+                if acc["name"] == account_name:
+                    return True
+            # 如果缓存里没有，可能是缓存过期，也可是真的没有
+            # 保险起见，如果没有找到，还是查一下文件，或者信任缓存？
+            # 考虑到 start_login 会更新缓存，应该可以信任。
+            # 但为了稳妥，如果缓存没命中，再查文件
+            pass
+
         session_file = self.session_dir / f"{account_name}.session"
         return session_file.exists()
 
@@ -85,10 +90,10 @@ class TelegramService:
         """
         # 确保释放资源
         from tg_signer.core import close_client_by_name
-        
+
         # 尝试关闭 active client
         try:
-             await close_client_by_name(account_name, workdir=self.session_dir)
+            await close_client_by_name(account_name, workdir=self.session_dir)
         except Exception as e:
             print(f"DEBUG: 关闭 Account Client 失败: {e}")
 
@@ -104,29 +109,28 @@ class TelegramService:
             journal_file = self.session_dir / f"{account_name}.session-journal"
             if journal_file.exists():
                 journal_file.unlink()
-                
+
             # 删除 shm 和 wal 文件 (sqlite3)
             shm_file = self.session_dir / f"{account_name}.session-shm"
             if shm_file.exists():
                 shm_file.unlink()
-                
+
             wal_file = self.session_dir / f"{account_name}.session-wal"
             if wal_file.exists():
                 wal_file.unlink()
 
             # 更新缓存
             if self._accounts_cache is not None:
-                self._accounts_cache = [acc for acc in self._accounts_cache if acc["name"] != account_name]
+                self._accounts_cache = [
+                    acc for acc in self._accounts_cache if acc["name"] != account_name
+                ]
 
             return True
         except OSError:
             return False
 
     async def start_login(
-        self,
-        account_name: str,
-        phone_number: str,
-        proxy: Optional[str] = None
+        self, account_name: str, phone_number: str, proxy: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         开始登录流程（发送验证码）
@@ -144,10 +148,12 @@ class TelegramService:
         Returns:
             包含 phone_code_hash 的字典
         """
+        import gc
+
         from pyrogram import Client
         from pyrogram.errors import FloodWait, PhoneNumberInvalid
+
         from tg_signer.core import close_client_by_name
-        import gc
 
         # 1. 清理全局 _login_sessions 中可能存在的残留连接
         # _login_sessions key 格式: f"{account_name}_{phone_number}"
@@ -161,7 +167,7 @@ class TelegramService:
                     except Exception:
                         pass
                 keys_to_remove.append(key)
-        
+
         for key in keys_to_remove:
             _login_sessions.pop(key, None)
 
@@ -176,6 +182,7 @@ class TelegramService:
 
         # 获取 API credentials
         from backend.services.config import config_service
+
         tg_config = config_service.get_telegram_config()
         api_id = tg_config.get("api_id")
         api_hash = tg_config.get("api_hash")
@@ -188,6 +195,7 @@ class TelegramService:
         proxy_dict = None
         if proxy:
             from urllib.parse import urlparse
+
             parsed = urlparse(proxy)
             proxy_dict = {
                 "scheme": parsed.scheme,
@@ -204,13 +212,13 @@ class TelegramService:
                 session_file.unlink()
                 # 顺便删掉 journal/wal/shm
                 for ext in [".session-journal", ".session-wal", ".session-shm"]:
-                     aux_file = self.session_dir / f"{account_name}{ext}"
-                     if aux_file.exists():
-                         aux_file.unlink()
+                    aux_file = self.session_dir / f"{account_name}{ext}"
+                    if aux_file.exists():
+                        aux_file.unlink()
             except OSError as e:
                 # 如果删除失败，说明真的被锁得很死，或者权限问题
                 print(f"DEBUG: 删除旧 Session 文件失败: {e} - 可能文件仍被占用")
-                # 这里不抛出异常，尝试继续，也许 Pyrogram 能处理? 
+                # 这里不抛出异常，尝试继续，也许 Pyrogram 能处理?
                 # 但通常 "unable to open database file" 就是因为这个。
                 pass
 
@@ -225,7 +233,7 @@ class TelegramService:
 
         try:
             await client.connect()
-            
+
             self._accounts_cache = None
 
             sent_code = await client.send_code(phone_number)
@@ -263,16 +271,22 @@ class TelegramService:
             raise ValueError(f"请求过于频繁，请等待 {e.value} 秒后重试")
         except Exception as e:
             import traceback
+
             traceback.print_exc()
             try:
                 await client.disconnect()
             except Exception:
                 pass
-            
+
             error_details = str(e)
-            if "database is locked" in error_details or "unable to open database file" in error_details:
-                raise ValueError(f"会话文件被占用，请稍后重试或重启程序。错误: {error_details}")
-            
+            if (
+                "database is locked" in error_details
+                or "unable to open database file" in error_details
+            ):
+                raise ValueError(
+                    f"会话文件被占用，请稍后重试或重启程序。错误: {error_details}"
+                )
+
             raise ValueError(f"发送验证码失败: {error_details}")
 
     async def verify_login(
@@ -282,7 +296,7 @@ class TelegramService:
         phone_code: str,
         phone_code_hash: str,
         password: Optional[str] = None,
-        proxy: Optional[str] = None
+        proxy: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         验证登录（输入验证码和可选的2FA密码）
@@ -324,11 +338,7 @@ class TelegramService:
 
             # 尝试使用验证码登录
             try:
-                await client.sign_in(
-                    phone_number,
-                    phone_code_hash,
-                    phone_code
-                )
+                await client.sign_in(phone_number, phone_code_hash, phone_code)
 
                 # 登录成功，获取用户信息
                 me = await client.get_me()
@@ -419,7 +429,7 @@ class TelegramService:
         phone_code: Optional[str] = None,
         phone_code_hash: Optional[str] = None,
         password: Optional[str] = None,
-        proxy: Optional[str] = None
+        proxy: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         同步版本的登录方法（用于 FastAPI）
@@ -454,7 +464,7 @@ class TelegramService:
                             phone_code,
                             phone_code_hash,
                             password,
-                            proxy
+                            proxy,
                         )
                     )
                 finally:

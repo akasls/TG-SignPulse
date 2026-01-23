@@ -2,6 +2,7 @@
 签到任务 API 路由
 提供签到任务的 REST API
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,41 +29,49 @@ router = APIRouter()
 
 # Pydantic 模型定义
 
+
 class ActionBase(BaseModel):
     """动作基类"""
+
     action: int = Field(..., description="动作类型")
 
 
 class SendTextAction(ActionBase):
     """发送文本动作"""
+
     action: int = Field(1, description="动作类型：1=发送文本")
     text: str = Field(..., description="要发送的文本")
 
 
 class SendDiceAction(ActionBase):
     """发送骰子动作"""
+
     action: int = Field(2, description="动作类型：2=发送骰子")
     dice: str = Field(..., description="骰子表情")
 
 
 class ClickKeyboardAction(ActionBase):
     """点击键盘按钮动作"""
+
     action: int = Field(3, description="动作类型：3=点击按钮")
     text: str = Field(..., description="按钮文本")
 
 
 class ChooseOptionByImageAction(ActionBase):
     """AI 图片识别动作"""
+
     action: int = Field(4, description="动作类型：4=AI 图片识别")
 
 
 class ReplyByCalculationAction(ActionBase):
     """AI 计算题动作"""
+
     action: int = Field(5, description="动作类型：5=AI 计算题")
 
 
 class ChatConfig(BaseModel):
     """Chat 配置"""
+
     chat_id: int = Field(..., description="Chat ID")
     name: str = Field("", description="Chat 名称")
     actions: List[Dict[str, Any]] = Field(..., description="动作列表")
@@ -72,18 +81,22 @@ class ChatConfig(BaseModel):
 
 class SignTaskCreate(BaseModel):
     """创建签到任务请求"""
+
     name: str = Field(..., description="任务名称")
     account_name: str = Field(..., description="关联的账号名称")
     sign_at: str = Field(..., description="签到时间（CRON 表达式）")
     chats: List[ChatConfig] = Field(..., description="Chat 配置列表")
     random_seconds: int = Field(0, description="随机延迟秒数")
-    sign_interval: Optional[int] = Field(None, description="签到间隔秒数，留空使用全局配置或随机 1-120 秒")
+    sign_interval: Optional[int] = Field(
+        None, description="签到间隔秒数，留空使用全局配置或随机 1-120 秒"
+    )
 
-    @validator('name')
+    @validator("name")
     def name_must_be_valid_filename(cls, v):
         import re
+
         if not v or not v.strip():
-            raise ValueError('任务名称不能为空')
+            raise ValueError("任务名称不能为空")
         # Windows 文件名非法字符检查
         invalid_chars = r'[<>:"/\\|?*]'
         if re.search(invalid_chars, v):
@@ -93,6 +106,7 @@ class SignTaskCreate(BaseModel):
 
 class SignTaskUpdate(BaseModel):
     """更新签到任务请求"""
+
     sign_at: Optional[str] = Field(None, description="签到时间（CRON 表达式）")
     chats: Optional[List[ChatConfig]] = Field(None, description="Chat 配置列表")
     random_seconds: Optional[int] = Field(None, description="随机延迟秒数")
@@ -104,6 +118,7 @@ class SignTaskUpdate(BaseModel):
 
 class LastRunInfo(BaseModel):
     """最后执行信息"""
+
     time: str
     success: bool
     message: str = ""
@@ -111,6 +126,7 @@ class LastRunInfo(BaseModel):
 
 class SignTaskOut(BaseModel):
     """签到任务输出"""
+
     name: str
     account_name: str = ""
     sign_at: str
@@ -126,6 +142,7 @@ class SignTaskOut(BaseModel):
 
 class ChatOut(BaseModel):
     """Chat 输出"""
+
     id: int
     title: Optional[str] = None
     username: Optional[str] = None
@@ -135,6 +152,7 @@ class ChatOut(BaseModel):
 
 class RunTaskResult(BaseModel):
     """运行任务结果"""
+
     success: bool
     output: str
     error: str
@@ -142,10 +160,10 @@ class RunTaskResult(BaseModel):
 
 # API 路由
 
+
 @router.get("", response_model=List[SignTaskOut])
 def list_sign_tasks(
-    account_name: Optional[str] = None,
-    current_user=Depends(get_current_user)
+    account_name: Optional[str] = None, current_user=Depends(get_current_user)
 ):
     """
     获取所有签到任务列表
@@ -164,6 +182,7 @@ async def create_sign_task(
 ):
     """创建新的签到任务"""
     import traceback
+
     try:
         # 转换 chats 为字典列表
         chats_dict = [chat.dict() for chat in payload.chats]
@@ -179,6 +198,7 @@ async def create_sign_task(
 
         # 同步调度器
         from backend.scheduler import sync_jobs
+
         await sync_jobs()
 
         return task
@@ -234,6 +254,7 @@ async def update_sign_task(
 
         # 同步调度器
         from backend.scheduler import sync_jobs
+
         await sync_jobs()
 
         return task
@@ -241,6 +262,7 @@ async def update_sign_task(
         raise
     except Exception as e:
         import traceback
+
         print(f"更新任务失败: {str(e)}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"更新任务失败: {str(e)}")
@@ -259,6 +281,7 @@ async def delete_sign_task(
 
     # 同步调度器
     from backend.scheduler import sync_jobs
+
     await sync_jobs()
 
     return {"ok": True}
@@ -298,13 +321,18 @@ async def get_account_chats(
 ):
     """获取账号的 Chat 列表"""
     try:
-        return await sign_task_service.get_account_chats(account_name, force_refresh=force_refresh)
+        return await sign_task_service.get_account_chats(
+            account_name, force_refresh=force_refresh
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取对话列表失败: {str(e)}")
+
+
 @router.websocket("/ws/{task_name}")
 async def sign_task_logs_ws(
     websocket: WebSocket,
@@ -336,19 +364,20 @@ async def sign_task_logs_ws(
             # 如果有新内容，则推送
             if len(active_logs) > last_idx:
                 new_logs = active_logs[last_idx:]
-                await websocket.send_json({
-                    "type": "logs",
-                    "data": new_logs,
-                    "is_running": sign_task_service.is_task_running(task_name)
-                })
+                await websocket.send_json(
+                    {
+                        "type": "logs",
+                        "data": new_logs,
+                        "is_running": sign_task_service.is_task_running(task_name),
+                    }
+                )
                 last_idx = len(active_logs)
 
             # 如果任务已结束且日志已推完
-            if not sign_task_service.is_task_running(task_name) and last_idx >= len(active_logs):
-                await websocket.send_json({
-                    "type": "done",
-                    "is_running": False
-                })
+            if not sign_task_service.is_task_running(task_name) and last_idx >= len(
+                active_logs
+            ):
+                await websocket.send_json({"type": "done", "is_running": False})
                 break
 
             await asyncio.sleep(0.5)

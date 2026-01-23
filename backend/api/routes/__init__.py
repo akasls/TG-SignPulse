@@ -10,4 +10,3 @@ router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 router.include_router(sign_tasks.router, prefix="/sign-tasks", tags=["sign-tasks"])
 router.include_router(config.router, prefix="/config", tags=["config"])
 router.include_router(events.router, prefix="/events", tags=["events"])
-

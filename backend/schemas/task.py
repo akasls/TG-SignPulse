@@ -32,6 +32,3 @@ class TaskOut(TaskBase):
 
     class Config:
         orm_mode = True
-
-
-

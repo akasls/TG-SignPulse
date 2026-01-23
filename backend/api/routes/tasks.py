@@ -130,7 +130,6 @@ def list_logs(
     return logs
 
 
-
 @router.websocket("/ws/{task_id}")
 async def task_logs_ws(
     websocket: WebSocket,
@@ -162,19 +161,20 @@ async def task_logs_ws(
             # 如果有新内容，则推送
             if len(active_logs) > last_idx:
                 new_logs = active_logs[last_idx:]
-                await websocket.send_json({
-                    "type": "logs",
-                    "data": new_logs,
-                    "is_running": task_service.is_task_running(task_id)
-                })
+                await websocket.send_json(
+                    {
+                        "type": "logs",
+                        "data": new_logs,
+                        "is_running": task_service.is_task_running(task_id),
+                    }
+                )
                 last_idx = len(active_logs)
 
             # 如果任务已结束且日志已推完
-            if not task_service.is_task_running(task_id) and last_idx >= len(active_logs):
-                await websocket.send_json({
-                    "type": "done",
-                    "is_running": False
-                })
+            if not task_service.is_task_running(task_id) and last_idx >= len(
+                active_logs
+            ):
+                await websocket.send_json({"type": "done", "is_running": False})
                 break
 
             await asyncio.sleep(0.5)
@@ -187,6 +187,8 @@ async def task_logs_ws(
             await websocket.close()
         except Exception:
             pass
+
+
 @router.get("/logs/{log_id}/output")
 def get_log_output(
     log_id: int,
@@ -206,4 +208,6 @@ def get_log_output(
             content = f.read()
         return {"output": content}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read log file: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to read log file: {str(e)}"
+        )

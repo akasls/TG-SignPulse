@@ -40,7 +40,7 @@ async def async_run_task_cli(
     process = await asyncio.create_subprocess_exec(
         *args,
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT, # 合并 stdout 和 stderr 以便于即时按顺序捕获日志
+        stderr=asyncio.subprocess.STDOUT,  # 合并 stdout 和 stderr 以便于即时按顺序捕获日志
     )
 
     full_output = []
@@ -48,7 +48,7 @@ async def async_run_task_cli(
         line = await process.stdout.readline()
         if not line:
             break
-        decoded_line = line.decode('utf-8', errors='replace').rstrip()
+        decoded_line = line.decode("utf-8", errors="replace").rstrip()
         if decoded_line:
             full_output.append(decoded_line)
             if callback:
@@ -59,8 +59,5 @@ async def async_run_task_cli(
     return (
         process.returncode or 0,
         "\n".join(full_output),
-        "" # stderr 已经由于合并捕获到了 stdout 中
+        "",  # stderr 已经由于合并捕获到了 stdout 中
     )
-
-
-

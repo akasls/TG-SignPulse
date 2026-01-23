@@ -15,5 +15,3 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     totp_secret = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-

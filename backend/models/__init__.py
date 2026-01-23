@@ -4,5 +4,3 @@ from backend.models.task_log import TaskLog
 from backend.models.user import User
 
 __all__ = ["Account", "Task", "TaskLog", "User"]
-
-

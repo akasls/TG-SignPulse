@@ -24,5 +24,3 @@ class Task(Base):
 
     account = relationship("Account", back_populates="tasks")
     logs = relationship("TaskLog", back_populates="task", cascade="all,delete")
-
-

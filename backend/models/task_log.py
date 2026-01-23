@@ -20,5 +20,3 @@ class TaskLog(Base):
     finished_at = Column(DateTime, nullable=True)
 
     task = relationship("Task", back_populates="logs")
-
-

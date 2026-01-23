@@ -24,4 +24,3 @@ class Account(Base):
     )
 
     tasks = relationship("Task", back_populates="account", cascade="all,delete")
-

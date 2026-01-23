@@ -63,14 +63,16 @@ from .utils import UserInput, print_to_user
 # Monkeypatch sqlite3.connect to increase default timeout
 _original_sqlite3_connect = sqlite3.connect
 
+
 def _patched_sqlite3_connect(*args, **kwargs):
     # Force timeout to be at least 10 seconds, even if Pyrogram sets it to 1
     if "timeout" in kwargs:
-         if kwargs["timeout"] < 30:
-             kwargs["timeout"] = 30
+        if kwargs["timeout"] < 30:
+            kwargs["timeout"] = 30
     else:
         kwargs["timeout"] = 30
     return _original_sqlite3_connect(*args, **kwargs)
+
 
 sqlite3.connect = _patched_sqlite3_connect
 
@@ -232,7 +234,7 @@ def get_client(
         _api_id, _api_hash = get_api_config()
         api_id = api_id or _api_id
         api_hash = api_hash or _api_hash
-        
+
     key = str(pathlib.Path(workdir).joinpath(name).resolve())
     if key in _CLIENT_INSTANCES:
         return _CLIENT_INSTANCES[key]
@@ -256,7 +258,7 @@ async def close_client_by_name(name: str, workdir: Union[str, pathlib.Path] = ".
     Forcefully close a client instance by its name and release resources.
     """
     key = str(pathlib.Path(workdir).joinpath(name).resolve())
-    
+
     # Check if we have a lock for this client
     lock = _CLIENT_ASYNC_LOCKS.get(key)
     if lock:
@@ -265,18 +267,20 @@ async def close_client_by_name(name: str, workdir: Union[str, pathlib.Path] = ".
         # If we want to forceful kill, we might skip this, but that's dangerous.
         # For deletion, waiting a moment is acceptable.
         try:
-             # Try to acquire with timeout to avoid deadlocks if something is stuck
-             await asyncio.wait_for(lock.acquire(), timeout=5.0)
-             try:
-                 # Reset references to 0 to ensure proper cleanup
-                 _CLIENT_REFS[key] = 0
-             finally:
-                 # Even if we manipulated refs, release the lock we just acquired
-                 lock.release()
+            # Try to acquire with timeout to avoid deadlocks if something is stuck
+            await asyncio.wait_for(lock.acquire(), timeout=5.0)
+            try:
+                # Reset references to 0 to ensure proper cleanup
+                _CLIENT_REFS[key] = 0
+            finally:
+                # Even if we manipulated refs, release the lock we just acquired
+                lock.release()
         except asyncio.TimeoutError:
-             logger.warning(f"Timeout waiting for lock on client {name}, proceeding with forceful cleanup")
-             _CLIENT_REFS[key] = 0
-             
+            logger.warning(
+                f"Timeout waiting for lock on client {name}, proceeding with forceful cleanup"
+            )
+            _CLIENT_REFS[key] = 0
+
     client = _CLIENT_INSTANCES.get(key)
     if client:
         try:
@@ -286,7 +290,7 @@ async def close_client_by_name(name: str, workdir: Union[str, pathlib.Path] = ".
             logger.warning(f"Error stopping client {name}: {e}")
         finally:
             _CLIENT_INSTANCES.pop(key, None)
-            
+
     # Clean up locks
     if key in _CLIENT_ASYNC_LOCKS:
         _CLIENT_ASYNC_LOCKS.pop(key, None)

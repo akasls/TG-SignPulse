@@ -18,12 +18,14 @@ router = APIRouter()
 
 class ResetTOTPRequest(BaseModel):
     """重置 TOTP 请求（通过密码验证）"""
+
     username: str
     password: str
 
 
 class ResetTOTPResponse(BaseModel):
     """重置 TOTP 响应"""
+
     success: bool
     message: str
 
@@ -33,10 +35,13 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = authenticate_user(db, payload.username, payload.password)
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
         )
     if user.totp_secret:
-        if not payload.totp_code or not verify_totp(user.totp_secret, payload.totp_code):
+        if not payload.totp_code or not verify_totp(
+            user.totp_secret, payload.totp_code
+        ):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="TOTP_REQUIRED_OR_INVALID",
@@ -54,10 +59,7 @@ def me(current_user: User = Depends(auth_core.get_current_user)):
 
 
 @router.post("/reset-totp", response_model=ResetTOTPResponse)
-def reset_totp(
-    request: ResetTOTPRequest,
-    db: Session = Depends(get_db)
-):
+def reset_totp(request: ResetTOTPRequest, db: Session = Depends(get_db)):
     """
     强制重置 TOTP（不需要 TOTP 验证码，只需要密码）
 
@@ -68,28 +70,20 @@ def reset_totp(
     user = db.query(User).filter(User.username == request.username).first()
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户名或密码错误"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误"
         )
 
     if not verify_password(request.password, user.password_hash):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户名或密码错误"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误"
         )
 
     # 如果没有启用 TOTP，提示无需重置
     if not user.totp_secret:
-        return ResetTOTPResponse(
-            success=True,
-            message="该用户未启用两步验证，无需重置"
-        )
+        return ResetTOTPResponse(success=True, message="该用户未启用两步验证，无需重置")
 
     # 清除 TOTP secret
     user.totp_secret = None
     db.commit()
 
-    return ResetTOTPResponse(
-        success=True,
-        message="两步验证已重置，现在可以正常登录"
-    )
+    return ResetTOTPResponse(success=True, message="两步验证已重置，现在可以正常登录")

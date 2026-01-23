@@ -40,5 +40,3 @@ def login_account(
         capture_output=True,
         text=True,
     )
-
-

@@ -2,6 +2,7 @@
 签到任务服务层
 提供签到任务的 CRUD 操作和执行功能
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -9,14 +10,12 @@ import json
 import logging
 import os
 import traceback
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from datetime import datetime
-
-from tg_signer.core import UserSigner, get_client
-from tg_signer.utils import print_to_user
 
 from backend.core.config import get_settings
+from tg_signer.core import UserSigner, get_client
 
 settings = get_settings()
 
@@ -45,6 +44,7 @@ class BackendUserSigner(UserSigner):
     """
     后端专用的 UserSigner，适配后端目录结构并禁止交互式输入
     """
+
     @property
     def task_dir(self):
         # 适配后端的目录结构: signs_dir / account_name / task_name
@@ -52,14 +52,17 @@ class BackendUserSigner(UserSigner):
         return self.tasks_dir / self._account / self.task_name
 
     def ask_for_config(self):
-        raise ValueError(f"任务配置文件不存在: {self.config_file}，且后端模式下禁止交互式输入。")
+        raise ValueError(
+            f"任务配置文件不存在: {self.config_file}，且后端模式下禁止交互式输入。"
+        )
 
     def reconfig(self):
-        raise ValueError(f"任务配置文件不存在: {self.config_file}，且后端模式下禁止交互式输入。")
+        raise ValueError(
+            f"任务配置文件不存在: {self.config_file}，且后端模式下禁止交互式输入。"
+        )
 
     def ask_one(self):
         raise ValueError("后端模式下禁止交互式输入")
-
 
 
 class SignTaskService:
@@ -67,17 +70,20 @@ class SignTaskService:
 
     def __init__(self):
         from backend.core.config import get_settings
+
         settings = get_settings()
         self.workdir = Path(settings.data_dir) / ".signer"
         self.signs_dir = self.workdir / "signs"
         self.run_history_dir = self.workdir / "history"
         self.signs_dir.mkdir(parents=True, exist_ok=True)
         self.run_history_dir.mkdir(parents=True, exist_ok=True)
-        print(f"DEBUG: 初始化 SignTaskService, signs_dir={self.signs_dir}, exists={self.signs_dir.exists()}")
+        print(
+            f"DEBUG: 初始化 SignTaskService, signs_dir={self.signs_dir}, exists={self.signs_dir.exists()}"
+        )
         self._active_logs: Dict[str, List[str]] = {}  # 存储正在运行任务的实时日志
-        self._active_tasks: Dict[str, bool] = {}     # 记录正在运行的任务
+        self._active_tasks: Dict[str, bool] = {}  # 记录正在运行的任务
         self._tasks_cache = None  # 内存缓存
-        self._account_locks: Dict[str, asyncio.Lock] = {} # 账号锁
+        self._account_locks: Dict[str, asyncio.Lock] = {}  # 账号锁
         self._cleanup_old_logs()
 
     def _cleanup_old_logs(self):
@@ -104,14 +110,14 @@ class SignTaskService:
         # 优化：先获取该账号下的任务列表，只读取相关任务的日志
         # 避免扫描整个 history 目录并读取所有文件
         tasks = self.list_tasks(account_name=account_name)
-        
+
         for task in tasks:
             task_name = task["name"]
             history_file = self.run_history_dir / f"{task_name}.json"
-            
+
             if not history_file.exists():
                 continue
-                
+
             try:
                 with open(history_file, "r", encoding="utf-8") as f:
                     data_list = json.load(f)
@@ -143,14 +149,16 @@ class SignTaskService:
             with open(history_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list) and len(data) > 0:
-                    return data[0] # 最近的一条
+                    return data[0]  # 最近的一条
                 elif isinstance(data, dict):
                     return data
                 return None
         except Exception:
             return None
 
-    def _save_run_info(self, task_name: str, success: bool, message: str = "", account_name: str = ""):
+    def _save_run_info(
+        self, task_name: str, success: bool, message: str = "", account_name: str = ""
+    ):
         """保存任务执行历史 (保留列表)"""
         from datetime import datetime
 
@@ -160,7 +168,7 @@ class SignTaskService:
             "time": datetime.now().isoformat(),
             "success": success,
             "message": message,
-            "account_name": account_name
+            "account_name": account_name,
         }
 
         history = []
@@ -187,25 +195,25 @@ class SignTaskService:
             # 1. 更新磁盘上的 config.json
             task = self.get_task(task_name, account_name)
             if task:
-                 # 注意 get_task 返回的是 dict，我们需要路径
-                 # 重新构建路径或复用逻辑
-                 # 这里为了简单，再次查找路径有点低效，但比全量扫描好
-                 # 我们可以利用 self.signs_dir / account_name / task_name
-                 # 但考虑到兼容性，还是得稍微判断下
-                 task_dir = self.signs_dir / account_name / task_name
-                 if not task_dir.exists():
-                     task_dir = self.signs_dir / task_name
-                 
-                 config_file = task_dir / "config.json"
-                 if config_file.exists():
-                     try:
-                         with open(config_file, "r", encoding="utf-8") as f:
-                             config = json.load(f)
-                         config["last_run"] = new_entry
-                         with open(config_file, "w", encoding="utf-8") as f:
-                             json.dump(config, f, ensure_ascii=False, indent=2)
-                     except Exception as e:
-                         print(f"DEBUG: 更新任务配置 last_run 失败: {e}")
+                # 注意 get_task 返回的是 dict，我们需要路径
+                # 重新构建路径或复用逻辑
+                # 这里为了简单，再次查找路径有点低效，但比全量扫描好
+                # 我们可以利用 self.signs_dir / account_name / task_name
+                # 但考虑到兼容性，还是得稍微判断下
+                task_dir = self.signs_dir / account_name / task_name
+                if not task_dir.exists():
+                    task_dir = self.signs_dir / task_name
+
+                config_file = task_dir / "config.json"
+                if config_file.exists():
+                    try:
+                        with open(config_file, "r", encoding="utf-8") as f:
+                            config = json.load(f)
+                        config["last_run"] = new_entry
+                        with open(config_file, "w", encoding="utf-8") as f:
+                            json.dump(config, f, ensure_ascii=False, indent=2)
+                    except Exception as e:
+                        print(f"DEBUG: 更新任务配置 last_run 失败: {e}")
 
             # 2. 更新内存缓存 (关键优化：避免置空 self._tasks_cache)
             if self._tasks_cache is not None:
@@ -213,17 +221,23 @@ class SignTaskService:
                     if t["name"] == task_name and t.get("account_name") == account_name:
                         t["last_run"] = new_entry
                         break
-            
+
         except Exception as e:
             print(f"DEBUG: 保存运行信息失败: {str(e)}")
 
-    def list_tasks(self, account_name: Optional[str] = None, force_refresh: bool = False) -> List[Dict[str, Any]]:
+    def list_tasks(
+        self, account_name: Optional[str] = None, force_refresh: bool = False
+    ) -> List[Dict[str, Any]]:
         """
         获取所有签到任务列表 (支持内存缓存)
         """
         if self._tasks_cache is not None and not force_refresh:
             if account_name:
-                return [t for t in self._tasks_cache if t.get("account_name") == account_name]
+                return [
+                    t
+                    for t in self._tasks_cache
+                    if t.get("account_name") == account_name
+                ]
             return self._tasks_cache
 
         tasks = []
@@ -250,10 +264,16 @@ class SignTaskService:
                     if task_info:
                         tasks.append(task_info)
 
-            self._tasks_cache = sorted(tasks, key=lambda x: (x["account_name"], x["name"]))
+            self._tasks_cache = sorted(
+                tasks, key=lambda x: (x["account_name"], x["name"])
+            )
 
             if account_name:
-                return [t for t in self._tasks_cache if t.get("account_name") == account_name]
+                return [
+                    t
+                    for t in self._tasks_cache
+                    if t.get("account_name") == account_name
+                ]
             return self._tasks_cache
 
         except Exception as e:
@@ -291,7 +311,9 @@ class SignTaskService:
         except Exception:
             return None
 
-    def get_task(self, task_name: str, account_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def get_task(
+        self, task_name: str, account_name: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """
         获取单个任务的详细信息
         """
@@ -303,7 +325,10 @@ class SignTaskService:
             if not (task_dir / "config.json").exists():
                 # 在所有账号目录下搜
                 for acc_dir in self.signs_dir.iterdir():
-                    if acc_dir.is_dir() and (acc_dir / task_name / "config.json").exists():
+                    if (
+                        acc_dir.is_dir()
+                        and (acc_dir / task_name / "config.json").exists()
+                    ):
                         task_dir = acc_dir / task_name
                         break
 
@@ -351,7 +376,7 @@ class SignTaskService:
         from backend.services.config import config_service
 
         if not account_name:
-             raise ValueError("必须指定账号名称")
+            raise ValueError("必须指定账号名称")
 
         account_dir = self.signs_dir / account_name
         account_dir.mkdir(parents=True, exist_ok=True)
@@ -393,11 +418,12 @@ class SignTaskService:
 
         try:
             from backend.scheduler import add_or_update_sign_task_job
+
             add_or_update_sign_task_job(
-                account_name, 
-                task_name, 
-                range_start if execution_mode == "range" else sign_at, 
-                enabled=True
+                account_name,
+                task_name,
+                range_start if execution_mode == "range" else sign_at,
+                enabled=True,
             )
         except Exception as e:
             print(f"DEBUG: 更新调度任务失败: {e}")
@@ -437,19 +463,33 @@ class SignTaskService:
 
         # Determine the account name for the update.
         # If a new account_name is provided, use it. Otherwise, use the existing one.
-        acc_name = account_name if account_name is not None else existing.get("account_name", "")
+        acc_name = (
+            account_name
+            if account_name is not None
+            else existing.get("account_name", "")
+        )
 
         # 更新配置
         config = {
             "_version": 3,
             "account_name": acc_name,
             "sign_at": sign_at if sign_at is not None else existing["sign_at"],
-            "random_seconds": random_seconds if random_seconds is not None else existing["random_seconds"],
-            "sign_interval": sign_interval if sign_interval is not None else existing["sign_interval"],
+            "random_seconds": random_seconds
+            if random_seconds is not None
+            else existing["random_seconds"],
+            "sign_interval": sign_interval
+            if sign_interval is not None
+            else existing["sign_interval"],
             "chats": chats if chats is not None else existing["chats"],
-            "execution_mode": execution_mode if execution_mode is not None else existing.get("execution_mode", "fixed"),
-            "range_start": range_start if range_start is not None else existing.get("range_start", ""),
-            "range_end": range_end if range_end is not None else existing.get("range_end", ""),
+            "execution_mode": execution_mode
+            if execution_mode is not None
+            else existing.get("execution_mode", "fixed"),
+            "range_start": range_start
+            if range_start is not None
+            else existing.get("range_start", ""),
+            "range_end": range_end
+            if range_end is not None
+            else existing.get("range_end", ""),
         }
 
         # 保存配置
@@ -467,11 +507,14 @@ class SignTaskService:
 
         try:
             from backend.scheduler import add_or_update_sign_task_job
+
             add_or_update_sign_task_job(
-                config["account_name"], 
-                task_name, 
-                config.get("range_start") if config.get("execution_mode") == "range" else config["sign_at"], 
-                enabled=True
+                config["account_name"],
+                task_name,
+                config.get("range_start")
+                if config.get("execution_mode") == "range"
+                else config["sign_at"],
+                enabled=True,
             )
         except Exception as e:
             msg = f"DEBUG: 更新调度任务失败: {e}"
@@ -480,7 +523,9 @@ class SignTaskService:
                 f.write(f"{datetime.now()}: {msg}\n")
         else:
             with open("scheduler_update.log", "a", encoding="utf-8") as f:
-                f.write(f"{datetime.now()}: Updated task {task_name} with cron {config.get('range_start') if config.get('execution_mode') == 'range' else config['sign_at']}\n")
+                f.write(
+                    f"{datetime.now()}: Updated task {task_name} with cron {config.get('range_start') if config.get('execution_mode') == 'range' else config['sign_at']}\n"
+                )
 
         return {
             "name": task_name,
@@ -514,7 +559,7 @@ class SignTaskService:
 
         if not task_dir or not task_dir.exists():
             return False
-            
+
         # 确定真实的 account_name，以便移除调度
         real_account_name = account_name
         if not real_account_name:
@@ -522,16 +567,16 @@ class SignTaskService:
             if task_dir.parent.parent == self.signs_dir:
                 real_account_name = task_dir.parent.name
             else:
-                 # 回退尝试读取 config
-                 try:
-                     with open(task_dir / "config.json", "r") as f:
-                         real_account_name = json.load(f).get("account_name")
-                 except Exception:
-                     pass
+                # 回退尝试读取 config
+                try:
+                    with open(task_dir / "config.json", "r") as f:
+                        real_account_name = json.load(f).get("account_name")
+                except Exception:
+                    pass
 
         try:
             import shutil
-            import shutil
+
             shutil.rmtree(task_dir)
             # Invalidate cache
             self._tasks_cache = None
@@ -539,6 +584,7 @@ class SignTaskService:
             if real_account_name:
                 try:
                     from backend.scheduler import remove_sign_task_job
+
                     remove_sign_task_job(real_account_name, task_name)
                 except Exception as e:
                     print(f"DEBUG: 移除调度任务失败: {e}")
@@ -547,7 +593,9 @@ class SignTaskService:
         except Exception:
             return False
 
-    async def get_account_chats(self, account_name: str, force_refresh: bool = False) -> List[Dict[str, Any]]:
+    async def get_account_chats(
+        self, account_name: str, force_refresh: bool = False
+    ) -> List[Dict[str, Any]]:
         """
         获取账号的 Chat 列表 (带缓存)
         """
@@ -567,18 +615,18 @@ class SignTaskService:
         """
         连接 Telegram 并刷新 Chat 列表
         """
-        from tg_signer.core import get_client
         from pyrogram.enums import ChatType
 
         # 获取 session 文件路径
         from backend.core.config import get_settings
         from backend.services.config import config_service
+
         settings = get_settings()
         session_dir = Path(settings.data_dir) / "sessions"
-        
+
         # 兼容: 如果 session 文件不存在但有 session 字符串的情况? 暂不考虑，只考 session 文件
         if not (session_dir / f"{account_name}.session").exists():
-             raise ValueError(f"账号 {account_name} 的 Session 文件不存在")
+            raise ValueError(f"账号 {account_name} 的 Session 文件不存在")
 
         tg_config = config_service.get_telegram_config()
         api_id = os.getenv("TG_API_ID", tg_config.get("api_id"))
@@ -593,7 +641,7 @@ class SignTaskService:
             workdir=session_dir,
             api_id=int(api_id),
             api_hash=api_hash,
-            in_memory=False, 
+            in_memory=False,
         )
 
         chats = []
@@ -612,7 +660,10 @@ class SignTaskService:
 
                     chat_info = {
                         "id": chat.id,
-                        "title": chat.title or chat.first_name or chat.username or str(chat.id),
+                        "title": chat.title
+                        or chat.first_name
+                        or chat.username
+                        or str(chat.id),
                         "username": chat.username,
                         "type": chat.type.name.lower(),
                     }
@@ -654,26 +705,28 @@ class SignTaskService:
         """检查任务是否正在运行"""
         return self._active_tasks.get(task_name, False)
 
-    async def run_task_with_logs(self, account_name: str, task_name: str) -> Dict[str, Any]:
+    async def run_task_with_logs(
+        self, account_name: str, task_name: str
+    ) -> Dict[str, Any]:
         """运行任务并实时捕获日志 (In-Process)"""
-        
+
         if self.is_task_running(task_name):
             return {"success": False, "error": "任务已经在运行中", "output": ""}
 
         # 初始化账号锁
         if account_name not in self._account_locks:
             self._account_locks[account_name] = asyncio.Lock()
-        
+
         account_lock = self._account_locks[account_name]
 
         # 检查是否能获取锁 (非阻塞检查，如果已被锁定则说明该账号有其他任务在运行)
         # 这里我们希望排队等待，还是直接报错？
         # 考虑到定时任务同时触发，应该排队执行。
         print(f"DEBUG: 等待获取账号锁 {account_name}...")
-        
+
         self._active_tasks[task_name] = True
         self._active_logs[task_name] = []
-        
+
         # 获取 logger 实例
         tg_logger = logging.getLogger("tg-signer")
         log_handler = TaskLogHandler(self._active_logs[task_name])
@@ -688,16 +741,19 @@ class SignTaskService:
         try:
             async with account_lock:
                 print(f"DEBUG: 已获取账号锁 {account_name}，开始执行任务 {task_name}")
-                self._active_logs[task_name].append(f"开始执行任务: {task_name} (账号: {account_name})")
-                
+                self._active_logs[task_name].append(
+                    f"开始执行任务: {task_name} (账号: {account_name})"
+                )
+
                 # 配置 API 凭据
                 from backend.services.config import config_service
+
                 tg_config = config_service.get_telegram_config()
                 api_id = tg_config.get("api_id")
                 api_hash = tg_config.get("api_hash")
 
                 session_dir = Path(settings.data_dir) / "sessions"
-                
+
                 # 实例化 UserSigner (使用 BackendUserSigner)
                 # 注意: UserSigner 内部会使用 get_client 复用 client
                 signer = BackendUserSigner(
@@ -706,12 +762,12 @@ class SignTaskService:
                     account=account_name,
                     workdir=self.workdir,
                     api_id=int(api_id) if api_id else None,
-                    api_hash=api_hash
+                    api_hash=api_hash,
                 )
-                
+
                 # 执行任务
                 await signer.run_once(num_of_dialogs=20)
-                
+
                 success = True
                 output_str = "\n".join(self._active_logs[task_name])
                 self._active_logs[task_name].append("任务执行完成")
@@ -729,7 +785,7 @@ class SignTaskService:
         finally:
             self._active_tasks[task_name] = False
             tg_logger.removeHandler(log_handler)
-            
+
             # 保存执行记录
             msg = error_msg if not success else ""
             self._save_run_info(task_name, success, msg, account_name)
@@ -739,6 +795,7 @@ class SignTaskService:
                 await asyncio.sleep(60)
                 if not self._active_tasks.get(task_name):
                     self._active_logs.pop(task_name, None)
+
             asyncio.create_task(cleanup())
 
         return {

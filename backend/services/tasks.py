@@ -19,8 +19,10 @@ settings = get_settings()
 _active_tasks: dict[int, bool] = {}
 _active_logs: dict[int, list[str]] = {}
 
+
 def get_active_logs(task_id: int) -> list[str]:
     return _active_logs.get(task_id, [])
+
 
 def is_task_running(task_id: int) -> bool:
     return _active_tasks.get(task_id, False)
@@ -35,9 +37,7 @@ def cleanup_old_logs(db: Session, days: int = 3) -> int:
     cutoff = datetime.utcnow() - timedelta(days=days)
 
     # 获取旧日志
-    old_logs = db.query(TaskLog).filter(
-        TaskLog.started_at < cutoff
-    ).all()
+    old_logs = db.query(TaskLog).filter(TaskLog.started_at < cutoff).all()
 
     count = 0
     for log in old_logs:
@@ -110,12 +110,15 @@ def _create_log_file(task: Task) -> Path:
     return logs_dir / f"task_{task.id}_{ts}.log"
 
 
-
-
 async def run_task_once(db: Session, task: Task) -> TaskLog:
     if is_task_running(task.id):
         # 如果已经在运行，返回最新的运行记录（或者抛出异常）
-        last_log = db.query(TaskLog).filter(TaskLog.task_id == task.id).order_by(TaskLog.id.desc()).first()
+        last_log = (
+            db.query(TaskLog)
+            .filter(TaskLog.task_id == task.id)
+            .order_by(TaskLog.id.desc())
+            .first()
+        )
         return last_log
 
     account: Account = task.account  # type: ignore[assignment]
@@ -144,7 +147,7 @@ async def run_task_once(db: Session, task: Task) -> TaskLog:
         returncode, stdout, stderr = await async_run_task_cli(
             account_name=account.account_name,
             task_name=task.name,
-            callback=log_callback
+            callback=log_callback,
         )
 
         full_output = (stdout or "") + "\n" + (stderr or "")
@@ -157,7 +160,9 @@ async def run_task_once(db: Session, task: Task) -> TaskLog:
         task_log.finished_at = datetime.utcnow()
         task_log.status = "success" if returncode == 0 else "failed"
         if returncode != 0:
-            task_log.output = stderr[-1000:] if stderr else "Failed with exit code " + str(returncode)
+            task_log.output = (
+                stderr[-1000:] if stderr else "Failed with exit code " + str(returncode)
+            )
         else:
             task_log.output = "Success"
 
@@ -174,11 +179,13 @@ async def run_task_once(db: Session, task: Task) -> TaskLog:
         db.commit()
     finally:
         _active_tasks[task.id] = False
+
         # 延迟清理日志
         async def cleanup():
             await asyncio.sleep(60)
             if not is_task_running(task.id):
                 _active_logs.pop(task.id, None)
+
         asyncio.create_task(cleanup())
 
     return task_log
@@ -192,6 +199,3 @@ def list_task_logs(db: Session, task_id: int, limit: int = 50) -> List[TaskLog]:
         .limit(limit)
         .all()
     )
-
-
-

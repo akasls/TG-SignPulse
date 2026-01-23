@@ -19,13 +19,10 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 settings = get_settings()
 
 
-def create_access_token(
-    data: dict, expires_delta: Optional[timedelta] = None
-) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + (
-        expires_delta
-        or timedelta(hours=settings.access_token_expire_hours)
+        expires_delta or timedelta(hours=settings.access_token_expire_hours)
     )
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.secret_key, algorithm="HS256")
@@ -70,16 +67,20 @@ def get_current_user(
 
 
 # OAuth2 scheme that doesn't auto-error on missing token
-oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl="/api/auth/login", auto_error=False
+)
 
 
 def get_current_user_optional(
-    token: Optional[str] = Depends(oauth2_scheme_optional), db: Session = Depends(get_db)
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db),
 ) -> Optional[User]:
     """获取当前用户，如果无法认证则返回 None（不抛出异常）"""
     if not token:
         return None
     return verify_token(token, db)
+
 
 def verify_token(token: str, db: Session) -> Optional[User]:
     """验证 Token 并返回用户对象"""

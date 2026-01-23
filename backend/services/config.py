@@ -2,6 +2,7 @@
 配置管理服务
 提供任务配置的导入导出功能
 """
+
 from __future__ import annotations
 
 import json
@@ -208,7 +209,9 @@ class ConfigService:
 
         return json.dumps(all_configs, ensure_ascii=False, indent=2)
 
-    def import_all_configs(self, json_str: str, overwrite: bool = False) -> Dict[str, Any]:
+    def import_all_configs(
+        self, json_str: str, overwrite: bool = False
+    ) -> Dict[str, Any]:
         """
         导入所有配置
 
@@ -256,7 +259,9 @@ class ConfigService:
                         json.dump(config, f, ensure_ascii=False, indent=2)
                     result["monitors_imported"] += 1
                 except OSError:
-                    result["errors"].append(f"Failed to import monitor task: {task_name}")
+                    result["errors"].append(
+                        f"Failed to import monitor task: {task_name}"
+                    )
 
         except (json.JSONDecodeError, KeyError) as e:
             result["errors"].append(f"Invalid JSON format: {str(e)}")
@@ -288,10 +293,7 @@ class ConfigService:
             return None
 
     def save_ai_config(
-        self,
-        api_key: str,
-        base_url: Optional[str] = None,
-        model: Optional[str] = None
+        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
     ) -> bool:
         """
         保存 AI 配置
@@ -350,54 +352,40 @@ class ConfigService:
         config = self.get_ai_config()
 
         if not config:
-            return {
-                "success": False,
-                "message": "未配置 AI API Key"
-            }
+            return {"success": False, "message": "未配置 AI API Key"}
 
         api_key = config.get("api_key")
         base_url = config.get("base_url")
         model = config.get("model", "gpt-4o")
 
         if not api_key:
-            return {
-                "success": False,
-                "message": "API Key 为空"
-            }
+            return {"success": False, "message": "API Key 为空"}
 
         try:
             from openai import AsyncOpenAI
 
-            client = AsyncOpenAI(
-                api_key=api_key,
-                base_url=base_url
-            )
+            client = AsyncOpenAI(api_key=api_key, base_url=base_url)
 
             # 发送一个简单的测试请求
             response = await client.chat.completions.create(
                 model=model,
-                messages=[
-                    {"role": "user", "content": "Say 'test ok' in 2 words"}
-                ],
+                messages=[{"role": "user", "content": "Say 'test ok' in 2 words"}],
                 max_tokens=10,
             )
 
             return {
                 "success": True,
                 "message": f"连接成功！模型响应: {response.choices[0].message.content}",
-                "model_used": model
+                "model_used": model,
             }
 
         except ImportError:
             return {
                 "success": False,
-                "message": "未安装 openai 库，请运行: pip install openai"
+                "message": "未安装 openai 库，请运行: pip install openai",
             }
         except Exception as e:
-            return {
-                "success": False,
-                "message": f"连接失败: {str(e)}"
-            }
+            return {"success": False, "message": f"连接失败: {str(e)}"}
 
     # ============ 全局设置 ============
 
@@ -492,11 +480,7 @@ class ConfigService:
         except (json.JSONDecodeError, OSError):
             return default_config
 
-    def save_telegram_config(
-        self,
-        api_id: str,
-        api_hash: str
-    ) -> bool:
+    def save_telegram_config(self, api_id: str, api_hash: str) -> bool:
         """
         保存 Telegram API 配置
 
@@ -542,4 +526,3 @@ class ConfigService:
 
 # 创建全局实例
 config_service = ConfigService()
-

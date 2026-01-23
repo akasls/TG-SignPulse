@@ -2,24 +2,23 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 # Monkeypatch sqlite3.connect to increase default timeout
 _original_sqlite3_connect = sqlite3.connect
 
+
 def _patched_sqlite3_connect(*args, **kwargs):
     # Force timeout to be at least 10 seconds, even if Pyrogram sets it to 1
     if "timeout" in kwargs:
-         if kwargs["timeout"] < 10:
-             kwargs["timeout"] = 10
+        if kwargs["timeout"] < 10:
+            kwargs["timeout"] = 10
     else:
         kwargs["timeout"] = 30
     return _original_sqlite3_connect(*args, **kwargs)
+
 
 sqlite3.connect = _patched_sqlite3_connect
 
@@ -35,6 +34,7 @@ from backend.utils.paths import ensure_data_dirs  # noqa: E402
 class HealthCheckFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         return record.getMessage().find("/health") == -1
+
 
 logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
 
@@ -63,9 +63,6 @@ def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
-
-
-
 # 静态前端托管（Mode A: 单容器，FastAPI 提供静态文件）
 # 挂载 Next.js 静态资源
 # app.mount(
@@ -85,21 +82,21 @@ def health_check() -> dict[str, str]:
 #     # 检查是否是静态文件请求
 #     web_dir = Path("/web")
 #     file_path = web_dir / full_path
-# 
+#
 #     # 如果文件存在且不是目录，直接返回文件
 #     if file_path.exists() and file_path.is_file():
 #         return FileResponse(file_path)
-# 
+#
 #     # 尝试添加 .html 后缀（Next.js 导出通常会生成 .html 文件）
 #     html_path = web_dir / f"{full_path}.html"
 #     if html_path.exists() and html_path.is_file():
 #         return FileResponse(html_path)
-# 
+#
 #     # 否则返回 index.html（SPA 路由）
 #     index_path = web_dir / "index.html"
 #     if index_path.exists():
 #         return FileResponse(index_path)
-# 
+#
 #     # 如果 index.html 也不存在，返回 404
 #     return {"detail": "Frontend not built"}
 

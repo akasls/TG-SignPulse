@@ -2,6 +2,7 @@
 账号管理 API 路由（重构版）
 基于原项目逻辑，使用手机号登录
 """
+
 from __future__ import annotations
 
 from typing import Optional
@@ -18,8 +19,10 @@ router = APIRouter()
 
 # ============ Schemas ============
 
+
 class LoginStartRequest(BaseModel):
     """开始登录请求"""
+
     account_name: str
     phone_number: str
     proxy: Optional[str] = None
@@ -27,6 +30,7 @@ class LoginStartRequest(BaseModel):
 
 class LoginStartResponse(BaseModel):
     """开始登录响应"""
+
     phone_code_hash: str
     phone_number: str
     account_name: str
@@ -35,6 +39,7 @@ class LoginStartResponse(BaseModel):
 
 class LoginVerifyRequest(BaseModel):
     """验证登录请求"""
+
     account_name: str
     phone_number: str
     phone_code: str
@@ -45,6 +50,7 @@ class LoginVerifyRequest(BaseModel):
 
 class LoginVerifyResponse(BaseModel):
     """验证登录响应"""
+
     success: bool
     user_id: Optional[int] = None
     first_name: Optional[str] = None
@@ -54,6 +60,7 @@ class LoginVerifyResponse(BaseModel):
 
 class AccountInfo(BaseModel):
     """账号信息"""
+
     name: str
     session_file: str
     exists: bool
@@ -62,22 +69,24 @@ class AccountInfo(BaseModel):
 
 class AccountListResponse(BaseModel):
     """账号列表响应"""
+
     accounts: list[AccountInfo]
     total: int
 
 
 class DeleteAccountResponse(BaseModel):
     """删除账号响应"""
+
     success: bool
     message: str
 
 
 # ============ API Routes ============
 
+
 @router.post("/login/start", response_model=LoginStartResponse)
 async def start_account_login(
-    request: LoginStartRequest,
-    current_user: User = Depends(get_current_user)
+    request: LoginStartRequest, current_user: User = Depends(get_current_user)
 ):
     """
     开始账号登录流程（发送验证码）
@@ -90,27 +99,23 @@ async def start_account_login(
         result = await telegram_service.start_login(
             account_name=request.account_name,
             phone_number=request.phone_number,
-            proxy=request.proxy
+            proxy=request.proxy,
         )
 
         return LoginStartResponse(**result)
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"发送验证码失败: {str(e)}"
+            detail=f"发送验证码失败: {str(e)}",
         )
 
 
 @router.post("/login/verify", response_model=LoginVerifyResponse)
 async def verify_account_login(
-    request: LoginVerifyRequest,
-    current_user: User = Depends(get_current_user)
+    request: LoginVerifyRequest, current_user: User = Depends(get_current_user)
 ):
     """
     验证账号登录（输入验证码和可选的2FA密码）
@@ -126,7 +131,7 @@ async def verify_account_login(
             phone_code=request.phone_code,
             phone_code_hash=request.phone_code_hash,
             password=request.password,
-            proxy=request.proxy
+            proxy=request.proxy,
         )
 
         return LoginVerifyResponse(
@@ -134,18 +139,15 @@ async def verify_account_login(
             user_id=result.get("user_id"),
             first_name=result.get("first_name"),
             username=result.get("username"),
-            message="登录成功"
+            message="登录成功",
         )
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"登录验证失败: {str(e)}"
+            detail=f"登录验证失败: {str(e)}",
         )
 
 
@@ -160,21 +162,19 @@ def list_accounts(current_user: User = Depends(get_current_user)):
         accounts = telegram_service.list_accounts()
 
         return AccountListResponse(
-            accounts=[AccountInfo(**acc) for acc in accounts],
-            total=len(accounts)
+            accounts=[AccountInfo(**acc) for acc in accounts], total=len(accounts)
         )
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取账号列表失败: {str(e)}"
+            detail=f"获取账号列表失败: {str(e)}",
         )
 
 
 @router.delete("/{account_name}", response_model=DeleteAccountResponse)
 async def delete_account(
-    account_name: str,
-    current_user: User = Depends(get_current_user)
+    account_name: str, current_user: User = Depends(get_current_user)
 ):
     """
     删除账号（删除 session 文件）
@@ -186,13 +186,12 @@ async def delete_account(
 
         if success:
             return DeleteAccountResponse(
-                success=True,
-                message=f"账号 {account_name} 已删除"
+                success=True, message=f"账号 {account_name} 已删除"
             )
         else:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"账号 {account_name} 不存在"
+                detail=f"账号 {account_name} 不存在",
             )
 
     except HTTPException:
@@ -200,14 +199,13 @@ async def delete_account(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"删除账号失败: {str(e)}"
+            detail=f"删除账号失败: {str(e)}",
         )
 
 
 @router.get("/{account_name}/exists")
 def check_account_exists(
-    account_name: str,
-    current_user: User = Depends(get_current_user)
+    account_name: str, current_user: User = Depends(get_current_user)
 ):
     """检查账号是否存在"""
     exists = telegram_service.account_exists(account_name)
@@ -216,6 +214,7 @@ def check_account_exists(
 
 class AccountLogItem(BaseModel):
     """账号日志项"""
+
     id: int
     account_name: str
     task_name: str
@@ -226,9 +225,7 @@ class AccountLogItem(BaseModel):
 
 @router.get("/{account_name}/logs", response_model=list[AccountLogItem])
 def get_account_logs(
-    account_name: str,
-    limit: int = 100,
-    current_user: User = Depends(get_current_user)
+    account_name: str, limit: int = 100, current_user: User = Depends(get_current_user)
 ):
     """获取账号的任务执行历史日志"""
     from backend.services.sign_tasks import sign_task_service
@@ -237,22 +234,24 @@ def get_account_logs(
 
     logs = []
     for i, item in enumerate(history[:limit]):
-        logs.append(AccountLogItem(
-            id=i + 1,
-            account_name=account_name,
-            task_name=item.get("task_name", "未知任务"),
-            message=item.get("message") or ("执行成功" if item.get("success") else "执行失败"),
-            success=item.get("success", False),
-            created_at=item.get("time", "")
-        ))
+        logs.append(
+            AccountLogItem(
+                id=i + 1,
+                account_name=account_name,
+                task_name=item.get("task_name", "未知任务"),
+                message=item.get("message")
+                or ("执行成功" if item.get("success") else "执行失败"),
+                success=item.get("success", False),
+                created_at=item.get("time", ""),
+            )
+        )
 
     return logs
 
 
 @router.get("/{account_name}/logs/export")
 def export_account_logs(
-    account_name: str,
-    current_user: User = Depends(get_current_user)
+    account_name: str, current_user: User = Depends(get_current_user)
 ):
     """导出账号日志为 txt 文件"""
     from fastapi.responses import Response
@@ -262,7 +261,7 @@ def export_account_logs(
     history = sign_task_service.get_account_history_logs(account_name)
 
     content = f"Account Logs for: {account_name}\n"
-    content += "="*40 + "\n\n"
+    content += "=" * 40 + "\n\n"
 
     for item in history:
         time_str = item.get("time", "").replace("T", " ")[:19]
@@ -270,12 +269,12 @@ def export_account_logs(
         content += f"[{time_str}] Task: {item.get('task_name')} | Status: {status}\n"
         if item.get("message"):
             content += f"Message: {item.get('message')}\n"
-        content += "-"*20 + "\n"
+        content += "-" * 20 + "\n"
 
     return Response(
         content=content,
         media_type="text/plain",
         headers={
             "Content-Disposition": f"attachment; filename=logs_{account_name}.txt"
-        }
+        },
     )

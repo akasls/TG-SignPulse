@@ -55,6 +55,3 @@ async def logs_events(
         event_generator(),
         media_type="text/event-stream",
     )
-
-
-

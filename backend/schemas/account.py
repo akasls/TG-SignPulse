@@ -38,4 +38,3 @@ class AccountOut(AccountBase):
 
     class Config:
         orm_mode = True
-
