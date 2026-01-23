@@ -192,10 +192,22 @@ export const fetchTaskLogs = (token: string, id: number, limit = 50) =>
 export const listConfigTasks = (token: string) =>
   request<{ sign_tasks: string[]; monitor_tasks: string[]; total: number }>("/config/tasks", {}, token);
 
-export const exportSignTask = (token: string, taskName: string) =>
-  fetch(`${API_BASE}/config/export/sign/${taskName}`, {
+export const exportSignTask = async (token: string, taskName: string) => {
+  const res = await fetch(`${API_BASE}/config/export/sign/${taskName}`, {
     headers: { Authorization: `Bearer ${token}` },
-  }).then(res => res.text());
+  });
+  if (!res.ok) {
+    let errorMessage = "Export failed";
+    try {
+      const errorData = await res.json();
+      errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+    } catch {
+      errorMessage = await res.text() || "Export failed";
+    }
+    throw new Error(errorMessage);
+  }
+  return res.text();
+};
 
 export const importSignTask = (token: string, configJson: string, taskName?: string) =>
   request<{ success: boolean; task_name: string; message: string }>("/config/import/sign", {
@@ -203,10 +215,22 @@ export const importSignTask = (token: string, configJson: string, taskName?: str
     body: JSON.stringify({ config_json: configJson, task_name: taskName }),
   }, token);
 
-export const exportAllConfigs = (token: string) =>
-  fetch(`${API_BASE}/config/export/all`, {
+export const exportAllConfigs = async (token: string) => {
+  const res = await fetch(`${API_BASE}/config/export/all`, {
     headers: { Authorization: `Bearer ${token}` },
-  }).then(res => res.text());
+  });
+  if (!res.ok) {
+    let errorMessage = "Export failed";
+    try {
+      const errorData = await res.json();
+      errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+    } catch {
+      errorMessage = await res.text() || "Export failed";
+    }
+    throw new Error(errorMessage);
+  }
+  return res.text();
+};
 
 export const importAllConfigs = (token: string, configJson: string, overwrite = false) =>
   request<{

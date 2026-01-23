@@ -282,8 +282,8 @@ export default function SettingsPage() {
         }
         try {
             setConfigLoading(true);
-            await importAllConfigs(token, importConfig, overwriteConfig);
-            addToast(language === "zh" ? "配置导入成功" : "Config imported", "success");
+            const res = await importAllConfigs(token, importConfig, overwriteConfig);
+            addToast(res.message, "success");
             setImportConfig("");
             loadAIConfig(token);
             loadGlobalSettings(token);
