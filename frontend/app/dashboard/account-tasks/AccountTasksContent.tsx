@@ -392,7 +392,7 @@ export default function AccountTasksContent() {
             actions: chat?.actions || [{ action: 1, text: "" }],
             delete_after: chat?.delete_after,
             action_interval: chat?.action_interval || 1,
-            execution_mode: "range",
+            execution_mode: task.execution_mode || "fixed",
             range_start: task.range_start || "09:00",
             range_end: task.range_end || "18:00",
         });
@@ -548,46 +548,74 @@ export default function AccountTasksContent() {
                                 )}
 
                                 <div className={showEditDialog ? "md:col-span-2" : ""}>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <label className="!mb-0 text-xs font-bold uppercase tracking-wider text-main/40">
-                                                {language === "zh" ? "调度模式" : "Scheduling Mode"}
-                                            </label>
-                                            <div className="text-[10px] font-bold text-[#8a3ffc] bg-[#8a3ffc]/10 px-2 py-0.5 rounded">
-                                                {language === "zh" ? "随机时间段 (默认)" : "Random Range (Default)"}
-                                            </div>
-                                        </div>
+                                    <div className="mb-2">
+                                        <label className="text-xs font-bold uppercase tracking-wider text-main/40 mb-1 block">
+                                            {language === "zh" ? "调度模式" : "Scheduling Mode"}
+                                        </label>
+                                        <select
+                                            className="w-full"
+                                            value={showCreateDialog ? newTask.execution_mode : editTask.execution_mode}
+                                            onChange={(e) => {
+                                                const mode = e.target.value as "fixed" | "range";
+                                                showCreateDialog
+                                                    ? setNewTask({ ...newTask, execution_mode: mode })
+                                                    : setEditTask({ ...editTask, execution_mode: mode });
+                                            }}
+                                        >
+                                            <option value="range">{language === "zh" ? "随机时间段 (推荐)" : "Random Range (Recommended)"}</option>
+                                            <option value="fixed">{language === "zh" ? "固定时间 (Cron)" : "Fixed Time (Cron)"}</option>
+                                        </select>
                                     </div>
 
-                                    <div className="flex gap-2">
-                                        <div className="flex-1">
-                                            <label className="text-[10px] font-bold text-main/40 uppercase tracking-wider">{language === "zh" ? "开始" : "Start"}</label>
+                                    {(showCreateDialog ? newTask.execution_mode : editTask.execution_mode) === "fixed" ? (
+                                        <div className="mb-2">
+                                            <label>{language === "zh" ? "签到时间 (Cron 表达式)" : "Sign-in Time (Cron Expression)"}</label>
                                             <input
-                                                type="time"
                                                 className="!mb-0"
-                                                value={showCreateDialog ? newTask.range_start : editTask.range_start}
+                                                placeholder="0 6 * * *"
+                                                value={showCreateDialog ? newTask.sign_at : editTask.sign_at}
                                                 onChange={(e) => showCreateDialog
-                                                    ? setNewTask({ ...newTask, range_start: e.target.value })
-                                                    : setEditTask({ ...editTask, range_start: e.target.value })
+                                                    ? setNewTask({ ...newTask, sign_at: e.target.value })
+                                                    : setEditTask({ ...editTask, sign_at: e.target.value })
                                                 }
                                             />
+                                            <div className="text-[10px] text-main/30 mt-1 italic">
+                                                Ex: <code>0 9 * * *</code> (9:00 AM)
+                                            </div>
                                         </div>
-                                        <div className="flex-1">
-                                            <label className="text-[10px] font-bold text-main/40 uppercase tracking-wider">{language === "zh" ? "结束" : "End"}</label>
-                                            <input
-                                                type="time"
-                                                className="!mb-0"
-                                                value={showCreateDialog ? newTask.range_end : editTask.range_end}
-                                                onChange={(e) => showCreateDialog
-                                                    ? setNewTask({ ...newTask, range_end: e.target.value })
-                                                    : setEditTask({ ...editTask, range_end: e.target.value })
-                                                }
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="text-[10px] text-main/30 mt-1 italic">
-                                        {language === "zh" ? "将在该时间段内随机选择执行时间" : "Random execution time within this range"}
-                                    </div>
+                                    ) : (
+                                        <>
+                                            <div className="flex gap-2">
+                                                <div className="flex-1">
+                                                    <label className="text-[10px] font-bold text-main/40 uppercase tracking-wider">{language === "zh" ? "开始" : "Start"}</label>
+                                                    <input
+                                                        type="time"
+                                                        className="!mb-0"
+                                                        value={showCreateDialog ? newTask.range_start : editTask.range_start}
+                                                        onChange={(e) => showCreateDialog
+                                                            ? setNewTask({ ...newTask, range_start: e.target.value })
+                                                            : setEditTask({ ...editTask, range_start: e.target.value })
+                                                        }
+                                                    />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <label className="text-[10px] font-bold text-main/40 uppercase tracking-wider">{language === "zh" ? "结束" : "End"}</label>
+                                                    <input
+                                                        type="time"
+                                                        className="!mb-0"
+                                                        value={showCreateDialog ? newTask.range_end : editTask.range_end}
+                                                        onChange={(e) => showCreateDialog
+                                                            ? setNewTask({ ...newTask, range_end: e.target.value })
+                                                            : setEditTask({ ...editTask, range_end: e.target.value })
+                                                        }
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="text-[10px] text-main/30 mt-1 italic">
+                                                {language === "zh" ? "将在该时间段内随机选择执行时间" : "Random execution time within this range"}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
 
