@@ -1,8 +1,11 @@
 /** @type {import('next').NextConfig} */
+const isProd = process.env.NODE_ENV === 'production';
+
 const nextConfig = {
-//   output: "export",
-//   distDir: "out",
+  output: isProd ? "export" : undefined,
+  // distDir: "out",
   async rewrites() {
+    if (isProd) return [];
     return [
       {
         source: "/api/:path*",
