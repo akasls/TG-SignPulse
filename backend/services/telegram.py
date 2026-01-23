@@ -245,11 +245,12 @@ class TelegramService:
                 "phone_number": phone_number,
             }
 
-            # 断开连接，避免长时间占用数据库锁
-            try:
-                await client.disconnect()
-            except Exception:
-                pass
+            # 保持连接，避免 session 变化导致验证码失效 (PhoneCodeExpired)
+            # 断开连接会导致服务端重新分配 Session ID，从而使之前的 hash 失效
+            # try:
+            #     await client.disconnect()
+            # except Exception:
+            #     pass
 
             return {
                 "phone_code_hash": sent_code.phone_code_hash,
