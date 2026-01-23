@@ -13,8 +13,12 @@ from fastapi.staticfiles import StaticFiles
 _original_sqlite3_connect = sqlite3.connect
 
 def _patched_sqlite3_connect(*args, **kwargs):
-    if "timeout" not in kwargs:
-        kwargs["timeout"] = 30  # Default to 30 seconds
+    # Force timeout to be at least 10 seconds, even if Pyrogram sets it to 1
+    if "timeout" in kwargs:
+         if kwargs["timeout"] < 10:
+             kwargs["timeout"] = 10
+    else:
+        kwargs["timeout"] = 30
     return _original_sqlite3_connect(*args, **kwargs)
 
 sqlite3.connect = _patched_sqlite3_connect
@@ -38,6 +42,10 @@ settings = get_settings()
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
 
+from fastapi.middleware.gzip import GZipMiddleware
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -55,42 +63,45 @@ def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
+
+
+
 # 静态前端托管（Mode A: 单容器，FastAPI 提供静态文件）
 # 挂载 Next.js 静态资源
-app.mount(
-    "/_next",
-    StaticFiles(directory="/web/_next"),
-    name="nextjs_static",
-)
+# app.mount(
+#     "/_next",
+#     StaticFiles(directory="/web/_next"),
+#     name="nextjs_static",
+# )
 
 
 # Catch-all 路由：处理所有前端路由，返回 index.html
-@app.get("/{full_path:path}")
-async def serve_spa(full_path: str):
-    """
-    SPA fallback: 对于所有非 API 路由，返回 index.html
-    这样刷新页面时不会 404
-    """
-    # 检查是否是静态文件请求
-    web_dir = Path("/web")
-    file_path = web_dir / full_path
-
-    # 如果文件存在且不是目录，直接返回文件
-    if file_path.exists() and file_path.is_file():
-        return FileResponse(file_path)
-
-    # 尝试添加 .html 后缀（Next.js 导出通常会生成 .html 文件）
-    html_path = web_dir / f"{full_path}.html"
-    if html_path.exists() and html_path.is_file():
-        return FileResponse(html_path)
-
-    # 否则返回 index.html（SPA 路由）
-    index_path = web_dir / "index.html"
-    if index_path.exists():
-        return FileResponse(index_path)
-
-    # 如果 index.html 也不存在，返回 404
-    return {"detail": "Frontend not built"}
+# @app.get("/{full_path:path}")
+# async def serve_spa(full_path: str):
+#     """
+#     SPA fallback: 对于所有非 API 路由，返回 index.html
+#     这样刷新页面时不会 404
+#     """
+#     # 检查是否是静态文件请求
+#     web_dir = Path("/web")
+#     file_path = web_dir / full_path
+# 
+#     # 如果文件存在且不是目录，直接返回文件
+#     if file_path.exists() and file_path.is_file():
+#         return FileResponse(file_path)
+# 
+#     # 尝试添加 .html 后缀（Next.js 导出通常会生成 .html 文件）
+#     html_path = web_dir / f"{full_path}.html"
+#     if html_path.exists() and html_path.is_file():
+#         return FileResponse(html_path)
+# 
+#     # 否则返回 index.html（SPA 路由）
+#     index_path = web_dir / "index.html"
+#     if index_path.exists():
+#         return FileResponse(index_path)
+# 
+#     # 如果 index.html 也不存在，返回 404
+#     return {"detail": "Frontend not built"}
 
 
 @app.on_event("startup")

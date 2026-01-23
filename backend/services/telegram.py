@@ -22,8 +22,9 @@ class TelegramService:
     def __init__(self):
         self.session_dir = settings.resolve_session_dir()
         self.session_dir.mkdir(parents=True, exist_ok=True)
+        self._accounts_cache: Optional[List[Dict[str, Any]]] = None
 
-    def list_accounts(self) -> List[Dict[str, Any]]:
+    def list_accounts(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """
         获取所有账号列表（基于 session 文件）
 
@@ -34,27 +35,45 @@ class TelegramService:
             - exists: session 文件是否存在
             - size: 文件大小（字节）
         """
+        if self._accounts_cache is not None and not force_refresh:
+            return self._accounts_cache
+
         accounts = []
 
         # 扫描 session 目录
-        for session_file in self.session_dir.glob("*.session"):
-            account_name = session_file.stem  # 文件名（不含扩展名）
+        try:
+            for session_file in self.session_dir.glob("*.session"):
+                account_name = session_file.stem  # 文件名（不含扩展名）
 
-            accounts.append({
-                "name": account_name,
-                "session_file": str(session_file),
-                "exists": session_file.exists(),
-                "size": session_file.stat().st_size if session_file.exists() else 0,
-            })
+                accounts.append({
+                    "name": account_name,
+                    "session_file": str(session_file),
+                    "exists": session_file.exists(),
+                    "size": session_file.stat().st_size if session_file.exists() else 0,
+                })
 
-        return sorted(accounts, key=lambda x: x["name"])
+            self._accounts_cache = sorted(accounts, key=lambda x: x["name"])
+            return self._accounts_cache
+        except Exception:
+            return []
 
     def account_exists(self, account_name: str) -> bool:
         """检查账号是否存在"""
+        # 优先查缓存
+        if self._accounts_cache is not None:
+             for acc in self._accounts_cache:
+                 if acc["name"] == account_name:
+                     return True
+             # 如果缓存里没有，可能是缓存过期，也可是真的没有
+             # 保险起见，如果没有找到，还是查一下文件，或者信任缓存？
+             # 考虑到 start_login 会更新缓存，应该可以信任。
+             # 但为了稳妥，如果缓存没命中，再查文件
+             pass
+        
         session_file = self.session_dir / f"{account_name}.session"
         return session_file.exists()
 
-    def delete_account(self, account_name: str) -> bool:
+    async def delete_account(self, account_name: str) -> bool:
         """
         删除账号（删除 session 文件）
 
@@ -64,6 +83,15 @@ class TelegramService:
         Returns:
             是否成功删除
         """
+        # 确保释放资源
+        from tg_signer.core import close_client_by_name
+        
+        # 尝试关闭 active client
+        try:
+             await close_client_by_name(account_name, workdir=self.session_dir)
+        except Exception as e:
+            print(f"DEBUG: 关闭 Account Client 失败: {e}")
+
         session_file = self.session_dir / f"{account_name}.session"
 
         if not session_file.exists():
@@ -76,6 +104,19 @@ class TelegramService:
             journal_file = self.session_dir / f"{account_name}.session-journal"
             if journal_file.exists():
                 journal_file.unlink()
+                
+            # 删除 shm 和 wal 文件 (sqlite3)
+            shm_file = self.session_dir / f"{account_name}.session-shm"
+            if shm_file.exists():
+                shm_file.unlink()
+                
+            wal_file = self.session_dir / f"{account_name}.session-wal"
+            if wal_file.exists():
+                wal_file.unlink()
+
+            # 更新缓存
+            if self._accounts_cache is not None:
+                self._accounts_cache = [acc for acc in self._accounts_cache if acc["name"] != account_name]
 
             return True
         except OSError:
@@ -105,24 +146,47 @@ class TelegramService:
         """
         from pyrogram import Client
         from pyrogram.errors import FloodWait, PhoneNumberInvalid
+        from tg_signer.core import close_client_by_name
+        import gc
 
-        # 获取 API credentials：优先使用配置服务中的自定义设置
+        # 1. 清理全局 _login_sessions 中可能存在的残留连接
+        # _login_sessions key 格式: f"{account_name}_{phone_number}"
+        keys_to_remove = []
+        for key, value in _login_sessions.items():
+            if key.startswith(f"{account_name}_"):
+                old_client = value.get("client")
+                if old_client:
+                    try:
+                        await old_client.disconnect()
+                    except Exception:
+                        pass
+                keys_to_remove.append(key)
+        
+        for key in keys_to_remove:
+            _login_sessions.pop(key, None)
+
+        # 2. 确保没有后台任务占用
+        try:
+            await close_client_by_name(account_name, workdir=self.session_dir)
+        except Exception as e:
+            print(f"DEBUG: start_login 清理后台客户端失败: {e}")
+
+        # 3. 强制垃圾回收，释放可能的未关闭文件句柄 (Windows 特性)
+        gc.collect()
+
+        # 获取 API credentials
         from backend.services.config import config_service
-
         tg_config = config_service.get_telegram_config()
         api_id = tg_config.get("api_id")
         api_hash = tg_config.get("api_hash")
 
-        # 环境变量可以覆盖配置
         if os.getenv("TG_API_ID"):
             api_id = os.getenv("TG_API_ID")
         if os.getenv("TG_API_HASH"):
             api_hash = os.getenv("TG_API_HASH")
 
-        # 解析代理
         proxy_dict = None
         if proxy:
-            # 格式: socks5://127.0.0.1:1080
             from urllib.parse import urlparse
             parsed = urlparse(proxy)
             proxy_dict = {
@@ -131,7 +195,25 @@ class TelegramService:
                 "port": parsed.port,
             }
 
-        # 创建客户端
+        # 4. 如果是重新登录，尝试先清理旧的 session 文件 (避免 SQLite 锁或损坏)
+        # 注意: 如果 session 有效但用户只是想重登，删除也没问题，因为反正要重新验证
+        session_file = self.session_dir / f"{account_name}.session"
+        if session_file.exists():
+            try:
+                # 尝试删除主文件
+                session_file.unlink()
+                # 顺便删掉 journal/wal/shm
+                for ext in [".session-journal", ".session-wal", ".session-shm"]:
+                     aux_file = self.session_dir / f"{account_name}{ext}"
+                     if aux_file.exists():
+                         aux_file.unlink()
+            except OSError as e:
+                # 如果删除失败，说明真的被锁得很死，或者权限问题
+                print(f"DEBUG: 删除旧 Session 文件失败: {e} - 可能文件仍被占用")
+                # 这里不抛出异常，尝试继续，也许 Pyrogram 能处理? 
+                # 但通常 "unable to open database file" 就是因为这个。
+                pass
+
         session_path = str(self.session_dir / account_name)
         client = Client(
             name=session_path,
@@ -143,17 +225,23 @@ class TelegramService:
 
         try:
             await client.connect()
+            
+            self._accounts_cache = None
 
-            # 发送验证码
             sent_code = await client.send_code(phone_number)
 
-            # 保存 client 到全局字典，不要断开连接
             session_key = f"{account_name}_{phone_number}"
             _login_sessions[session_key] = {
                 "client": client,
                 "phone_code_hash": sent_code.phone_code_hash,
                 "phone_number": phone_number,
             }
+
+            # 断开连接，避免长时间占用数据库锁
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
 
             return {
                 "phone_code_hash": sent_code.phone_code_hash,
@@ -162,14 +250,30 @@ class TelegramService:
             }
 
         except PhoneNumberInvalid:
-            await client.disconnect()
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
             raise ValueError("手机号格式无效，请使用国际格式（如 +8613800138000）")
         except FloodWait as e:
-            await client.disconnect()
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
             raise ValueError(f"请求过于频繁，请等待 {e.value} 秒后重试")
         except Exception as e:
-            await client.disconnect()
-            raise ValueError(f"发送验证码失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+            
+            error_details = str(e)
+            if "database is locked" in error_details or "unable to open database file" in error_details:
+                raise ValueError(f"会话文件被占用，请稍后重试或重启程序。错误: {error_details}")
+            
+            raise ValueError(f"发送验证码失败: {error_details}")
 
     async def verify_login(
         self,
@@ -211,6 +315,10 @@ class TelegramService:
         client = session_data["client"]
 
         try:
+            # 重新连接 (因为 start_login 中断开了)
+            if not client.is_connected:
+                await client.connect()
+
             # 移除验证码中的空格和横线
             phone_code = phone_code.strip().replace(" ", "").replace("-", "")
 

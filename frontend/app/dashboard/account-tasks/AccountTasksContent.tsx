@@ -152,6 +152,9 @@ export default function AccountTasksContent() {
         actions: [{ action: 1, text: "" }],
         delete_after: undefined as number | undefined,
         action_interval: 1,
+        execution_mode: "range" as "fixed" | "range",
+        range_start: "09:00",
+        range_end: "18:00",
     });
 
     // 编辑任务对话框
@@ -166,6 +169,9 @@ export default function AccountTasksContent() {
         actions: [{ action: 1, text: "" }] as any[],
         delete_after: undefined as number | undefined,
         action_interval: 1,
+        execution_mode: "fixed" as "fixed" | "range",
+        range_start: "09:00",
+        range_end: "18:00",
     });
 
     const [checking, setChecking] = useState(true);
@@ -320,6 +326,9 @@ export default function AccountTasksContent() {
                     action_interval: newTask.action_interval,
                 }],
                 random_seconds: newTask.random_minutes * 60,
+                execution_mode: newTask.execution_mode,
+                range_start: newTask.range_start,
+                range_end: newTask.range_end,
             };
 
             await createSignTask(token, request);
@@ -335,6 +344,9 @@ export default function AccountTasksContent() {
                 actions: [{ action: 1, text: "" }],
                 delete_after: undefined,
                 action_interval: 1,
+                execution_mode: "fixed",
+                range_start: "09:00",
+                range_end: "18:00",
             });
             await loadData(token);
         } catch (err: any) {
@@ -376,6 +388,9 @@ export default function AccountTasksContent() {
             actions: chat?.actions || [{ action: 1, text: "" }],
             delete_after: chat?.delete_after,
             action_interval: chat?.action_interval || 1,
+            execution_mode: "range",
+            range_start: task.range_start || "09:00",
+            range_end: task.range_end || "18:00",
         });
         setShowEditDialog(true);
     };
@@ -402,6 +417,9 @@ export default function AccountTasksContent() {
                     delete_after: editTask.delete_after,
                     action_interval: editTask.action_interval,
                 }],
+                execution_mode: editTask.execution_mode,
+                range_start: editTask.range_start,
+                range_end: editTask.range_end,
             });
 
             addToast(language === "zh" ? "任务更新成功！" : "Task updated!", "success");
@@ -524,32 +542,51 @@ export default function AccountTasksContent() {
                                         />
                                     </div>
                                 )}
+
                                 <div className={showEditDialog ? "md:col-span-2" : ""}>
-                                    <label>{t("sign_time")}</label>
-                                    <input
-                                        placeholder="0 6 * * *"
-                                        value={showCreateDialog ? newTask.sign_at : editTask.sign_at}
-                                        onChange={(e) => showCreateDialog
-                                            ? setNewTask({ ...newTask, sign_at: e.target.value })
-                                            : setEditTask({ ...editTask, sign_at: e.target.value })
-                                        }
-                                    />
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                            <label className="!mb-0 text-xs font-bold uppercase tracking-wider text-main/40">
+                                                {language === "zh" ? "调度模式" : "Scheduling Mode"}
+                                            </label>
+                                            <div className="text-[10px] font-bold text-[#8a3ffc] bg-[#8a3ffc]/10 px-2 py-0.5 rounded">
+                                                {language === "zh" ? "随机时间段 (默认)" : "Random Range (Default)"}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-2">
+                                        <div className="flex-1">
+                                            <label className="text-[10px] font-bold text-main/40 uppercase tracking-wider">{language === "zh" ? "开始" : "Start"}</label>
+                                            <input
+                                                type="time"
+                                                className="!mb-0"
+                                                value={showCreateDialog ? newTask.range_start : editTask.range_start}
+                                                onChange={(e) => showCreateDialog
+                                                    ? setNewTask({ ...newTask, range_start: e.target.value })
+                                                    : setEditTask({ ...editTask, range_start: e.target.value })
+                                                }
+                                            />
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="text-[10px] font-bold text-main/40 uppercase tracking-wider">{language === "zh" ? "结束" : "End"}</label>
+                                            <input
+                                                type="time"
+                                                className="!mb-0"
+                                                value={showCreateDialog ? newTask.range_end : editTask.range_end}
+                                                onChange={(e) => showCreateDialog
+                                                    ? setNewTask({ ...newTask, range_end: e.target.value })
+                                                    : setEditTask({ ...editTask, range_end: e.target.value })
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="text-[10px] text-main/30 mt-1 italic">
+                                        {language === "zh" ? "将在该时间段内随机选择执行时间" : "Random execution time within this range"}
+                                    </div>
                                 </div>
-                                <div className="mb-2">
-                                    <label>{t("random_delay")}</label>
-                                    <input
-                                        type="text"
-                                        className="!mb-0"
-                                        placeholder="0"
-                                        value={showCreateDialog ? newTask.random_minutes : editTask.random_minutes}
-                                        onChange={(e) => {
-                                            const val = parseInt(e.target.value) || 0;
-                                            showCreateDialog
-                                                ? setNewTask({ ...newTask, random_minutes: val })
-                                                : setEditTask({ ...editTask, random_minutes: val });
-                                        }}
-                                    />
-                                </div>
+
+
                                 <div className="mb-2">
                                     <label>{t("action_interval")}</label>
                                     <input
@@ -768,9 +805,10 @@ export default function AccountTasksContent() {
                         </footer>
                     </div>
                 </div>
-            )}
+            )
+            }
 
             <ToastContainer toasts={toasts} removeToast={removeToast} />
-        </div>
+        </div >
     );
 }

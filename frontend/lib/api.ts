@@ -406,6 +406,9 @@ export interface SignTask {
   sign_interval: number;
   enabled: boolean;
   last_run?: LastRunInfo | null;
+  execution_mode?: "fixed" | "range";
+  range_start?: string;
+  range_end?: string;
 }
 
 export interface CreateSignTaskRequest {
@@ -415,6 +418,9 @@ export interface CreateSignTaskRequest {
   chats: SignTaskChat[];
   random_seconds?: number;
   sign_interval?: number;
+  execution_mode?: "fixed" | "range";
+  range_start?: string;
+  range_end?: string;
 }
 
 export interface UpdateSignTaskRequest {
@@ -422,6 +428,9 @@ export interface UpdateSignTaskRequest {
   chats?: SignTaskChat[];
   random_seconds?: number;
   sign_interval?: number;
+  execution_mode?: "fixed" | "range";
+  range_start?: string;
+  range_end?: string;
 }
 
 export interface ChatInfo {

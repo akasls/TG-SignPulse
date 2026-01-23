@@ -14,11 +14,12 @@ FROM python:3.12-slim AS app
 
 ENV PYTHONUNBUFFERED=1 \
   PIP_NO_CACHE_DIR=1 \
-  PORT=8080
+  PORT=8080 \
+  TZ=Asia/Shanghai
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential && \
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential tzdata && \
   rm -rf /var/lib/apt/lists/*
 
 # 先复制 pyproject.toml 和相关配置文件

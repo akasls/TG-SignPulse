@@ -172,7 +172,7 @@ def list_accounts(current_user: User = Depends(get_current_user)):
 
 
 @router.delete("/{account_name}", response_model=DeleteAccountResponse)
-def delete_account(
+async def delete_account(
     account_name: str,
     current_user: User = Depends(get_current_user)
 ):
@@ -182,7 +182,7 @@ def delete_account(
     注意：删除后无法恢复，需要重新登录
     """
     try:
-        success = telegram_service.delete_account(account_name)
+        success = await telegram_service.delete_account(account_name)
 
         if success:
             return DeleteAccountResponse(

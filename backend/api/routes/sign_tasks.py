@@ -97,6 +97,9 @@ class SignTaskUpdate(BaseModel):
     chats: Optional[List[ChatConfig]] = Field(None, description="Chat 配置列表")
     random_seconds: Optional[int] = Field(None, description="随机延迟秒数")
     sign_interval: Optional[int] = Field(None, description="签到间隔秒数")
+    execution_mode: Optional[str] = Field(None, description="执行模式: fixed/range")
+    range_start: Optional[str] = Field(None, description="随机范围开始时间")
+    range_end: Optional[str] = Field(None, description="随机范围结束时间")
 
 
 class LastRunInfo(BaseModel):
@@ -116,6 +119,9 @@ class SignTaskOut(BaseModel):
     sign_interval: int
     enabled: bool
     last_run: Optional[LastRunInfo] = None
+    execution_mode: Optional[str] = "fixed"
+    range_start: Optional[str] = None
+    range_end: Optional[str] = None
 
 
 class ChatOut(BaseModel):
@@ -221,6 +227,9 @@ async def update_sign_task(
             random_seconds=payload.random_seconds,
             sign_interval=payload.sign_interval,
             account_name=account_name or existing.get("account_name"),
+            execution_mode=payload.execution_mode,
+            range_start=payload.range_start,
+            range_end=payload.range_end,
         )
 
         # 同步调度器

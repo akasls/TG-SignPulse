@@ -38,12 +38,59 @@ async def _job_run_task(task_id: int) -> None:
 async def _job_run_sign_task(account_name: str, task_name: str) -> None:
     """运行签到任务的 Job 包装器"""
     from backend.services.sign_tasks import sign_task_service
+    import logging
+    import random
+    import asyncio
+    from datetime import datetime, time, timedelta
+
+    logger = logging.getLogger("backend.scheduler")
     try:
-        print(f"Scheduler: 正在运行签到任务 {task_name} (账号: {account_name})")
+        logger.info(f"Scheduler: 正在运行签到任务 {task_name} (账号: {account_name})")
+        
+        # 获取任务配置，检查是否为随机时间段模式
+        task_config = sign_task_service.get_task(task_name, account_name)
+        if task_config and task_config.get("execution_mode") == "range":
+            range_start_str = task_config.get("range_start")
+            range_end_str = task_config.get("range_end")
+            
+            if range_start_str and range_end_str:
+                try:
+                    # 解析时间
+                    fmt = "%H:%M"
+                    start_time = datetime.strptime(range_start_str, fmt).time()
+                    end_time = datetime.strptime(range_end_str, fmt).time()
+                    
+                    # 转换为当前日期的 datetime
+                    now = datetime.now()
+                    start_dt = now.replace(hour=start_time.hour, minute=start_time.minute, second=0, microsecond=0)
+                    end_dt = now.replace(hour=end_time.hour, minute=end_time.minute, second=0, microsecond=0)
+                    
+                    # 如果结束时间小于开始时间，假设是第二天（虽然CRON触发通常在开始时间，这里做个防御）
+                    if end_dt < start_dt:
+                        end_dt += timedelta(days=1)
+                        
+                    # 计算总秒数
+                    total_seconds = (end_dt - start_dt).total_seconds()
+                    
+                    if total_seconds > 0:
+                        # 生成随机延迟
+                        delay_seconds = random.uniform(0, total_seconds)
+                        logger.info(f"Scheduler: 任务 {task_name} 设置为随机时间段模式 ({range_start_str} - {range_end_str})")
+                        logger.info(f"Scheduler: 将随机等待 {int(delay_seconds)} 秒 ({delay_seconds/60:.2f} 分钟) 后执行")
+                        
+                        await asyncio.sleep(delay_seconds)
+                        
+                except Exception as e:
+                    logger.error(f"Scheduler: 计算随机时间段延迟失败: {e}，将立即执行")
+
         # run_task_with_logs 是 async 的，我们使用它
-        await sign_task_service.run_task_with_logs(account_name, task_name)
+        result = await sign_task_service.run_task_with_logs(account_name, task_name)
+        if result.get("success"):
+            logger.info(f"Scheduler: 任务 {task_name} 执行成功")
+        else:
+             logger.error(f"Scheduler: 任务 {task_name} 执行失败: {result.get('error')}")
     except Exception as e:
-        print(f"Scheduler: 运行签到任务 {task_name} 失败: {e}")
+        logger.error(f"Scheduler: 运行签到任务 {task_name} 失败: {e}", exc_info=True)
 
 
 async def _job_maintenance() -> None:
@@ -140,7 +187,14 @@ async def init_scheduler() -> AsyncIOScheduler:
     if scheduler is None:
         from backend.core.config import get_settings
         settings = get_settings()
-        scheduler = AsyncIOScheduler(timezone=settings.timezone)
+        scheduler = AsyncIOScheduler(
+            timezone=settings.timezone,
+            job_defaults={
+                'misfire_grace_time': 3600,  # 允许任务延迟 1 小时执行
+                'coalesce': True,            # 合并积压的执行
+                'max_instances': 1           # 每个任务同一时间只运行实例
+            }
+        )
         scheduler.start()
 
         # 添加每日凌晨 3 点执行的维护任务
@@ -160,6 +214,50 @@ def shutdown_scheduler() -> None:
     if scheduler:
         scheduler.shutdown(wait=False)
         scheduler = None
+
+
+def add_or_update_sign_task_job(account_name: str, task_name: str, cron_expression: str, enabled: bool = True) -> None:
+    """动态添加或更新签到任务 Job"""
+    global scheduler
+    if not scheduler:
+        return
+
+    job_id = f"sign-{task_name}"
+    
+    if not enabled:
+        remove_sign_task_job(account_name, task_name)
+        return
+
+    try:
+        cron = time_to_cron(cron_expression)
+        trigger = CronTrigger.from_crontab(cron)
+        
+        # 总是使用 replace_existing=True 来覆盖旧的
+        scheduler.add_job(
+            _job_run_sign_task,
+            trigger=trigger,
+            id=job_id,
+            args=[account_name, task_name],
+            replace_existing=True,
+        )
+        print(f"Scheduler: 已添加/更新任务 {job_id} -> {cron}")
+    except Exception as e:
+        print(f"Scheduler: 添加任务 {job_id} 失败: {e}")
+
+
+def remove_sign_task_job(account_name: str, task_name: str) -> None:
+    """动态移除签到任务 Job"""
+    global scheduler
+    if not scheduler:
+        return
+
+    job_id = f"sign-{task_name}"
+    try:
+        if scheduler.get_job(job_id):
+            scheduler.remove_job(job_id)
+            print(f"Scheduler: 已移除任务 {job_id}")
+    except Exception as e:
+        print(f"Scheduler: 移除任务 {job_id} 失败: {e}")
 
 
 
