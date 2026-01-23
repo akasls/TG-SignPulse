@@ -90,6 +90,9 @@ class SignTaskCreate(BaseModel):
     sign_interval: Optional[int] = Field(
         None, description="签到间隔秒数，留空使用全局配置或随机 1-120 秒"
     )
+    execution_mode: Optional[str] = Field("fixed", description="执行模式: fixed/range")
+    range_start: Optional[str] = Field(None, description="随机范围开始时间")
+    range_end: Optional[str] = Field(None, description="随机范围结束时间")
 
     @validator("name")
     def name_must_be_valid_filename(cls, v):
@@ -194,6 +197,9 @@ async def create_sign_task(
             chats=chats_dict,
             random_seconds=payload.random_seconds,
             sign_interval=payload.sign_interval,
+            execution_mode=payload.execution_mode,
+            range_start=payload.range_start,
+            range_end=payload.range_end,
         )
 
         # 同步调度器

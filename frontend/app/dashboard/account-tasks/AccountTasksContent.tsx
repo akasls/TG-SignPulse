@@ -65,7 +65,11 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onDelete, t, language }: 
                     <div className="flex items-center gap-3">
                         <div className="flex items-center gap-1.5 text-main/40">
                             <Clock weight="bold" size={12} />
-                            <span className="text-[10px] font-bold font-mono uppercase tracking-wider">{task.sign_at}</span>
+                            <span className="text-[10px] font-bold font-mono uppercase tracking-wider">
+                                {task.execution_mode === "range" && task.range_start && task.range_end
+                                    ? `${task.range_start} - ${task.range_end}`
+                                    : task.sign_at}
+                            </span>
                         </div>
                         {task.random_seconds > 0 && (
                             <div className="flex items-center gap-1 text-[#8a3ffc]/60">
