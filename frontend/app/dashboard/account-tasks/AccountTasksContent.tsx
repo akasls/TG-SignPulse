@@ -249,7 +249,7 @@ export default function AccountTasksContent() {
 
         try {
             setLoading(true);
-            await deleteSignTask(token, taskName);
+            await deleteSignTask(token, taskName, accountName);
             // addToast(language === "zh" ? `任务 ${taskName} 已删除` : `Task ${taskName} deleted`, "success"); // Removed toast as per user request to just refresh
             await loadData(token);
         } catch (err: any) {

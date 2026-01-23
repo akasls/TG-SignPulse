@@ -488,8 +488,8 @@ export const updateSignTask = (token: string, name: string, data: UpdateSignTask
     body: JSON.stringify(data),
   }, token);
 
-export const deleteSignTask = (token: string, name: string) =>
-  request<{ ok: boolean }>(`/sign-tasks/${name}`, {
+export const deleteSignTask = (token: string, name: string, accountName?: string) =>
+  request<{ ok: boolean }>(`/sign-tasks/${name}${accountName ? `?account_name=${accountName}` : ''}`, {
     method: "DELETE",
   }, token);
 

@@ -547,9 +547,11 @@ class SignTaskService:
         task_dir = None
         if account_name:
             task_dir = self.signs_dir / account_name / task_name
-
-        if not task_dir or not task_dir.exists():
-            # 搜一下
+            # 如果指定了账号但任务不存在，直接返回失败，不进行搜索
+            if not task_dir.exists():
+                return False
+        else:
+            # 未指定账号，尝试搜索 (兼容旧逻辑，但不推荐)
             task_dir = self.signs_dir / task_name
             if not task_dir.exists():
                 for acc_dir in self.signs_dir.iterdir():
@@ -646,33 +648,40 @@ class SignTaskService:
 
         chats = []
         try:
+            # 初始化账号锁
+            if account_name not in self._account_locks:
+                self._account_locks[account_name] = asyncio.Lock()
+            
+            account_lock = self._account_locks[account_name]
+            
             # 使用上下文管理器处理生命周期和锁
-            async with client:
-                try:
-                    # 尝试获取用户信息，如果失败说明 session 无效
-                    await client.get_me()
-                except Exception as e:
-                    # 捕获所有异常，如果是 401 等错误则说明 session 失效
-                    raise ValueError(f"Session 无效或已过期: {e}")
+            async with account_lock:
+                async with client:
+                    try:
+                        # 尝试获取用户信息，如果失败说明 session 无效
+                        await client.get_me()
+                    except Exception as e:
+                        # 捕获所有异常，如果是 401 等错误则说明 session 失效
+                        raise ValueError(f"Session 无效或已过期: {e}")
 
-                async for dialog in client.get_dialogs():
-                    chat = dialog.chat
+                    async for dialog in client.get_dialogs():
+                        chat = dialog.chat
 
-                    chat_info = {
-                        "id": chat.id,
-                        "title": chat.title
-                        or chat.first_name
-                        or chat.username
-                        or str(chat.id),
-                        "username": chat.username,
-                        "type": chat.type.name.lower(),
-                    }
+                        chat_info = {
+                            "id": chat.id,
+                            "title": chat.title
+                            or chat.first_name
+                            or chat.username
+                            or str(chat.id),
+                            "username": chat.username,
+                            "type": chat.type.name.lower(),
+                        }
 
-                    # 特殊处理机器人和私聊
-                    if chat.type == ChatType.BOT:
-                        chat_info["title"] = f"🤖 {chat_info['title']}"
+                        # 特殊处理机器人和私聊
+                        if chat.type == ChatType.BOT:
+                            chat_info["title"] = f"🤖 {chat_info['title']}"
 
-                    chats.append(chat_info)
+                        chats.append(chat_info)
 
             # 保存到缓存
             account_dir = self.signs_dir / account_name
