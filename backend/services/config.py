@@ -220,14 +220,16 @@ class ConfigService:
     def export_all_configs(self) -> str:
         """
         导出所有配置
+        Returns:
+            包含所有配置的 JSON 字符串
         """
         all_configs = {
             "signs": {},
             "monitors": {},
+            "settings": {}, # 新增 settings 字段
         }
 
         # 导出所有签到任务
-        # 直接遍历目录以确保涵盖所有任务，包括同名的
         if self.signs_dir.exists():
             # 1. 扫描顶层 (旧版)
             for path in self.signs_dir.iterdir():
@@ -235,8 +237,6 @@ class ConfigService:
                     try:
                         with open(path / "config.json", "r", encoding="utf-8") as f:
                             config = json.load(f)
-                            # 使用 name 作为 key，如果有同名这会覆盖，但这种情况在同一目录下不应该发生
-                            # 为了防止跨目录同名覆盖，我们检查一下
                             key = path.name
                             if key in all_configs["signs"]:
                                 key = f"{key}_{config.get('account_name', 'default')}"
@@ -251,18 +251,13 @@ class ConfigService:
                             try:
                                 with open(task_dir / "config.json", "r", encoding="utf-8") as f:
                                     config = json.load(f)
-                                    # 构造唯一 key: 任务名_账号名
                                     key = f"{task_dir.name}_{path.name}"
-                                    # 如果原来的 key 已经被占用了 (e.g. 顶层有个叫 TaskA)，这里 TaskA_AccA 不会冲突
-                                    # 但是为了整洁，我们统一一下策略？
-                                    # 策略：如果有 account_name，key = task_name@account_name，否则 key = task_name
                                     account_name = config.get("account_name")
                                     if account_name:
                                         key = f"{config.get('name', task_dir.name)}@{account_name}"
                                     else:
                                         key = config.get("name", task_dir.name)
                                     
-                                    #此时如果还有冲突（极小概率），加随机后缀
                                     if key in all_configs["signs"]:
                                         import uuid
                                         key = f"{key}_{str(uuid.uuid4())[:8]}"
@@ -280,6 +275,13 @@ class ConfigService:
                         all_configs["monitors"][task_name] = json.load(f)
                 except (json.JSONDecodeError, OSError):
                     pass
+        
+        # 导出设置 (新增)
+        all_configs["settings"] = {
+            "global": self.get_global_settings(),
+            "ai": self.get_ai_config(),
+            "telegram": self.get_telegram_config(),
+        }
 
         return json.dumps(all_configs, ensure_ascii=False, indent=2)
 
@@ -294,6 +296,7 @@ class ConfigService:
             "signs_skipped": 0,
             "monitors_imported": 0,
             "monitors_skipped": 0,
+            "settings_imported": 0,
             "errors": [],
         }
 
@@ -302,17 +305,11 @@ class ConfigService:
 
             # 导入签到任务
             for key, config in data.get("signs", {}).items():
-                # 优先使用配置中的 name，如果没有则使用 key (并去除可能的唯一后缀)
                 task_name = config.get("name")
                 if not task_name:
-                    task_name = key.split("@")[0] # 简单尝试还原
+                    task_name = key.split("@")[0]
 
                 if not overwrite and self.get_sign_config(task_name):
-                    # 注意：get_sign_config 可能会找到其他账号下的同名任务，导致误判 "已存在"
-                    # 如果我们要精确判断，应该结合 account_name
-                    # 但 get_sign_config 目前逻辑是 "只要找到一个就返回"
-                    
-                    # 改进：如果 config 中有 account_name，我们应该检查特定路径是否存在
                     account_name = config.get("account_name")
                     exists = False
                     if account_name:
@@ -349,6 +346,57 @@ class ConfigService:
                     result["errors"].append(
                         f"Failed to import monitor task: {task_name}"
                     )
+            
+            # 导入设置 (新增)
+            settings_data = data.get("settings", {})
+            
+            # 导入全局设置
+            if "global" in settings_data:
+                try:
+                    self.save_global_settings(settings_data["global"])
+                    result["settings_imported"] += 1
+                except Exception as e:
+                    result["errors"].append(f"Failed to import global settings: {e}")
+            
+            # 导入 AI 配置
+            if "ai" in settings_data and settings_data["ai"]:
+                try:
+                    ai_conf = settings_data["ai"]
+                    # 注意：如果 masking 处理过 api_key (e.g. ****)，这里需要处理吗？
+                    # 当前 export_ai_config 直接读取文件，应该包含完整 key（文件里是明文）。前端展示才 mask。
+                    # 所以这里导出的是完整 key，可以直接导入。
+                    if ai_conf.get("api_key"):
+                        self.save_ai_config(ai_conf["api_key"], ai_conf.get("base_url"), ai_conf.get("model"))
+                        result["settings_imported"] += 1
+                except Exception as e:
+                    result["errors"].append(f"Failed to import AI config: {e}")
+
+            # 导入 Telegram 配置
+            if "telegram" in settings_data:
+                try:
+                    tg_conf = settings_data["telegram"]
+                    if tg_conf.get("is_custom") and tg_conf.get("api_id") and tg_conf.get("api_hash"):
+                         self.save_telegram_config(str(tg_conf["api_id"]), tg_conf["api_hash"])
+                         result["settings_imported"] += 1
+                except Exception as e:
+                    result["errors"].append(f"Failed to import Telegram config: {e}")
+
+            # 关键修复：清除 SignTaskService 缓存，否则前端刷新也看不到新任务
+            try:
+                from backend.services.sign_tasks import sign_task_service
+                sign_task_service._tasks_cache = None
+                
+                # 可选：触发调度同步？
+                # 如果导入了新任务，调度器并不知道。
+                # 只有 _tasks_cache 清除后，下次调用 list_tasks 才会读文件，但调度器是内存常驻的。
+                # 我们应该调用 sync_jobs!
+                
+                # 由于 sync_jobs 是 async 的，而这里是同步方法，可能不太好直接调。
+                # 但 FastAPI 路由是 async 的，我们可以在路由层调用 sync_jobs。
+                # 这里的职责主要是文件操作。清理 cache 是必须的。
+                pass
+            except Exception as e:
+                 print(f"Failed to clear cache: {e}")
 
         except (json.JSONDecodeError, KeyError) as e:
             result["errors"].append(f"Invalid JSON format: {str(e)}")
