@@ -31,13 +31,19 @@ class ConfigService:
         tasks = []
 
         if self.signs_dir.exists():
-            for task_dir in self.signs_dir.iterdir():
-                if task_dir.is_dir():
-                    config_file = task_dir / "config.json"
-                    if config_file.exists():
-                        tasks.append(task_dir.name)
+            # 扫描顶层目录 (兼容旧版)
+            for path in self.signs_dir.iterdir():
+                if path.is_dir():
+                    # Check if it's a task directory (has config.json)
+                    if (path / "config.json").exists():
+                        tasks.append(path.name)
+                    else:
+                        # Check if it's an account directory containing tasks
+                        for task_dir in path.iterdir():
+                            if task_dir.is_dir() and (task_dir / "config.json").exists():
+                                tasks.append(task_dir.name)
 
-        return sorted(tasks)
+        return sorted(list(set(tasks)))  # 去重并排序
 
     def list_monitor_tasks(self) -> List[str]:
         """获取所有监控任务名称列表"""
@@ -62,10 +68,24 @@ class ConfigService:
         Returns:
             配置字典，如果不存在则返回 None
         """
-        config_file = self.signs_dir / task_name / "config.json"
+        # 1. 尝试直接查找 (旧版结构)
+        task_dir = self.signs_dir / task_name
+        config_file = task_dir / "config.json"
 
+        # 2. 如果找不到，尝试搜索嵌套结构 (signs/account/task)
         if not config_file.exists():
-            return None
+            found = False
+            for acc_dir in self.signs_dir.iterdir():
+                if acc_dir.is_dir():
+                    nested_task_dir = acc_dir / task_name
+                    if (nested_task_dir / "config.json").exists():
+                        task_dir = nested_task_dir
+                        config_file = task_dir / "config.json"
+                        found = True
+                        break
+            
+            if not found:
+                return None
 
         try:
             with open(config_file, "r", encoding="utf-8") as f:
@@ -84,9 +104,16 @@ class ConfigService:
         Returns:
             是否成功保存
         """
-        task_dir = self.signs_dir / task_name
-        task_dir.mkdir(parents=True, exist_ok=True)
+        account_name = config.get("account_name", "")
+        
+        if account_name:
+            # 使用新版结构: signs/account/task
+            task_dir = self.signs_dir / account_name / task_name
+        else:
+            # 兼容旧版或无账号: signs/task
+            task_dir = self.signs_dir / task_name
 
+        task_dir.mkdir(parents=True, exist_ok=True)
         config_file = task_dir / "config.json"
 
         try:
@@ -106,10 +133,17 @@ class ConfigService:
         Returns:
             是否成功删除
         """
+        # 1. 尝试定位任务目录
         task_dir = self.signs_dir / task_name
-
         if not task_dir.exists():
-            return False
+            found = False
+            for acc_dir in self.signs_dir.iterdir():
+                if acc_dir.is_dir() and (acc_dir / task_name).exists():
+                    task_dir = acc_dir / task_name
+                    found = True
+                    break
+            if not found:
+                return False
 
         try:
             # 删除配置文件
@@ -123,7 +157,11 @@ class ConfigService:
                 record_file.unlink()
 
             # 删除目录
-            task_dir.rmdir()
+            # 注意：如果是嵌套结构，这里只删除了任务目录，没有删除可能变空的账号目录
+            # 这通常是可以接受的，或者我们可以检查父目录是否为空并删除
+            import shutil
+            shutil.rmtree(task_dir)
+            
             return True
         except OSError:
             return False
