@@ -143,23 +143,54 @@ class Client(BaseClient):
         async with lock:
             _CLIENT_REFS[self.key] += 1
             if _CLIENT_REFS[self.key] == 1:
-                try:
-                    await self.connect()
+                # Retry loop for database locks
+                max_retries = 3
+                for attempt in range(max_retries):
                     try:
-                        await self.get_me()
-                    except Exception as e:
-                        # Prevent interactive login attempt
-                        raise ConnectionError(f"Session invalid: {e}")
-
-                    await self.start()
-                    # Enable WAL mode after start
-                    if hasattr(self, "storage") and hasattr(self.storage, "conn"):
+                        await self.connect()
                         try:
-                            self.storage.conn.execute("PRAGMA journal_mode=WAL")
+                            await self.get_me()
                         except Exception as e:
-                            logger.error(f"Failed to enable WAL mode: {e}")
-                except ConnectionError:
-                    pass
+                            # Prevent interactive login attempt
+                            raise ConnectionError(f"Session invalid: {e}")
+
+                        await self.start()
+                        # Enable WAL mode after start
+                        if hasattr(self, "storage") and hasattr(self.storage, "conn"):
+                            try:
+                                self.storage.conn.execute("PRAGMA journal_mode=WAL")
+                            except Exception as e:
+                                logger.error(f"Failed to enable WAL mode: {e}")
+                        
+                        # Success! Break loop
+                        break
+                    
+                    except Exception as e:
+                        # If this is a database lock and we have retries left, wait and retry
+                        is_locked = "database is locked" in str(e)
+                        if is_locked and attempt < max_retries - 1:
+                            # Cleanup before retry
+                            try:
+                                if self.is_connected:
+                                    await self.stop()
+                            except: pass
+                            
+                            wait_time = (attempt + 1) * 2
+                            logger.warning(f"Database locked when starting client {self.name}, retrying in {wait_time}s... ({attempt + 1}/{max_retries})")
+                            await asyncio.sleep(wait_time)
+                            continue
+                        
+                        # If execution reaches here, it's a fatal error or retries exhausted
+                        # Rollback the ref count
+                        _CLIENT_REFS[self.key] -= 1
+                        if _CLIENT_REFS[self.key] <= 0:
+                            _CLIENT_REFS.pop(self.key, None)
+                            _CLIENT_INSTANCES.pop(self.key, None)
+                            try:
+                                await self.stop()
+                            except Exception:
+                                pass
+                        raise e
             return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
