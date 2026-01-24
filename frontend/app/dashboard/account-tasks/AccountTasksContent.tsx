@@ -424,7 +424,7 @@ export default function AccountTasksContent() {
                 execution_mode: editTask.execution_mode,
                 range_start: editTask.range_start,
                 range_end: editTask.range_end,
-            });
+            }, accountName);
 
             addToast(language === "zh" ? "任务更新成功！" : "Task updated!", "success");
             setShowEditDialog(false);

@@ -482,8 +482,8 @@ export const createSignTask = (token: string, data: CreateSignTaskRequest) =>
     body: JSON.stringify(data),
   }, token);
 
-export const updateSignTask = (token: string, name: string, data: UpdateSignTaskRequest) =>
-  request<SignTask>(`/sign-tasks/${name}`, {
+export const updateSignTask = (token: string, name: string, data: UpdateSignTaskRequest, accountName?: string) =>
+  request<SignTask>(`/sign-tasks/${name}${accountName ? `?account_name=${accountName}` : ''}`, {
     method: "PUT",
     body: JSON.stringify(data),
   }, token);
