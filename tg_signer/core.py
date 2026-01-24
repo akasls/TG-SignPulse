@@ -147,14 +147,21 @@ class Client(BaseClient):
                 max_retries = 3
                 for attempt in range(max_retries):
                     try:
-                        await self.connect()
+                        if not self.is_connected:
+                            await self.connect()
+                        
                         try:
                             await self.get_me()
                         except Exception as e:
                             # Prevent interactive login attempt
                             raise ConnectionError(f"Session invalid: {e}")
 
-                        await self.start()
+                        try:
+                            await self.start()
+                        except ConnectionError as e:
+                            if "already connected" not in str(e).lower():
+                                raise e
+
                         # Enable WAL mode after start
                         if hasattr(self, "storage") and hasattr(self.storage, "conn"):
                             try:
