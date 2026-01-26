@@ -166,6 +166,7 @@ class Client(BaseClient):
                         if hasattr(self, "storage") and hasattr(self.storage, "conn"):
                             try:
                                 self.storage.conn.execute("PRAGMA journal_mode=WAL")
+                                self.storage.conn.execute("PRAGMA busy_timeout=30000")
                             except Exception as e:
                                 logger.error(f"Failed to enable WAL mode: {e}")
                         

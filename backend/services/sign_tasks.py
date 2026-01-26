@@ -815,6 +815,21 @@ class SignTaskService:
                 api_hash = tg_config.get("api_hash")
 
                 session_dir = Path(settings.data_dir) / "sessions"
+                session_string_file = session_dir / f"{account_name}.session_string"
+                session_string = None
+                use_in_memory = False
+                if session_string_file.exists():
+                    try:
+                        session_string = session_string_file.read_text(
+                            encoding="utf-8"
+                        ).strip()
+                        use_in_memory = bool(session_string)
+                    except Exception:
+                        session_string = None
+                        use_in_memory = False
+
+                if os.getenv("SIGN_TASK_FORCE_IN_MEMORY") == "1":
+                    use_in_memory = True
 
                 # 实例化 UserSigner (使用 BackendUserSigner)
                 # 注意: UserSigner 内部会使用 get_client 复用 client
@@ -823,6 +838,8 @@ class SignTaskService:
                     session_dir=str(session_dir),
                     account=account_name,
                     workdir=self.workdir,
+                    session_string=session_string,
+                    in_memory=use_in_memory,
                     api_id=int(api_id) if api_id else None,
                     api_hash=api_hash,
                 )
