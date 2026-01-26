@@ -98,7 +98,7 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onDelete, t, language }: 
                     <div className="text-[10px] text-main/20 font-bold uppercase tracking-widest italic">{t("no_data")}</div>
                 )}
 
-                <div className="flex flex-col items-center gap-1 bg-black/10 rounded-xl p-1 border border-white/5">
+                <div className="flex flex-col md:flex-row items-center gap-1 bg-black/10 rounded-xl p-1 border border-white/5">
                     <button
                         onClick={() => onRun(task.name)}
                         disabled={loading}
