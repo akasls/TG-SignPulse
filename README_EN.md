@@ -1,0 +1,84 @@
+# TG-SignPulse
+
+[中文说明](README.md)
+
+TG-SignPulse is a Telegram automation and management panel for multi-account sign-ins, scheduled tasks, and button clicks.
+
+This project includes AI-assisted features and is developed with AI assistance.
+
+## Features
+
+- Multi-account tasks and scheduling
+- Sign-in automation, message sending, button click flows
+- Time range randomization to reduce risk
+- Web UI for management (Next.js)
+- Docker-first deployment
+- Optional AI helpers: image option selection, calculation reply
+
+## Deployment
+
+### Docker Run
+
+```bash
+docker run -d \
+  --name tg-signpulse \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -v $(pwd)/data:/data \
+  -e TZ=Asia/Shanghai \
+  ghcr.io/akasls/tg-signpulse:latest
+```
+
+- Data persistence: `./data` -> `/data`
+- Open: `http://localhost:8080`
+
+### Docker Compose
+
+```yaml
+version: "3.8"
+services:
+  app:
+    image: ghcr.io/akasls/tg-signpulse:latest
+    container_name: tg-signpulse
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+```
+
+```bash
+docker compose up -d
+```
+
+### Zeabur
+
+1. Create a new project and deploy from GitHub.  
+2. Add a persistent volume at `/data` (required).  
+3. Ensure port `8080` is exposed.
+
+## Project Structure
+
+```
+backend/      # FastAPI backend, scheduler, services
+tg_signer/    # Telegram automation core (Pyrogram)
+frontend/     # Next.js admin panel
+docker/       # Additional docker assets (optional)
+scripts/      # Utility scripts
+tests/        # Tests
+```
+
+## Acknowledgements
+
+This project is based on and extended from the original project:
+- `tg-signer` by amchii  
+  https://github.com/amchii/tg-signer
+
+Thanks to:
+- FastAPI, Uvicorn
+- APScheduler
+- Pyrogram / Kurigram
+- Next.js, Tailwind CSS
+- OpenAI SDK and related AI tooling

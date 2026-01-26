@@ -1,5 +1,7 @@
 # TG-SignPulse
 
+[English README](README_EN.md)
+
 TG-SignPulse is a Telegram automation and management panel for multi-account sign-ins, scheduled tasks, and button clicks.  
 TG-SignPulse 是一个 Telegram 自动化与管理面板，面向多账号签到、定时任务与按钮点击。
 
@@ -70,8 +72,13 @@ scripts/      # Utility scripts
 tests/        # Tests
 ```
 
-## Acknowledgements | 致谢
+## 致谢
 
+本项目基于原项目改造与扩展，特别感谢：
+- 原项目：`tg-signer` by amchii  
+  https://github.com/amchii/tg-signer
+
+并感谢以下依赖与社区：
 - FastAPI, Uvicorn
 - APScheduler
 - Pyrogram / Kurigram
