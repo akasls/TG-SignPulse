@@ -65,9 +65,6 @@ docker compose up -d
 backend/      # FastAPI backend, scheduler, services
 tg_signer/    # Telegram automation core (Pyrogram)
 frontend/     # Next.js admin panel
-docker/       # Additional docker assets (optional)
-scripts/      # Utility scripts
-tests/        # Tests
 ```
 
 ## Acknowledgements
