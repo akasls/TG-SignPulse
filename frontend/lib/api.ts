@@ -192,8 +192,11 @@ export const fetchTaskLogs = (token: string, id: number, limit = 50) =>
 export const listConfigTasks = (token: string) =>
   request<{ sign_tasks: string[]; monitor_tasks: string[]; total: number }>("/config/tasks", {}, token);
 
-export const exportSignTask = async (token: string, taskName: string) => {
-  const res = await fetch(`${API_BASE}/config/export/sign/${taskName}`, {
+export const exportSignTask = async (token: string, taskName: string, accountName?: string) => {
+  const params = new URLSearchParams();
+  if (accountName) params.append("account_name", accountName);
+  const url = `${API_BASE}/config/export/sign/${taskName}${params.toString() ? `?${params.toString()}` : ""}`;
+  const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
@@ -209,10 +212,15 @@ export const exportSignTask = async (token: string, taskName: string) => {
   return res.text();
 };
 
-export const importSignTask = (token: string, configJson: string, taskName?: string) =>
+export const importSignTask = (
+  token: string,
+  configJson: string,
+  taskName?: string,
+  accountName?: string
+) =>
   request<{ success: boolean; task_name: string; message: string }>("/config/import/sign", {
     method: "POST",
-    body: JSON.stringify({ config_json: configJson, task_name: taskName }),
+    body: JSON.stringify({ config_json: configJson, task_name: taskName, account_name: accountName }),
   }, token);
 
 export const exportAllConfigs = async (token: string) => {
@@ -245,10 +253,14 @@ export const importAllConfigs = (token: string, configJson: string, overwrite = 
     body: JSON.stringify({ config_json: configJson, overwrite }),
   }, token);
 
-export const deleteSignConfig = (token: string, taskName: string) =>
-  request<{ success: boolean; message: string }>(`/config/sign/${taskName}`, {
+export const deleteSignConfig = (token: string, taskName: string, accountName?: string) => {
+  const params = new URLSearchParams();
+  if (accountName) params.append("account_name", accountName);
+  const url = `/config/sign/${taskName}${params.toString() ? `?${params.toString()}` : ""}`;
+  return request<{ success: boolean; message: string }>(url, {
     method: "DELETE",
   }, token);
+};
 
 // ============ 用户设置 ============
 
@@ -473,8 +485,12 @@ export async function listSignTasks(token: string, accountName?: string, forceRe
   return request<SignTask[]>(url, {}, token);
 }
 
-export const getSignTask = (token: string, name: string) =>
-  request<SignTask>(`/sign-tasks/${name}`, {}, token);
+export const getSignTask = (token: string, name: string, accountName?: string) => {
+  const params = new URLSearchParams();
+  if (accountName) params.append("account_name", accountName);
+  const url = `/sign-tasks/${name}${params.toString() ? `?${params.toString()}` : ""}`;
+  return request<SignTask>(url, {}, token);
+};
 
 export const createSignTask = (token: string, data: CreateSignTaskRequest) =>
   request<SignTask>("/sign-tasks", {
@@ -501,6 +517,10 @@ export const runSignTask = (token: string, name: string, accountName: string) =>
 export const getAccountChats = (token: string, accountName: string, forceRefresh?: boolean) =>
   request<ChatInfo[]>(`/sign-tasks/chats/${accountName}${forceRefresh ? '?force_refresh=true' : ''}`, {}, token);
 
-export const getSignTaskLogs = (token: string, name: string) =>
-  request<string[]>(`/sign-tasks/${name}/logs`, {}, token);
+export const getSignTaskLogs = (token: string, name: string, accountName?: string) => {
+    const params = new URLSearchParams();
+    if (accountName) params.append("account_name", accountName);
+    const url = `/sign-tasks/${name}/logs${params.toString() ? `?${params.toString()}` : ""}`;
+    return request<string[]>(url, {}, token);
+};
 

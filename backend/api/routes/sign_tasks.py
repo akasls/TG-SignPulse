@@ -301,7 +301,7 @@ async def run_sign_task(
 ):
     """手动运行签到任务"""
     # 检查任务是否存在
-    task = sign_task_service.get_task(task_name)
+    task = sign_task_service.get_task(task_name, account_name=account_name)
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_name} 不存在")
 
@@ -312,10 +312,11 @@ async def run_sign_task(
 @router.get("/{task_name}/logs", response_model=List[str])
 def get_sign_task_logs(
     task_name: str,
+    account_name: str | None = None,
     current_user=Depends(get_current_user),
 ):
     """获取正在运行任务的实时日志"""
-    logs = sign_task_service.get_active_logs(task_name)
+    logs = sign_task_service.get_active_logs(task_name, account_name=account_name)
     return logs
 
 
@@ -343,6 +344,7 @@ async def get_account_chats(
 async def sign_task_logs_ws(
     websocket: WebSocket,
     task_name: str,
+    account_name: str | None = Query(None),
     token: str = Query(...),
     db: Session = Depends(get_db),
 ):
@@ -365,7 +367,9 @@ async def sign_task_logs_ws(
     try:
         while True:
             # 获取当前所有日志
-            active_logs = sign_task_service._active_logs.get(task_name, [])
+            active_logs = sign_task_service.get_active_logs(
+                task_name, account_name=account_name
+            )
 
             # 如果有新内容，则推送
             if len(active_logs) > last_idx:
@@ -374,14 +378,19 @@ async def sign_task_logs_ws(
                     {
                         "type": "logs",
                         "data": new_logs,
-                        "is_running": sign_task_service.is_task_running(task_name),
+                        "is_running": sign_task_service.is_task_running(
+                            task_name, account_name=account_name
+                        ),
                     }
                 )
                 last_idx = len(active_logs)
 
             # 如果任务已结束且日志已推完
-            if not sign_task_service.is_task_running(task_name) and last_idx >= len(
-                active_logs
+            if (
+                not sign_task_service.is_task_running(
+                    task_name, account_name=account_name
+                )
+                and last_idx >= len(active_logs)
             ):
                 await websocket.send_json({"type": "done", "is_running": False})
                 break

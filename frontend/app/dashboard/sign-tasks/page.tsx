@@ -70,7 +70,7 @@ export default function SignTasksPage() {
         }
     };
 
-    const handleDelete = async (taskName: string) => {
+    const handleDelete = async (task: SignTask) => {
         if (!token) return;
 
         if (!confirm(t("confirm_delete"))) {
@@ -79,8 +79,8 @@ export default function SignTasksPage() {
 
         try {
             setLoading(true);
-            await deleteSignTask(token, taskName);
-            addToast(t("delete") + " " + taskName + " " + t("login_success"), "success");
+            await deleteSignTask(token, task.name, task.account_name);
+            addToast(t("delete") + " " + task.name + " " + t("login_success"), "success");
             await loadData(token);
         } catch (err: any) {
             addToast(err.message || t("login_failed"), "error");
@@ -105,7 +105,11 @@ export default function SignTasksPage() {
             const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
             const host = window.location.host;
             // 注意：这里需要确保后端地址正确，如果是在开发环境（localhost:3000 -> localhost:8000）可能需要处理
-            const wsUrl = `${protocol}//${host}/api/sign-tasks/ws/${taskName}?token=${token}`;
+            const wsParams = new URLSearchParams({
+                token,
+                account_name: accountName,
+            });
+            const wsUrl = `${protocol}//${host}/api/sign-tasks/ws/${taskName}?${wsParams.toString()}`;
             const ws = new WebSocket(wsUrl);
 
             ws.onmessage = (event) => {
@@ -234,7 +238,7 @@ export default function SignTasksPage() {
                                             <Play weight="fill" />
                                         </button>
                                         <Link
-                                            href={`/dashboard/account-tasks/AccountTasksContent?name=${task.name}`}
+                                            href={`/dashboard/account-tasks/AccountTasksContent?name=${task.account_name}`}
                                             className={`action-btn ${loading ? 'pointer-events-none opacity-20' : ''}`}
                                             title={t("edit")}
                                         >
@@ -242,7 +246,7 @@ export default function SignTasksPage() {
                                         </Link>
                                     </div>
                                     <button
-                                        onClick={() => handleDelete(task.name)}
+                                        onClick={() => handleDelete(task)}
                                         disabled={loading}
                                         className="action-btn !text-rose-400 hover:bg-rose-500/10 disabled:opacity-20 disabled:cursor-not-allowed"
                                         title={t("delete")}

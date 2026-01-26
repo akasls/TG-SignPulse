@@ -80,8 +80,8 @@ class SignTaskService:
         print(
             f"DEBUG: 初始化 SignTaskService, signs_dir={self.signs_dir}, exists={self.signs_dir.exists()}"
         )
-        self._active_logs: Dict[str, List[str]] = {}  # 存储正在运行任务的实时日志
-        self._active_tasks: Dict[str, bool] = {}  # 记录正在运行的任务
+        self._active_logs: Dict[tuple[str, str], List[str]] = {}  # (account, task) -> logs
+        self._active_tasks: Dict[tuple[str, str], bool] = {}  # (account, task) -> running
         self._tasks_cache = None  # 内存缓存
         self._account_locks: Dict[str, asyncio.Lock] = {}  # 账号锁
         self._cleanup_old_logs()
@@ -101,6 +101,16 @@ class SignTaskService:
                 except Exception:
                     continue
 
+    def _safe_history_key(self, name: str) -> str:
+        return name.replace("/", "_").replace("\\", "_")
+
+    def _history_file_path(self, task_name: str, account_name: str = "") -> Path:
+        if account_name:
+            safe_account = self._safe_history_key(account_name)
+            safe_task = self._safe_history_key(task_name)
+            return self.run_history_dir / f"{safe_account}__{safe_task}.json"
+        return self.run_history_dir / f"{self._safe_history_key(task_name)}.json"
+
     def get_account_history_logs(self, account_name: str) -> List[Dict[str, Any]]:
         """获取某账号下所有任务的最近历史日志"""
         all_history = []
@@ -113,10 +123,14 @@ class SignTaskService:
 
         for task in tasks:
             task_name = task["name"]
-            history_file = self.run_history_dir / f"{task_name}.json"
+            history_file = self._history_file_path(task_name, account_name)
 
             if not history_file.exists():
-                continue
+                legacy_file = self.run_history_dir / f"{task_name}.json"
+                if legacy_file.exists():
+                    history_file = legacy_file
+                else:
+                    continue
 
             try:
                 with open(history_file, "r", encoding="utf-8") as f:
@@ -136,14 +150,20 @@ class SignTaskService:
         all_history.sort(key=lambda x: x.get("time", ""), reverse=True)
         return all_history
 
-    def _get_last_run_info(self, task_dir: Path) -> Optional[Dict[str, Any]]:
+    def _get_last_run_info(
+        self, task_dir: Path, account_name: str = ""
+    ) -> Optional[Dict[str, Any]]:
         """
         获取任务的最后执行信息
         """
-        history_file = self.run_history_dir / f"{task_dir.name}.json"
+        history_file = self._history_file_path(task_dir.name, account_name)
+        legacy_file = self.run_history_dir / f"{task_dir.name}.json"
 
         if not history_file.exists():
-            return None
+            if account_name and legacy_file.exists():
+                history_file = legacy_file
+            else:
+                return None
 
         try:
             with open(history_file, "r", encoding="utf-8") as f:
@@ -162,7 +182,7 @@ class SignTaskService:
         """保存任务执行历史 (保留列表)"""
         from datetime import datetime
 
-        history_file = self.run_history_dir / f"{task_name}.json"
+        history_file = self._history_file_path(task_name, account_name)
 
         new_entry = {
             "time": datetime.now().isoformat(),
@@ -293,7 +313,9 @@ class SignTaskService:
             # 优先从 config 读取 last_run
             last_run = config.get("last_run")
             if not last_run:
-                last_run = self._get_last_run_info(task_dir)
+                last_run = self._get_last_run_info(
+                    task_dir, account_name=config.get("account_name", "")
+                )
 
             return {
                 "name": task_dir.name,
@@ -706,20 +728,35 @@ class SignTaskService:
         """
         return await self.run_task_with_logs(account_name, task_name)
 
-    def get_active_logs(self, task_name: str) -> List[str]:
-        """获取正在运行任务的日志"""
-        return self._active_logs.get(task_name, [])
+    def _task_key(self, account_name: str, task_name: str) -> tuple[str, str]:
+        return account_name, task_name
 
-    def is_task_running(self, task_name: str) -> bool:
+    def _find_task_keys(self, task_name: str) -> List[tuple[str, str]]:
+        return [key for key in self._active_logs.keys() if key[1] == task_name]
+
+    def get_active_logs(
+        self, task_name: str, account_name: Optional[str] = None
+    ) -> List[str]:
+        """获取正在运行任务的日志"""
+        if account_name:
+            return self._active_logs.get(self._task_key(account_name, task_name), [])
+        # 兼容旧接口：返回第一个同名任务的日志
+        for key in self._find_task_keys(task_name):
+            return self._active_logs.get(key, [])
+        return []
+
+    def is_task_running(self, task_name: str, account_name: Optional[str] = None) -> bool:
         """检查任务是否正在运行"""
-        return self._active_tasks.get(task_name, False)
+        if account_name:
+            return self._active_tasks.get(self._task_key(account_name, task_name), False)
+        return any(key[1] == task_name for key, running in self._active_tasks.items() if running)
 
     async def run_task_with_logs(
         self, account_name: str, task_name: str
     ) -> Dict[str, Any]:
         """运行任务并实时捕获日志 (In-Process)"""
 
-        if self.is_task_running(task_name):
+        if self.is_task_running(task_name, account_name):
             return {"success": False, "error": "任务已经在运行中", "output": ""}
 
         # 初始化账号锁
@@ -733,12 +770,13 @@ class SignTaskService:
         # 考虑到定时任务同时触发，应该排队执行。
         print(f"DEBUG: 等待获取账号锁 {account_name}...")
 
-        self._active_tasks[task_name] = True
-        self._active_logs[task_name] = []
+        task_key = self._task_key(account_name, task_name)
+        self._active_tasks[task_key] = True
+        self._active_logs[task_key] = []
 
         # 获取 logger 实例
         tg_logger = logging.getLogger("tg-signer")
-        log_handler = TaskLogHandler(self._active_logs[task_name])
+        log_handler = TaskLogHandler(self._active_logs[task_key])
         log_handler.setLevel(logging.INFO)
         log_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
         tg_logger.addHandler(log_handler)
@@ -750,7 +788,7 @@ class SignTaskService:
         try:
             async with account_lock:
                 print(f"DEBUG: 已获取账号锁 {account_name}，开始执行任务 {task_name}")
-                self._active_logs[task_name].append(
+                self._active_logs[task_key].append(
                     f"开始执行任务: {task_name} (账号: {account_name})"
                 )
 
@@ -778,21 +816,21 @@ class SignTaskService:
                 await signer.run_once(num_of_dialogs=20)
 
                 success = True
-                output_str = "\n".join(self._active_logs[task_name])
-                self._active_logs[task_name].append("任务执行完成")
+                output_str = "\n".join(self._active_logs[task_key])
+                self._active_logs[task_key].append("任务执行完成")
 
                 # 增加缓冲时间，防止同账号连续执行任务时，Session文件锁尚未完全释放导致 "database is locked"
                 await asyncio.sleep(2)
 
         except Exception as e:
             error_msg = f"任务执行出错: {str(e)}"
-            self._active_logs[task_name].append(error_msg)
+            self._active_logs[task_key].append(error_msg)
             # 打印堆栈以便调试
             traceback.print_exc()
             logger = logging.getLogger("backend")
             logger.error(error_msg)
         finally:
-            self._active_tasks[task_name] = False
+            self._active_tasks[task_key] = False
             tg_logger.removeHandler(log_handler)
 
             # 保存执行记录
@@ -802,8 +840,8 @@ class SignTaskService:
             # 延迟清理日志
             async def cleanup():
                 await asyncio.sleep(60)
-                if not self._active_tasks.get(task_name):
-                    self._active_logs.pop(task_name, None)
+                if not self._active_tasks.get(task_key):
+                    self._active_logs.pop(task_key, None)
 
             asyncio.create_task(cleanup())
 

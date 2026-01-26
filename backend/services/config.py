@@ -58,34 +58,51 @@ class ConfigService:
 
         return sorted(tasks)
 
-    def get_sign_config(self, task_name: str) -> Optional[Dict]:
+    def _find_sign_task_dirs(self, task_name: str) -> List[Path]:
+        matches = []
+        if not self.signs_dir.exists():
+            return matches
+
+        # 1. 旧版结构: signs/task
+        direct_dir = self.signs_dir / task_name
+        if (direct_dir / "config.json").exists():
+            matches.append(direct_dir)
+
+        # 2. 新版结构: signs/account/task
+        for acc_dir in self.signs_dir.iterdir():
+            if acc_dir.is_dir():
+                nested_task_dir = acc_dir / task_name
+                if (nested_task_dir / "config.json").exists():
+                    matches.append(nested_task_dir)
+
+        return matches
+
+    def get_sign_config(
+        self, task_name: str, account_name: Optional[str] = None
+    ) -> Optional[Dict]:
         """
         获取签到任务配置
 
         Args:
             task_name: 任务名称
+            account_name: 账号名称（可选）
 
         Returns:
             配置字典，如果不存在则返回 None
         """
-        # 1. 尝试直接查找 (旧版结构)
-        task_dir = self.signs_dir / task_name
-        config_file = task_dir / "config.json"
-
-        # 2. 如果找不到，尝试搜索嵌套结构 (signs/account/task)
-        if not config_file.exists():
-            found = False
-            for acc_dir in self.signs_dir.iterdir():
-                if acc_dir.is_dir():
-                    nested_task_dir = acc_dir / task_name
-                    if (nested_task_dir / "config.json").exists():
-                        task_dir = nested_task_dir
-                        config_file = task_dir / "config.json"
-                        found = True
-                        break
-            
-            if not found:
+        if account_name:
+            task_dir = self.signs_dir / account_name / task_name
+            config_file = task_dir / "config.json"
+            if not config_file.exists():
                 return None
+        else:
+            matches = self._find_sign_task_dirs(task_name)
+            if not matches:
+                return None
+            if len(matches) > 1:
+                raise ValueError(f"任务 {task_name} 存在于多个账号中，请指定 account_name")
+            task_dir = matches[0]
+            config_file = task_dir / "config.json"
 
         try:
             with open(config_file, "r", encoding="utf-8") as f:
@@ -123,27 +140,30 @@ class ConfigService:
         except OSError:
             return False
 
-    def delete_sign_config(self, task_name: str) -> bool:
+    def delete_sign_config(
+        self, task_name: str, account_name: Optional[str] = None
+    ) -> bool:
         """
         删除签到任务配置
 
         Args:
             task_name: 任务名称
+            account_name: 账号名称（可选）
 
         Returns:
             是否成功删除
         """
-        # 1. 尝试定位任务目录
-        task_dir = self.signs_dir / task_name
-        if not task_dir.exists():
-            found = False
-            for acc_dir in self.signs_dir.iterdir():
-                if acc_dir.is_dir() and (acc_dir / task_name).exists():
-                    task_dir = acc_dir / task_name
-                    found = True
-                    break
-            if not found:
+        if account_name:
+            task_dir = self.signs_dir / account_name / task_name
+            if not task_dir.exists():
                 return False
+        else:
+            matches = self._find_sign_task_dirs(task_name)
+            if not matches:
+                return False
+            if len(matches) > 1:
+                raise ValueError(f"任务 {task_name} 存在于多个账号中，请指定 account_name")
+            task_dir = matches[0]
 
         try:
             # 删除配置文件
@@ -166,20 +186,26 @@ class ConfigService:
         except OSError:
             return False
 
-    def export_sign_task(self, task_name: str) -> Optional[str]:
+    def export_sign_task(
+        self, task_name: str, account_name: Optional[str] = None
+    ) -> Optional[str]:
         """
         导出签到任务配置为 JSON 字符串
 
         Args:
             task_name: 任务名称
+            account_name: 账号名称（可选）
 
         Returns:
             JSON 字符串，如果任务不存在则返回 None
         """
-        config = self.get_sign_config(task_name)
+        config = self.get_sign_config(task_name, account_name=account_name)
 
         if config is None:
             return None
+
+        config = dict(config)
+        config.pop("last_run", None)
 
         # 添加元数据
         export_data = {
@@ -190,13 +216,19 @@ class ConfigService:
 
         return json.dumps(export_data, ensure_ascii=False, indent=2)
 
-    def import_sign_task(self, json_str: str, task_name: Optional[str] = None) -> bool:
+    def import_sign_task(
+        self,
+        json_str: str,
+        task_name: Optional[str] = None,
+        account_name: Optional[str] = None,
+    ) -> bool:
         """
         导入签到任务配置
 
         Args:
             json_str: JSON 字符串
             task_name: 新任务名称（可选，如果不提供则使用原名称）
+            account_name: 新账号名称（可选，如果不提供则使用原名称）
 
         Returns:
             是否成功导入
@@ -211,8 +243,12 @@ class ConfigService:
             # 确定任务名称
             final_task_name = task_name or data.get("task_name", "imported_task")
 
+            config = data["config"]
+            if account_name:
+                config["account_name"] = account_name
+
             # 保存配置
-            return self.save_sign_config(final_task_name, data["config"])
+            return self.save_sign_config(final_task_name, config)
 
         except (json.JSONDecodeError, KeyError):
             return False
@@ -237,6 +273,7 @@ class ConfigService:
                     try:
                         with open(path / "config.json", "r", encoding="utf-8") as f:
                             config = json.load(f)
+                            config.pop("last_run", None)
                             key = path.name
                             if key in all_configs["signs"]:
                                 key = f"{key}_{config.get('account_name', 'default')}"
@@ -250,7 +287,8 @@ class ConfigService:
                         if task_dir.is_dir() and (task_dir / "config.json").exists():
                             try:
                                 with open(task_dir / "config.json", "r", encoding="utf-8") as f:
-                                    config = json.load(f)
+                                config = json.load(f)
+                                config.pop("last_run", None)
                                     key = f"{task_dir.name}_{path.name}"
                                     account_name = config.get("account_name")
                                     if account_name:
@@ -272,7 +310,9 @@ class ConfigService:
             if config_file.exists():
                 try:
                     with open(config_file, "r", encoding="utf-8") as f:
-                        all_configs["monitors"][task_name] = json.load(f)
+                        config = json.load(f)
+                        config.pop("last_run", None)
+                        all_configs["monitors"][task_name] = config
                 except (json.JSONDecodeError, OSError):
                     pass
         
@@ -309,16 +349,16 @@ class ConfigService:
                 if not task_name:
                     task_name = key.split("@")[0]
 
-                if not overwrite and self.get_sign_config(task_name):
+                if not overwrite:
                     account_name = config.get("account_name")
                     exists = False
                     if account_name:
-                         if (self.signs_dir / account_name / task_name).exists():
-                             exists = True
+                        if (self.signs_dir / account_name / task_name).exists():
+                            exists = True
                     else:
-                         if (self.signs_dir / task_name).exists():
-                             exists = True
-                    
+                        if (self.signs_dir / task_name).exists():
+                            exists = True
+
                     if exists:
                         result["signs_skipped"] += 1
                         continue

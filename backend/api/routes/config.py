@@ -33,6 +33,7 @@ class ImportTaskRequest(BaseModel):
 
     config_json: str
     task_name: Optional[str] = None  # 新任务名称（可选）
+    account_name: Optional[str] = None  # 新账号名称（可选）
 
 
 class ImportTaskResponse(BaseModel):
@@ -95,14 +96,20 @@ def list_all_tasks(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/export/sign/{task_name}")
-def export_sign_task(task_name: str, current_user: User = Depends(get_current_user)):
+def export_sign_task(
+    task_name: str,
+    account_name: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+):
     """
     导出单个签到任务配置
 
     返回 JSON 格式的配置文件，可以保存后导入
     """
     try:
-        config_json = config_service.export_sign_task(task_name)
+        config_json = config_service.export_sign_task(
+            task_name, account_name=account_name
+        )
 
         if config_json is None:
             raise HTTPException(
@@ -120,6 +127,10 @@ def export_sign_task(task_name: str, current_user: User = Depends(get_current_us
             },
         )
 
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(e)
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -140,7 +151,7 @@ def import_sign_task(
     """
     try:
         success = config_service.import_sign_task(
-            request.config_json, request.task_name
+            request.config_json, request.task_name, request.account_name
         )
 
         if not success:
@@ -246,14 +257,20 @@ def import_all_configs(
 
 
 @router.delete("/sign/{task_name}")
-def delete_sign_task(task_name: str, current_user: User = Depends(get_current_user)):
+def delete_sign_task(
+    task_name: str,
+    account_name: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+):
     """
     删除签到任务配置
 
     注意：删除后无法恢复
     """
     try:
-        success = config_service.delete_sign_config(task_name)
+        success = config_service.delete_sign_config(
+            task_name, account_name=account_name
+        )
 
         if not success:
             raise HTTPException(
@@ -267,6 +284,10 @@ def delete_sign_task(task_name: str, current_user: User = Depends(get_current_us
 
         return {"success": True, "message": f"任务 {task_name} 已删除"}
 
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(e)
+        )
     except HTTPException:
         raise
     except Exception as e:
