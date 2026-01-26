@@ -534,24 +534,40 @@ export default function AccountTasksContent() {
                         </header>
 
                         <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {showCreateDialog && (
-                                    <div className="mb-2">
-                                        <label>{t("task_name")}</label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                                <div className="space-y-4">
+                                    {showCreateDialog && (
+                                        <div className="space-y-2">
+                                            <label>{t("task_name")}</label>
+                                            <input
+                                                className="!mb-0"
+                                                placeholder={t("task_name_placeholder")}
+                                                value={newTask.name}
+                                                onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
+                                            />
+                                        </div>
+                                    )}
+                                    <div className="space-y-2">
+                                        <label>{t("action_interval")}</label>
                                         <input
+                                            type="text"
                                             className="!mb-0"
-                                            placeholder="linuxdo_sign"
-                                            value={newTask.name}
-                                            onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
+                                            value={showCreateDialog ? newTask.action_interval : editTask.action_interval}
+                                            onChange={(e) => {
+                                                const val = parseInt(e.target.value) || 1;
+                                                showCreateDialog
+                                                    ? setNewTask({ ...newTask, action_interval: val })
+                                                    : setEditTask({ ...editTask, action_interval: val });
+                                            }}
                                         />
                                     </div>
-                                )}
+                                </div>
 
-                                <div className={showEditDialog ? "md:col-span-2" : ""}>
-                                    <div className="mb-2">
-                                        <label className="text-xs font-bold uppercase tracking-wider text-main/40 mb-1 block">
-                                            {language === "zh" ? "调度模式" : "Scheduling Mode"}
-                                        </label>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold uppercase tracking-wider text-main/40 mb-1 block">
+                                        {t("scheduling_mode")}
+                                    </label>
+                                    <div>
                                         <select
                                             className="w-full"
                                             value={showCreateDialog ? newTask.execution_mode : editTask.execution_mode}
@@ -562,14 +578,14 @@ export default function AccountTasksContent() {
                                                     : setEditTask({ ...editTask, execution_mode: mode });
                                             }}
                                         >
-                                            <option value="range">{language === "zh" ? "随机时间段 (推荐)" : "Random Range (Recommended)"}</option>
-                                            <option value="fixed">{language === "zh" ? "固定时间 (Cron)" : "Fixed Time (Cron)"}</option>
+                                            <option value="range">{t("random_range_recommend")}</option>
+                                            <option value="fixed">{t("fixed_time_cron")}</option>
                                         </select>
                                     </div>
 
                                     {(showCreateDialog ? newTask.execution_mode : editTask.execution_mode) === "fixed" ? (
-                                        <div className="mb-2">
-                                            <label>{language === "zh" ? "签到时间 (Cron 表达式)" : "Sign-in Time (Cron Expression)"}</label>
+                                        <div className="space-y-2">
+                                            <label>{t("sign_time_cron")}</label>
                                             <input
                                                 className="!mb-0"
                                                 placeholder="0 6 * * *"
@@ -580,14 +596,14 @@ export default function AccountTasksContent() {
                                                 }
                                             />
                                             <div className="text-[10px] text-main/30 mt-1 italic">
-                                                Ex: <code>0 9 * * *</code> (9:00 AM)
+                                                {t("cron_example")}
                                             </div>
                                         </div>
                                     ) : (
                                         <>
-                                            <div className="flex gap-2">
-                                                <div className="flex-1">
-                                                    <label className="text-[10px] font-bold text-main/40 uppercase tracking-wider">{language === "zh" ? "开始" : "Start"}</label>
+                                            <div className="grid grid-cols-2 gap-2 items-end">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-bold text-main/40 uppercase tracking-wider">{t("start_label")}</label>
                                                     <input
                                                         type="time"
                                                         className="!mb-0"
@@ -598,8 +614,8 @@ export default function AccountTasksContent() {
                                                         }
                                                     />
                                                 </div>
-                                                <div className="flex-1">
-                                                    <label className="text-[10px] font-bold text-main/40 uppercase tracking-wider">{language === "zh" ? "结束" : "End"}</label>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-bold text-main/40 uppercase tracking-wider">{t("end_label")}</label>
                                                     <input
                                                         type="time"
                                                         className="!mb-0"
@@ -612,26 +628,10 @@ export default function AccountTasksContent() {
                                                 </div>
                                             </div>
                                             <div className="text-[10px] text-main/30 mt-1 italic">
-                                                {language === "zh" ? "将在该时间段内随机选择执行时间" : "Random execution time within this range"}
+                                                {t("random_time_hint")}
                                             </div>
                                         </>
                                     )}
-                                </div>
-
-
-                                <div className="mb-2">
-                                    <label>{t("action_interval")}</label>
-                                    <input
-                                        type="text"
-                                        className="!mb-0"
-                                        value={showCreateDialog ? newTask.action_interval : editTask.action_interval}
-                                        onChange={(e) => {
-                                            const val = parseInt(e.target.value) || 1;
-                                            showCreateDialog
-                                                ? setNewTask({ ...newTask, action_interval: val })
-                                                : setEditTask({ ...editTask, action_interval: val });
-                                        }}
-                                    />
                                 </div>
                             </div>
 
@@ -644,12 +644,12 @@ export default function AccountTasksContent() {
                                                 onClick={handleRefreshChats}
                                                 disabled={refreshingChats}
                                                 className="text-[10px] text-[#8a3ffc] hover:text-[#8a3ffc]/80 transition-colors uppercase font-bold tracking-tighter flex items-center gap-1"
-                                                title={language === "zh" ? "从 Telegram 重新获取对话" : "Re-fetch chats from Telegram"}
+                                                title={t("refresh_chat_title")}
                                             >
                                                 {refreshingChats ? (
                                                     <div className="w-3 h-3 border-2 border-[#8a3ffc] border-t-transparent rounded-full animate-spin"></div>
                                                 ) : <ArrowClockwise weight="bold" size={12} />}
-                                                {language === "zh" ? "刷新列表" : "Refresh"}
+                                                {t("refresh_list")}
                                             </button>
                                         </div>
                                         <select
@@ -677,7 +677,7 @@ export default function AccountTasksContent() {
                                                 }
                                             }}
                                         >
-                                            <option value={0}>{language === "zh" ? "从列表选择..." : "Select from list..."}</option>
+                                            <option value={0}>{t("select_from_list")}</option>
                                             {chats.map(chat => (
                                                 <option key={chat.id} value={chat.id}>
                                                     {chat.title || chat.username || chat.id}
@@ -797,13 +797,13 @@ export default function AccountTasksContent() {
                                                 {action.action === 4 && (
                                                     <div className="h-10 px-4 flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-[#8183ff] text-xs font-bold uppercase tracking-wider">
                                                         <Robot weight="fill" size={16} />
-                                                        AI Vision Mode
+                                                        {t("ai_vision_mode")}
                                                     </div>
                                                 )}
                                                 {action.action === 5 && (
                                                     <div className="h-10 px-4 flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-xs font-bold uppercase tracking-wider">
                                                         <MathOperations weight="fill" size={16} />
-                                                        AI Logic Solver
+                                                        {t("ai_logic_solver")}
                                                     </div>
                                                 )}
                                             </div>
@@ -832,7 +832,7 @@ export default function AccountTasksContent() {
                                 onClick={showCreateDialog ? handleCreateTask : handleSaveEdit}
                                 disabled={loading}
                             >
-                                {loading ? <Spinner className="animate-spin" /> : (showCreateDialog ? (language === "zh" ? "添加任务" : t("add_task")) : t("save_changes"))}
+                                {loading ? <Spinner className="animate-spin" /> : (showCreateDialog ? t("add_task") : t("save_changes"))}
                             </button>
                         </footer>
                     </div>

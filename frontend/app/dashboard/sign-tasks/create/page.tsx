@@ -81,7 +81,7 @@ export default function CreateSignTaskPage() {
                 loadChats(tokenStr, data.accounts[0].name);
             }
         } catch (err: any) {
-            addToast(err.message || "加载失败", "error");
+            addToast(err.message || t("load_failed"), "error");
         }
     };
 
@@ -113,11 +113,11 @@ export default function CreateSignTaskPage() {
     const handleSaveChat = () => {
         if (!editingChat) return;
         if (editingChat.chat_id === 0) {
-            addToast("请选择一个 Chat", "error");
+            addToast(t("select_chat_error"), "error");
             return;
         }
         if (editingChat.actions.length === 0) {
-            addToast("请至少添加一个动作", "error");
+            addToast(t("add_action_error"), "error");
             return;
         }
         setChats([...chats, editingChat]);
@@ -127,19 +127,19 @@ export default function CreateSignTaskPage() {
     const handleSubmit = async () => {
         if (!token) return;
         if (!taskName) {
-            addToast("请填写任务名称", "error");
+            addToast(t("task_name_required"), "error");
             return;
         }
         if (executionMode === "fixed" && !signAt) {
-            addToast("请填写CRON表达式", "error");
+            addToast(t("cron_required"), "error");
             return;
         }
         if (executionMode === "range" && (!rangeStart || !rangeEnd)) {
-            addToast("请填写完整的时间段", "error");
+            addToast(t("range_required"), "error");
             return;
         }
         if (chats.length === 0) {
-            addToast("请至少添加一个 Chat", "error");
+            addToast(t("chat_required"), "error");
             return;
         }
 
@@ -156,10 +156,10 @@ export default function CreateSignTaskPage() {
                 range_start: rangeStart,
                 range_end: rangeEnd,
             });
-            addToast("任务创建成功", "success");
+            addToast(t("create_success"), "success");
             setTimeout(() => router.push("/dashboard/sign-tasks"), 1500);
         } catch (err: any) {
-            addToast(err.message || "创建失败", "error");
+            addToast(err.message || t("create_failed"), "error");
         } finally {
             setLoading(false);
         }
@@ -188,7 +188,7 @@ export default function CreateSignTaskPage() {
             <main className="flex-1 p-5 md:p-10 w-full max-w-[900px] mx-auto overflow-y-auto animate-float-up pb-20">
                 <header className="mb-10">
                     <h1 className="text-3xl font-bold tracking-tight mb-2">{t("add_task")}</h1>
-                    <p className="text-[#9496a1] text-sm">定义全局签到规则，可以应用到多个目标频道</p>
+                    <p className="text-[#9496a1] text-sm">{t("define_global_rules")}</p>
                 </header>
 
                 <div className="grid gap-8">
@@ -198,21 +198,21 @@ export default function CreateSignTaskPage() {
                             <div className="p-2 bg-[#8a3ffc]/10 rounded-lg text-[#b57dff]">
                                 <Lightning weight="fill" size={18} />
                             </div>
-                            <h2 className="text-lg font-bold">基本配置</h2>
+                            <h2 className="text-lg font-bold">{t("basic_config")}</h2>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <label className="text-xs font-bold text-main/40 uppercase tracking-wider">{language === "zh" ? "任务名称" : "Task Name"}</label>
+                                <label className="text-xs font-bold text-main/40 uppercase tracking-wider">{t("task_name")}</label>
                                 <input
                                     className="!mb-0"
                                     value={taskName}
                                     onChange={(e) => setTaskName(e.target.value)}
-                                    placeholder={language === "zh" ? "例如: linuxdo_sign" : "e.g. linuxdo_sign"}
+                                    placeholder={t("task_name_placeholder")}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-xs font-bold text-main/40 uppercase tracking-wider">{language === "zh" ? "关联账号" : "Associated Account"}</label>
+                                <label className="text-xs font-bold text-main/40 uppercase tracking-wider">{t("associated_account")}</label>
                                 <select
                                     className="!mb-0"
                                     value={selectedAccount}
@@ -227,22 +227,20 @@ export default function CreateSignTaskPage() {
                         <div className="p-4 glass-panel !bg-black/5 space-y-4 border-white/5">
                             <div className="flex items-center justify-between mb-4">
                                 <label className="text-xs font-bold text-main/40 uppercase tracking-wider">
-                                    {language === "zh" ? "调度模式" : "Scheduling Mode"}
+                                    {t("scheduling_mode")}
                                 </label>
                                 <div className="text-xs font-bold text-[#8a3ffc] bg-[#8a3ffc]/10 px-2 py-1 rounded">
-                                    {language === "zh" ? "随机时间段 (默认)" : "Random Range (Default)"}
+                                    {t("random_range_default")}
                                 </div>
                             </div>
 
                             <p className="text-xs text-[#9496a1] mb-4">
-                                {language === "zh"
-                                    ? "系统将在设定的时间段内随机选择一个时间点执行任务，避免被检测为机器人。"
-                                    : "The system will randomly select a time within the configured range to execute the task, avoiding bot detection."}
+                                {t("random_range_desc")}
                             </p>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-main/40 uppercase tracking-wider">{language === "zh" ? "开始时间" : "Start Time"}</label>
+                                    <label className="text-xs font-bold text-main/40 uppercase tracking-wider">{t("start_time")}</label>
                                     <input
                                         type="time"
                                         className="!mb-0"
@@ -251,7 +249,7 @@ export default function CreateSignTaskPage() {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-main/40 uppercase tracking-wider">{language === "zh" ? "结束时间" : "End Time"}</label>
+                                    <label className="text-xs font-bold text-main/40 uppercase tracking-wider">{t("end_time")}</label>
                                     <input
                                         type="time"
                                         className="!mb-0"
@@ -272,17 +270,17 @@ export default function CreateSignTaskPage() {
                                 <div className="p-2 bg-[#8a3ffc]/10 rounded-lg text-[#b57dff]">
                                     <ChatCircleText weight="fill" size={18} />
                                 </div>
-                                <h2 className="text-lg font-bold">目标 Chat 配置 ({chats.length})</h2>
+                                <h2 className="text-lg font-bold">{t("target_chat_config")} ({chats.length})</h2>
                             </div>
                             <button onClick={handleAddChat} className="btn-secondary !h-8 !px-3 font-bold !text-[10px]">
-                                + 添加 CHAT
+                                + {t("add_chat")}
                             </button>
                         </div>
 
                         {
                             chats.length === 0 ? (
                                 <div className="py-10 text-center border-2 border-dashed border-white/5 rounded-2xl text-main/20">
-                                    <p className="text-sm">尚未添加任何目标频道</p>
+                                    <p className="text-sm">{t("no_target_chat")}</p>
                                 </div>
                             ) : (
                                 <div className="flex flex-col gap-3">
@@ -295,7 +293,7 @@ export default function CreateSignTaskPage() {
                                                 <div>
                                                     <div className="font-bold text-sm">{chat.name}</div>
                                                     <div className="text-[10px] text-main/30 font-mono mt-0.5">
-                                                        ID: {chat.chat_id} | <span className="text-[#8a3ffc]/60 font-bold">{chat.actions.length} ACTIONS</span>
+                                                        {t("id_label")}: {chat.chat_id} | <span className="text-[#8a3ffc]/60 font-bold">{chat.actions.length} {t("actions_count")}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -315,7 +313,7 @@ export default function CreateSignTaskPage() {
                     <div className="flex gap-4 pt-4">
                         <button onClick={() => router.back()} className="btn-secondary flex-1">{t("cancel")}</button>
                         <button onClick={handleSubmit} disabled={loading} className="btn-gradient flex-1">
-                            {loading ? <Spinner className="animate-spin mx-auto" weight="bold" /> : "立即部署任务"}
+                            {loading ? <Spinner className="animate-spin mx-auto" weight="bold" /> : t("deploy_task")}
                         </button>
                     </div>
                 </div>
@@ -331,7 +329,7 @@ export default function CreateSignTaskPage() {
                                     <div className="p-2 bg-[#8a3ffc]/10 rounded-lg text-[#b57dff]">
                                         <Plus weight="bold" size={20} />
                                     </div>
-                                    配置目标 Chat
+                                    {t("configure_target_chat")}
                                 </h2>
                                 <button onClick={() => setEditingChat(null)} className="action-btn !w-8 !h-8">
                                     <X weight="bold" />
@@ -340,7 +338,7 @@ export default function CreateSignTaskPage() {
 
                             <div className="p-6 space-y-6">
                                 <div className="space-y-2">
-                                    <label className="text-xs uppercase tracking-widest font-bold text-main/40">选择目标 Chat</label>
+                                    <label className="text-xs uppercase tracking-widest font-bold text-main/40">{t("select_target_chat")}</label>
                                     <select
                                         value={editingChat.chat_id}
                                         onChange={(e) => {
@@ -349,19 +347,19 @@ export default function CreateSignTaskPage() {
                                             setEditingChat({ ...editingChat, chat_id: cid, name: chat?.title || chat?.username || "" });
                                         }}
                                     >
-                                        <option value={0}>请选择服务器中的频道...</option>
+                                        <option value={0}>{t("select_chat_placeholder")}</option>
                                         {availableChats.map(c => <option key={c.id} value={c.id}>{c.title || c.username}</option>)}
                                     </select>
                                 </div>
 
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
-                                        <label className="text-xs uppercase tracking-widest font-bold text-main/40">任务动作序列</label>
+                                        <label className="text-xs uppercase tracking-widest font-bold text-main/40">{t("action_sequence_title")}</label>
                                         <button
-                                            onClick={() => setEditingChat({ ...editingChat, actions: [...editingChat.actions, { action: 1, text: "Check in" }] })}
+                                            onClick={() => setEditingChat({ ...editingChat, actions: [...editingChat.actions, { action: 1, text: "" }] })}
                                             className="text-[10px] font-bold text-[#8a3ffc] hover:underline"
                                         >
-                                            + 添加签到动作
+                                            + {t("add_sign_action")}
                                         </button>
                                     </div>
 
@@ -393,7 +391,7 @@ export default function CreateSignTaskPage() {
                                         ))}
                                         {editingChat.actions.length === 0 && (
                                             <div className="text-center py-4 text-xs text-main/20 italic">
-                                                点击上方按钮添加第一个动作，如发送 &quot;/checkin&quot;
+                                                {t("no_actions_hint")}
                                             </div>
                                         )}
                                     </div>
@@ -404,7 +402,7 @@ export default function CreateSignTaskPage() {
                                 <button onClick={() => setEditingChat(null)} className="btn-secondary flex-1">{t("cancel")}</button>
                                 <button onClick={handleSaveChat} className="btn-gradient flex-1 flex items-center justify-center gap-2">
                                     <Check weight="bold" />
-                                    确认添加
+                                    {t("confirm_add")}
                                 </button>
                             </footer>
                         </div>
