@@ -81,7 +81,7 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onDelete, t, language }: 
                 </div>
             </div>
 
-            <div className="flex items-center gap-8">
+            <div className="flex items-center gap-4">
                 {task.last_run ? (
                     <div className="flex flex-col items-end">
                         <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${task.last_run.success ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -98,7 +98,7 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onDelete, t, language }: 
                     <div className="text-[10px] text-main/20 font-bold uppercase tracking-widest italic">{t("no_data")}</div>
                 )}
 
-                <div className="flex items-center gap-1 bg-black/10 rounded-xl p-1 border border-white/5">
+                <div className="flex flex-col items-center gap-1 bg-black/10 rounded-xl p-1 border border-white/5">
                     <button
                         onClick={() => onRun(task.name)}
                         disabled={loading}
