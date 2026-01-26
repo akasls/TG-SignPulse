@@ -1074,7 +1074,7 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                 return True
         return False
 
-    async def wait_for(self, chat: SignChatV3, action: ActionT, timeout=10):
+    async def wait_for(self, chat: SignChatV3, action: ActionT, timeout=15):
         if isinstance(action, SendTextAction):
             return await self.send_message(chat.chat_id, action.text, chat.delete_after)
         elif isinstance(action, SendDiceAction):
@@ -1107,6 +1107,25 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                     self.context.chat_messages[chat.chat_id][message.id] = None
                     return None
                 self.log(f"忽略消息: {readable_message(message)}")
+        # Fallback: try recent history in case message handlers missed the reply.
+        if isinstance(
+            action,
+            (ClickKeyboardByTextAction, ReplyByCalculationProblemAction, ChooseOptionByImageAction),
+        ):
+            try:
+                self.log("等待超时，尝试从历史消息中查找按钮", level="WARNING")
+                async for message in self.app.get_chat_history(chat.chat_id, limit=5):
+                    if isinstance(action, ClickKeyboardByTextAction):
+                        ok = await self._click_keyboard_by_text(action, message)
+                    elif isinstance(action, ReplyByCalculationProblemAction):
+                        ok = await self._reply_by_calculation_problem(action, message)
+                    else:
+                        ok = await self._choose_option_by_image(action, message)
+                    if ok:
+                        return None
+            except Exception as e:
+                self.log(f"历史消息回退失败: {e}", level="WARNING")
+
         self.log(f"等待超时: \nchat: \n{chat} \naction: {action}", level="WARNING")
         return None
 
