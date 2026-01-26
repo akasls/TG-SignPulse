@@ -34,6 +34,7 @@ from pyrogram.types import (
     Chat,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
     Message,
     Object,
     User,
@@ -1019,6 +1020,14 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                             btn.callback_data,
                         )
                         return True
+            elif isinstance(reply_markup, ReplyKeyboardMarkup):
+                for row in reply_markup.keyboard:
+                    for btn in row:
+                        btn_text = getattr(btn, "text", None)
+                        if btn_text and action.text in btn_text:
+                            self.log(f"发送按钮文本: {btn_text}")
+                            await self.send_message(message.chat.id, btn_text)
+                            return True
         return False
 
     async def _reply_by_calculation_problem(
