@@ -287,15 +287,15 @@ class ConfigService:
                         if task_dir.is_dir() and (task_dir / "config.json").exists():
                             try:
                                 with open(task_dir / "config.json", "r", encoding="utf-8") as f:
-                                config = json.load(f)
-                                config.pop("last_run", None)
+                                    config = json.load(f)
+                                    config.pop("last_run", None)
                                     key = f"{task_dir.name}_{path.name}"
                                     account_name = config.get("account_name")
                                     if account_name:
                                         key = f"{config.get('name', task_dir.name)}@{account_name}"
                                     else:
                                         key = config.get("name", task_dir.name)
-                                    
+
                                     if key in all_configs["signs"]:
                                         import uuid
                                         key = f"{key}_{str(uuid.uuid4())[:8]}"
