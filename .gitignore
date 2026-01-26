@@ -93,8 +93,9 @@ uv.lock
 
 # Instance
 media/
-logs/*
-!logs/.gitkeep
+logs/
+data/
+data_test/
 
 # Editors & IDEs
 *.sublime-project
@@ -102,6 +103,7 @@ logs/*
 .idea/
 *.swp
 .vscode
+*.bak
 
 # db
 *.sqlite3

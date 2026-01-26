@@ -1,20 +1,23 @@
 # TG-SignPulse
 
-Telegram 任务自动执行与管理面板。支持多账号管理、自动签到、定时任务随机化执行等功能。
+TG-SignPulse is a Telegram automation and management panel for multi-account sign-ins, scheduled tasks, and button clicks.  
+TG-SignPulse 是一个 Telegram 自动化与管理面板，面向多账号签到、定时任务与按钮点击。
 
-## 功能特性
+This project includes AI-assisted features and is developed with AI assistance.  
+本项目包含 AI 辅助能力，并由 AI 参与开发。
 
-- **多账号管理**：支持导入和管理多个 Telegram 账号。
-- **自动化任务**：支持定时签到、发送消息等任务。
-- **随机执行模式**：支持设置时间范围（如 09:00 - 18:00），系统将在范围内随机时间点执行，避免封号风险。
-- **Docker 部署**：原生支持 Docker 和 Docker Compose 一键部署。
-- **现代化 UI**：基于 Next.js 的响应式管理面板。
+## Features | 功能特性
 
-## 部署方法
+- Multi-account tasks and scheduling | 多账号任务与定时调度
+- Sign-in automation, message sending, button click flows | 签到自动化、消息发送、按钮点击流程
+- Time range randomization to reduce risk | 时间段随机执行，降低风险
+- Web UI for management (Next.js) | 现代化管理面板
+- Docker-first deployment | 原生 Docker 部署
+- Optional AI helpers: image option selection, calculation reply | 可选 AI 辅助：图片选项识别、计算题回复
 
-### 方式一：Docker Run (命令行)
+## Deployment | 部署
 
-如果您只需简单运行，可以使用以下命令：
+### Docker Run
 
 ```bash
 docker run -d \
@@ -26,15 +29,13 @@ docker run -d \
   ghcr.io/akasls/tg-signpulse:latest
 ```
 
-*   **数据持久化**：您的数据将保存在当前目录下的 `data` 文件夹中。
-*   **访问地址**：`http://localhost:8080`
+- Data persistence: `./data` -> `/data` | 数据持久化：`./data` -> `/data`
+- Open: `http://localhost:8080`
 
-### 方式二：Docker Compose (推荐)
-
-创建 `docker-compose.yml`：
+### Docker Compose
 
 ```yaml
-version: '3.8'
+version: "3.8"
 services:
   app:
     image: ghcr.io/akasls/tg-signpulse:latest
@@ -48,30 +49,31 @@ services:
     restart: unless-stopped
 ```
 
-然后运行：
-
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
+### Zeabur
+
+1. Create a new project and deploy from GitHub.  
+2. Add a persistent volume at `/data` (required).  
+3. Ensure port `8080` is exposed.
+
+## Project Structure | 项目结构
+
+```
+backend/      # FastAPI backend, scheduler, services
+tg_signer/    # Telegram automation core (Pyrogram)
+frontend/     # Next.js admin panel
+docker/       # Additional docker assets (optional)
+scripts/      # Utility scripts
+tests/        # Tests
 ```
 
-### 方式三：Zeabur 一键部署
+## Acknowledgements | 致谢
 
-1.  在 Zeabur 控制台创建新项目。
-2.  选择 **Deploy New Service** -> **GitHub** -> 选择本仓库。
-3.  服务创建后，进入 **Settings** -> **Volumes**（持久化存储）：
-    *   **Mount Path**: `/data`
-    *   这是一定要做的，否则重启后数据丢失。
-4.  **Networking**：
-    *   确保 Port 设置为 `8080`（Zeabur 通常会自动检测）。
-    *   创建 Domain 以访问服务。
-
-## 开发
-
-本项目后端基于 Python (FastAPI)，前端基于 TypeScript (Next.js)。
-
-1.  克隆项目
-2.  `pip install -r requirements.txt`
-3.  `npm install` (在 frontend 目录)
-4.  参考 `local-test.sh` 启动本地开发环境。
+- FastAPI, Uvicorn
+- APScheduler
+- Pyrogram / Kurigram
+- Next.js, Tailwind CSS
+- OpenAI SDK and related AI tooling
