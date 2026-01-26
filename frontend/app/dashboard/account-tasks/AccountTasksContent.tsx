@@ -137,6 +137,8 @@ export default function AccountTasksContent() {
     const searchParams = useSearchParams();
     const accountName = searchParams.get("name") || "";
     const { toasts, addToast, removeToast } = useToast();
+    const fieldLabelClass = "text-xs font-bold uppercase tracking-wider text-main/40 mb-1 block";
+    const subLabelClass = "text-[10px] font-bold uppercase tracking-wider text-main/40 block";
 
     const [token, setLocalToken] = useState<string | null>(null);
     const [tasks, setTasks] = useState<SignTask[]>([]);
@@ -535,57 +537,64 @@ export default function AccountTasksContent() {
 
                         <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-                                <div className="space-y-4">
-                                    {showCreateDialog && (
-                                        <div className="space-y-2">
-                                            <label>{t("task_name")}</label>
-                                            <input
-                                                className="!mb-0"
-                                                placeholder={t("task_name_placeholder")}
-                                                value={newTask.name}
-                                                onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
-                                            />
-                                        </div>
-                                    )}
+                                {showCreateDialog ? (
                                     <div className="space-y-2">
-                                        <label>{t("action_interval")}</label>
+                                        <label className={fieldLabelClass}>{t("task_name")}</label>
                                         <input
-                                            type="text"
                                             className="!mb-0"
-                                            value={showCreateDialog ? newTask.action_interval : editTask.action_interval}
-                                            onChange={(e) => {
-                                                const val = parseInt(e.target.value) || 1;
-                                                showCreateDialog
-                                                    ? setNewTask({ ...newTask, action_interval: val })
-                                                    : setEditTask({ ...editTask, action_interval: val });
-                                            }}
+                                            placeholder={t("task_name_placeholder")}
+                                            value={newTask.name}
+                                            onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
                                         />
                                     </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <label className={fieldLabelClass}>{t("task_name")}</label>
+                                        <input
+                                            className="!mb-0"
+                                            value={editingTaskName}
+                                            readOnly
+                                            aria-readonly="true"
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="space-y-2">
+                                    <label className={fieldLabelClass}>{t("scheduling_mode")}</label>
+                                    <select
+                                        className="w-full"
+                                        value={showCreateDialog ? newTask.execution_mode : editTask.execution_mode}
+                                        onChange={(e) => {
+                                            const mode = e.target.value as "fixed" | "range";
+                                            showCreateDialog
+                                                ? setNewTask({ ...newTask, execution_mode: mode })
+                                                : setEditTask({ ...editTask, execution_mode: mode });
+                                        }}
+                                    >
+                                        <option value="range">{t("random_range_recommend")}</option>
+                                        <option value="fixed">{t("fixed_time_cron")}</option>
+                                    </select>
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold uppercase tracking-wider text-main/40 mb-1 block">
-                                        {t("scheduling_mode")}
-                                    </label>
-                                    <div>
-                                        <select
-                                            className="w-full"
-                                            value={showCreateDialog ? newTask.execution_mode : editTask.execution_mode}
-                                            onChange={(e) => {
-                                                const mode = e.target.value as "fixed" | "range";
-                                                showCreateDialog
-                                                    ? setNewTask({ ...newTask, execution_mode: mode })
-                                                    : setEditTask({ ...editTask, execution_mode: mode });
-                                            }}
-                                        >
-                                            <option value="range">{t("random_range_recommend")}</option>
-                                            <option value="fixed">{t("fixed_time_cron")}</option>
-                                        </select>
-                                    </div>
+                                    <label className={fieldLabelClass}>{t("action_interval")}</label>
+                                    <input
+                                        type="text"
+                                        className="!mb-0"
+                                        value={showCreateDialog ? newTask.action_interval : editTask.action_interval}
+                                        onChange={(e) => {
+                                            const val = parseInt(e.target.value) || 1;
+                                            showCreateDialog
+                                                ? setNewTask({ ...newTask, action_interval: val })
+                                                : setEditTask({ ...editTask, action_interval: val });
+                                        }}
+                                    />
+                                </div>
 
+                                <div className="space-y-2">
                                     {(showCreateDialog ? newTask.execution_mode : editTask.execution_mode) === "fixed" ? (
-                                        <div className="space-y-2">
-                                            <label>{t("sign_time_cron")}</label>
+                                        <>
+                                            <label className={fieldLabelClass}>{t("sign_time_cron")}</label>
                                             <input
                                                 className="!mb-0"
                                                 placeholder="0 6 * * *"
@@ -598,12 +607,13 @@ export default function AccountTasksContent() {
                                             <div className="text-[10px] text-main/30 mt-1 italic">
                                                 {t("cron_example")}
                                             </div>
-                                        </div>
+                                        </>
                                     ) : (
                                         <>
+                                            <label className={fieldLabelClass}>{t("time_range")}</label>
                                             <div className="grid grid-cols-2 gap-2 items-end">
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-bold text-main/40 uppercase tracking-wider">{t("start_label")}</label>
+                                                    <label className={subLabelClass}>{t("start_label")}</label>
                                                     <input
                                                         type="time"
                                                         className="!mb-0"
@@ -615,7 +625,7 @@ export default function AccountTasksContent() {
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-bold text-main/40 uppercase tracking-wider">{t("end_label")}</label>
+                                                    <label className={subLabelClass}>{t("end_label")}</label>
                                                     <input
                                                         type="time"
                                                         className="!mb-0"

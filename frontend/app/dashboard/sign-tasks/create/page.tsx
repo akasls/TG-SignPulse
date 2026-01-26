@@ -32,7 +32,7 @@ import { ToastContainer, useToast } from "../../../../components/ui/toast";
 
 export default function CreateSignTaskPage() {
     const router = useRouter();
-    const { t, language } = useLanguage();
+    const { t } = useLanguage();
     const { toasts, addToast, removeToast } = useToast();
     const [token, setLocalToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);

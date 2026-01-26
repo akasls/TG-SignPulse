@@ -357,7 +357,9 @@ export default function Dashboard() {
 
             <div className="px-5 py-3 border-b border-white/5 flex justify-between items-center bg-white/2">
               <div className="text-[10px] text-main/30 font-bold uppercase tracking-wider">
-                Showing last {accountLogs.length} entries (3 Days History)
+                {t("logs_summary")
+                  .replace("{count}", accountLogs.length.toString())
+                  .replace("{days}", "3")}
               </div>
               {accountLogs.length > 0 && (
                 <button
@@ -366,7 +368,7 @@ export default function Dashboard() {
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#8a3ffc]/10 text-[#8a3ffc] text-[10px] font-bold hover:bg-[#8a3ffc]/20 transition-all disabled:opacity-50"
                 >
                   <DownloadSimple weight="bold" size={14} />
-                  {language === "zh" ? "导出日志" : "Export Logs"}
+                  {t("export_logs")}
                 </button>
               )}
             </div>
