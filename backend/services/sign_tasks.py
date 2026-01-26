@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import traceback
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -84,6 +85,10 @@ class SignTaskService:
         self._active_tasks: Dict[tuple[str, str], bool] = {}  # (account, task) -> running
         self._tasks_cache = None  # 内存缓存
         self._account_locks: Dict[str, asyncio.Lock] = {}  # 账号锁
+        self._account_last_run_end: Dict[str, float] = {}  # 账号最后一次结束时间
+        self._account_cooldown_seconds = int(
+            os.getenv("SIGN_TASK_ACCOUNT_COOLDOWN", "5")
+        )
         self._cleanup_old_logs()
 
     def _cleanup_old_logs(self):
@@ -787,6 +792,16 @@ class SignTaskService:
 
         try:
             async with account_lock:
+                last_end = self._account_last_run_end.get(account_name)
+                if last_end:
+                    gap = time.time() - last_end
+                    wait_seconds = self._account_cooldown_seconds - gap
+                    if wait_seconds > 0:
+                        self._active_logs[task_key].append(
+                            f"等待账号冷却 {int(wait_seconds)} 秒"
+                        )
+                        await asyncio.sleep(wait_seconds)
+
                 print(f"DEBUG: 已获取账号锁 {account_name}，开始执行任务 {task_name}")
                 self._active_logs[task_key].append(
                     f"开始执行任务: {task_name} (账号: {account_name})"
@@ -812,8 +827,22 @@ class SignTaskService:
                     api_hash=api_hash,
                 )
 
-                # 执行任务
-                await signer.run_once(num_of_dialogs=20)
+                # 执行任务（数据库锁冲突时重试）
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        await signer.run_once(num_of_dialogs=20)
+                        break
+                    except Exception as e:
+                        if "database is locked" in str(e).lower():
+                            if attempt < max_retries - 1:
+                                delay = (attempt + 1) * 3
+                                self._active_logs[task_key].append(
+                                    f"Session 被锁定，{delay} 秒后重试..."
+                                )
+                                await asyncio.sleep(delay)
+                                continue
+                        raise
 
                 success = True
                 output_str = "\n".join(self._active_logs[task_key])
@@ -830,6 +859,7 @@ class SignTaskService:
             logger = logging.getLogger("backend")
             logger.error(error_msg)
         finally:
+            self._account_last_run_end[account_name] = time.time()
             self._active_tasks[task_key] = False
             tg_logger.removeHandler(log_handler)
 
