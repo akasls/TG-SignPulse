@@ -61,6 +61,8 @@ docker compose up -d
 
 ## Optional Environment Variables
 
+- `TG_API_ID` / `TG_API_HASH`: Telegram API credentials (optional, recommended to use your own)
+
 - `APP_SECRET_KEY`: backend secret key (optional, for extra security)
 - `OPENAI_API_KEY`: required only if you enable AI features (optional)
 - `OPENAI_BASE_URL`: custom OpenAI API base URL (optional)
