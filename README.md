@@ -26,12 +26,12 @@ docker run -d \
   -p 8080:8080 \
   -v $(pwd)/data:/data \
   -e TZ=Asia/Shanghai \
-  # ???Telegram API??????????
+  # 可选：Telegram API
   # -e TG_API_ID=123456 \
   # -e TG_API_HASH=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
-  # ??????????????
+  # 可选：后端密钥
   # -e APP_SECRET_KEY=your_secret \
-  # ???AI ??
+  # 可选：AI接入
   # -e OPENAI_API_KEY=sk-xxxxxxxx \
   # -e OPENAI_BASE_URL=https://api.openai.com/v1 \
   # -e OPENAI_MODEL=gpt-4.1 \
@@ -55,12 +55,12 @@ services:
       - ./data:/data
     environment:
       - TZ=Asia/Shanghai
-      # ???Telegram API??????????
+      # 可选：Telegram API
       # - TG_API_ID=123456
       # - TG_API_HASH=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-      # ??????????????
+      # 可选：后端密钥
       # - APP_SECRET_KEY=your_secret
-      # ???AI ??
+      # 可选：AI接入
       # - OPENAI_API_KEY=sk-xxxxxxxx
       # - OPENAI_BASE_URL=https://api.openai.com/v1
       # - OPENAI_MODEL=gpt-4.1
