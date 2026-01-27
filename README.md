@@ -1,4 +1,4 @@
-# TG-SignPulse
+﻿# TG-SignPulse
 
 [English README](README_EN.md)
 
