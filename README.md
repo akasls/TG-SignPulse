@@ -16,7 +16,8 @@ TG-SignPulse 是一个 Telegram 自动化与管理面板，面向多账号签到
 - 可选 AI 辅助：图片选项识别、计算题回复
 
 ## 部署
-
+默认账号：admin
+默认密码：admin123
 ### Docker Run
 
 ```bash
