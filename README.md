@@ -55,6 +55,8 @@ docker compose up -d
 
 ### Zeabur
 
+<a href="https://zeabur.com/referral?referralCode=akasls&utm_source=7764877&utm_campaign=oss"><img src=https://zeabur.com/deployed-on-zeabur-dark.svg alt="Deployed on Zeabur"/></a>
+
 1. 在 Zeabur 控制台创建新项目并从 GitHub 部署。  
 2. 挂载持久化目录到 `/data`（必需）。  
 3. 确保端口为 `8080`。

@@ -55,6 +55,8 @@ docker compose up -d
 
 ### Zeabur
 
+<a href="https://zeabur.com/referral?referralCode=akasls&utm_source=7764877&utm_campaign=oss"><img src=https://zeabur.com/deployed-on-zeabur-dark.svg alt="Deployed on Zeabur"/></a>
+
 1. Create a new project and deploy from GitHub.  
 2. Add a persistent volume at `/data` (required).  
 3. Ensure port `8080` is exposed.
