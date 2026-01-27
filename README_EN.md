@@ -26,6 +26,15 @@ docker run -d \
   -p 8080:8080 \
   -v $(pwd)/data:/data \
   -e TZ=Asia/Shanghai \
+  # Optional: Telegram API (recommended to use your own)
+  # -e TG_API_ID=123456 \
+  # -e TG_API_HASH=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+  # Optional: backend secret key
+  # -e APP_SECRET_KEY=your_secret \
+  # Optional: AI features
+  # -e OPENAI_API_KEY=sk-xxxxxxxx \
+  # -e OPENAI_BASE_URL=https://api.openai.com/v1 \
+  # -e OPENAI_MODEL=gpt-4.1 \
   ghcr.io/akasls/tg-signpulse:latest
 ```
 
