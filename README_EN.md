@@ -60,6 +60,7 @@ docker compose up -d
 3. Ensure port `8080` is exposed.
 
 ## Optional Environment Variables
+Note: These can also be set in the admin panel ?Settings?. Environment variables take precedence.
 
 - `TG_API_ID` / `TG_API_HASH`: Telegram API credentials (optional, recommended to use your own)
 
