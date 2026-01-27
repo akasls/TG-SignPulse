@@ -16,7 +16,7 @@ This project includes AI-assisted features and is developed with AI assistance.
 - Optional AI helpers: image option selection, calculation reply
 
 ## Deployment
-
+Default account: admin  Default password: admin123
 ### Docker Run
 
 ```bash
