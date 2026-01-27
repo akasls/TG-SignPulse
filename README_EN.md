@@ -59,6 +59,13 @@ docker compose up -d
 2. Add a persistent volume at `/data` (required).  
 3. Ensure port `8080` is exposed.
 
+## Optional Environment Variables
+
+- `APP_SECRET_KEY`: backend secret key (optional, for extra security)
+- `OPENAI_API_KEY`: required only if you enable AI features (optional)
+- `OPENAI_BASE_URL`: custom OpenAI API base URL (optional)
+- `OPENAI_MODEL`: custom model name (optional)
+
 ## Project Structure
 
 ```
