@@ -240,8 +240,21 @@ class Client(BaseClient):
 
 
 def get_api_config():
-    api_id = int(os.environ.get("TG_API_ID", 611335))
-    api_hash = os.environ.get("TG_API_HASH", "d524b414d21f4d37f08684c1df41ac9c")
+    api_id_env = os.environ.get("TG_API_ID")
+    api_hash_env = os.environ.get("TG_API_HASH")
+
+    api_id = 611335
+    if api_id_env:
+        try:
+            api_id = int(api_id_env)
+        except (TypeError, ValueError):
+            pass
+
+    if isinstance(api_hash_env, str) and api_hash_env.strip():
+        api_hash = api_hash_env.strip()
+    else:
+        api_hash = "d524b414d21f4d37f08684c1df41ac9c"
+
     return api_id, api_hash
 
 

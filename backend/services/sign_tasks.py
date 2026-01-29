@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from backend.core.config import get_settings
+from backend.utils.account_locks import get_account_lock
 from tg_signer.core import UserSigner, get_client
 
 settings = get_settings()
@@ -658,8 +659,16 @@ class SignTaskService:
             raise ValueError(f"账号 {account_name} 的 Session 文件不存在")
 
         tg_config = config_service.get_telegram_config()
-        api_id = os.getenv("TG_API_ID", tg_config.get("api_id"))
-        api_hash = os.getenv("TG_API_HASH", tg_config.get("api_hash"))
+        api_id = os.getenv("TG_API_ID") or tg_config.get("api_id")
+        api_hash = os.getenv("TG_API_HASH") or tg_config.get("api_hash")
+
+        try:
+            api_id = int(api_id) if api_id is not None else None
+        except (TypeError, ValueError):
+            api_id = None
+
+        if isinstance(api_hash, str):
+            api_hash = api_hash.strip()
 
         if not api_id or not api_hash:
             raise ValueError("未配置 Telegram API ID 或 API Hash")
@@ -668,17 +677,17 @@ class SignTaskService:
         client = get_client(
             name=account_name,
             workdir=session_dir,
-            api_id=int(api_id),
+            api_id=api_id,
             api_hash=api_hash,
             in_memory=False,
         )
 
         chats = []
         try:
-            # 初始化账号锁
+            # 初始化账号锁（跨服务共享）
             if account_name not in self._account_locks:
-                self._account_locks[account_name] = asyncio.Lock()
-            
+                self._account_locks[account_name] = get_account_lock(account_name)
+
             account_lock = self._account_locks[account_name]
             
             # 使用上下文管理器处理生命周期和锁
@@ -764,9 +773,9 @@ class SignTaskService:
         if self.is_task_running(task_name, account_name):
             return {"success": False, "error": "任务已经在运行中", "output": ""}
 
-        # 初始化账号锁
+        # 初始化账号锁（跨服务共享）
         if account_name not in self._account_locks:
-            self._account_locks[account_name] = asyncio.Lock()
+            self._account_locks[account_name] = get_account_lock(account_name)
 
         account_lock = self._account_locks[account_name]
 
@@ -811,8 +820,19 @@ class SignTaskService:
                 from backend.services.config import config_service
 
                 tg_config = config_service.get_telegram_config()
-                api_id = tg_config.get("api_id")
-                api_hash = tg_config.get("api_hash")
+                api_id = os.getenv("TG_API_ID") or tg_config.get("api_id")
+                api_hash = os.getenv("TG_API_HASH") or tg_config.get("api_hash")
+
+                try:
+                    api_id = int(api_id) if api_id is not None else None
+                except (TypeError, ValueError):
+                    api_id = None
+
+                if isinstance(api_hash, str):
+                    api_hash = api_hash.strip()
+
+                if not api_id or not api_hash:
+                    raise ValueError("未配置 Telegram API ID 或 API Hash")
 
                 session_dir = Path(settings.data_dir) / "sessions"
                 session_string_file = session_dir / f"{account_name}.session_string"
@@ -840,7 +860,7 @@ class SignTaskService:
                     workdir=self.workdir,
                     session_string=session_string,
                     in_memory=use_in_memory,
-                    api_id=int(api_id) if api_id else None,
+                    api_id=api_id,
                     api_hash=api_hash,
                 )
 

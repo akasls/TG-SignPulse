@@ -72,6 +72,7 @@ docker compose up -d
 
 ## Optional Environment Variables
 Note: These can also be set in the admin panel ?Settings?. Environment variables take precedence.
+Empty values are ignored; the app falls back to panel/default settings if a value is missing or invalid.
 
 - `TG_API_ID` / `TG_API_HASH`: Telegram API credentials (optional, recommended to use your own)
 

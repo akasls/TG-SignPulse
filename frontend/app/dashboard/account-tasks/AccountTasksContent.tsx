@@ -138,7 +138,6 @@ export default function AccountTasksContent() {
     const accountName = searchParams.get("name") || "";
     const { toasts, addToast, removeToast } = useToast();
     const fieldLabelClass = "text-xs font-bold uppercase tracking-wider text-main/40 mb-1 block";
-    const subLabelClass = "text-[10px] font-bold uppercase tracking-wider text-main/40 block";
 
     const [token, setLocalToken] = useState<string | null>(null);
     const [tasks, setTasks] = useState<SignTask[]>([]);
@@ -611,31 +610,29 @@ export default function AccountTasksContent() {
                                     ) : (
                                         <>
                                             <label className={fieldLabelClass}>{t("time_range")}</label>
-                                            <div className="grid grid-cols-2 gap-2 items-end">
-                                                <div className="space-y-2">
-                                                    <label className={subLabelClass}>{t("start_label")}</label>
-                                                    <input
-                                                        type="time"
-                                                        className="!mb-0"
-                                                        value={showCreateDialog ? newTask.range_start : editTask.range_start}
-                                                        onChange={(e) => showCreateDialog
-                                                            ? setNewTask({ ...newTask, range_start: e.target.value })
-                                                            : setEditTask({ ...editTask, range_start: e.target.value })
-                                                        }
-                                                    />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <label className={subLabelClass}>{t("end_label")}</label>
-                                                    <input
-                                                        type="time"
-                                                        className="!mb-0"
-                                                        value={showCreateDialog ? newTask.range_end : editTask.range_end}
-                                                        onChange={(e) => showCreateDialog
-                                                            ? setNewTask({ ...newTask, range_end: e.target.value })
-                                                            : setEditTask({ ...editTask, range_end: e.target.value })
-                                                        }
-                                                    />
-                                                </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <input
+                                                    type="time"
+                                                    className="!mb-0"
+                                                    aria-label={t("start_label")}
+                                                    title={t("start_label")}
+                                                    value={showCreateDialog ? newTask.range_start : editTask.range_start}
+                                                    onChange={(e) => showCreateDialog
+                                                        ? setNewTask({ ...newTask, range_start: e.target.value })
+                                                        : setEditTask({ ...editTask, range_start: e.target.value })
+                                                    }
+                                                />
+                                                <input
+                                                    type="time"
+                                                    className="!mb-0"
+                                                    aria-label={t("end_label")}
+                                                    title={t("end_label")}
+                                                    value={showCreateDialog ? newTask.range_end : editTask.range_end}
+                                                    onChange={(e) => showCreateDialog
+                                                        ? setNewTask({ ...newTask, range_end: e.target.value })
+                                                        : setEditTask({ ...editTask, range_end: e.target.value })
+                                                    }
+                                                />
                                             </div>
                                             <div className="text-[10px] text-main/30 mt-1 italic">
                                                 {t("random_time_hint")}
@@ -715,11 +712,13 @@ export default function AccountTasksContent() {
                                     <label>{t("delete_after")}</label>
                                     <input
                                         type="text"
+                                        inputMode="numeric"
                                         placeholder={t("delete_after_placeholder")}
                                         className="!mb-0"
-                                        value={(showCreateDialog ? newTask.delete_after : editTask.delete_after) || ""}
+                                        value={showCreateDialog ? (newTask.delete_after ?? "") : (editTask.delete_after ?? "")}
                                         onChange={(e) => {
-                                            const val = e.target.value ? parseInt(e.target.value) : undefined;
+                                            const cleaned = e.target.value.replace(/[^0-9]/g, "");
+                                            const val = cleaned === "" ? undefined : Number(cleaned);
                                             showCreateDialog
                                                 ? setNewTask({ ...newTask, delete_after: val })
                                                 : setEditTask({ ...editTask, delete_after: val });

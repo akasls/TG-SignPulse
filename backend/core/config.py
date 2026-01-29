@@ -15,8 +15,9 @@ except ImportError:
 def get_default_secret_key() -> str:
     """获取默认密钥，优先使用环境变量，否则使用固定默认值"""
     # 如果设置了环境变量，使用环境变量
-    if os.getenv("APP_SECRET_KEY"):
-        return os.getenv("APP_SECRET_KEY", "")
+    env_secret = os.getenv("APP_SECRET_KEY")
+    if env_secret and env_secret.strip():
+        return env_secret.strip()
 
     # 否则使用固定的默认值（生产环境应该设置环境变量）
     # 这个默认值确保应用能启动，但不够安全

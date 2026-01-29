@@ -59,6 +59,17 @@ export default function Dashboard() {
     phone_code_hash: "",
   });
 
+  const normalizeAccountName = (name: string) => name.trim();
+
+  const sanitizeAccountName = (name: string) =>
+    name.replace(/[^A-Za-z0-9\u4e00-\u9fff]/g, "");
+
+  const isDuplicateAccountName = (name: string) => {
+    const normalized = normalizeAccountName(name).toLowerCase();
+    if (!normalized) return false;
+    return accounts.some(acc => acc.name.toLowerCase() === normalized);
+  };
+
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
@@ -94,20 +105,25 @@ export default function Dashboard() {
 
   const handleStartLogin = async () => {
     if (!token) return;
-    if (!loginData.account_name || !loginData.phone_number) {
-      addToast(language === "zh" ? "请填写账号名称和手机号" : "Please fill in account name and phone number", "error");
+    const trimmedAccountName = normalizeAccountName(loginData.account_name);
+    if (!trimmedAccountName || !loginData.phone_number) {
+      addToast(language === "zh" ? "?????????????????" : "Please fill in account name and phone number", "error");
+      return;
+    }
+    if (isDuplicateAccountName(trimmedAccountName)) {
+      addToast(language === "zh" ? "???????????" : "Account name already exists. Please change it.", "error");
       return;
     }
     try {
       setLoading(true);
       const res = await startAccountLogin(token, {
         phone_number: loginData.phone_number,
-        account_name: loginData.account_name
+        account_name: trimmedAccountName
       });
-      setLoginData({ ...loginData, phone_code_hash: res.phone_code_hash });
+      setLoginData({ ...loginData, account_name: trimmedAccountName, phone_code_hash: res.phone_code_hash });
       addToast(t("code_sent"), "success");
     } catch (err: any) {
-      addToast(err.message || (language === "zh" ? "发送失败" : "Failed to send"), "error");
+      addToast(err.message || (language === "zh" ? "???????" : "Failed to send"), "error");
     } finally {
       setLoading(false);
     }
@@ -116,13 +132,22 @@ export default function Dashboard() {
   const handleVerifyLogin = async () => {
     if (!token) return;
     if (!loginData.phone_code) {
-      addToast(language === "zh" ? "请输入验证码" : "Please enter code", "error");
+      addToast(language === "zh" ? "?????????" : "Please enter code", "error");
+      return;
+    }
+    const trimmedAccountName = normalizeAccountName(loginData.account_name);
+    if (!trimmedAccountName) {
+      addToast(language === "zh" ? "???????" : "Please fill in account name", "error");
+      return;
+    }
+    if (isDuplicateAccountName(trimmedAccountName)) {
+      addToast(language === "zh" ? "???????????" : "Account name already exists. Please change it.", "error");
       return;
     }
     try {
       setLoading(true);
       await verifyAccountLogin(token, {
-        account_name: loginData.account_name,
+        account_name: trimmedAccountName,
         phone_number: loginData.phone_number,
         phone_code: loginData.phone_code,
         phone_code_hash: loginData.phone_code_hash,
@@ -133,7 +158,7 @@ export default function Dashboard() {
       setShowAddDialog(false);
       loadData(token);
     } catch (err: any) {
-      addToast(err.message || (language === "zh" ? "验证失败" : "Verification failed"), "error");
+      addToast(err.message || (language === "zh" ? "??????" : "Verification failed"), "error");
     } finally {
       setLoading(false);
     }
@@ -285,7 +310,10 @@ export default function Dashboard() {
                   className="!py-2.5 !px-4 !mb-4"
                   placeholder="e.g. Work_Account_01"
                   value={loginData.account_name}
-                  onChange={(e) => setLoginData({ ...loginData, account_name: e.target.value })}
+                  onChange={(e) => {
+                    const cleaned = sanitizeAccountName(e.target.value);
+                    setLoginData({ ...loginData, account_name: cleaned });
+                  }}
                 />
 
                 <label className="text-[11px] mb-1">{t("phone_number")}</label>

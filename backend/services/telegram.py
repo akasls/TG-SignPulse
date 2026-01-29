@@ -10,6 +10,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from backend.core.config import get_settings
+from backend.utils.account_locks import get_account_lock
 
 settings = get_settings()
 
@@ -155,12 +156,17 @@ class TelegramService:
 
         from tg_signer.core import close_client_by_name
 
+        account_lock = get_account_lock(account_name)
+
         # 1. 清理全局 _login_sessions 中可能存在的残留连接
         # _login_sessions key 格式: f"{account_name}_{phone_number}"
         keys_to_remove = []
         for key, value in _login_sessions.items():
             if key.startswith(f"{account_name}_"):
                 old_client = value.get("client")
+                old_lock = value.get("lock")
+                if old_lock and old_lock.locked():
+                    old_lock.release()
                 if old_client:
                     try:
                         await old_client.disconnect()
@@ -170,6 +176,13 @@ class TelegramService:
 
         for key in keys_to_remove:
             _login_sessions.pop(key, None)
+
+        # 获取账号锁，避免与任务并发写 session
+        await account_lock.acquire()
+
+        def _release_account_lock() -> None:
+            if account_lock.locked():
+                account_lock.release()
 
         # 2. 确保没有后台任务占用
         try:
@@ -187,10 +200,24 @@ class TelegramService:
         api_id = tg_config.get("api_id")
         api_hash = tg_config.get("api_hash")
 
-        if os.getenv("TG_API_ID"):
-            api_id = os.getenv("TG_API_ID")
-        if os.getenv("TG_API_HASH"):
-            api_hash = os.getenv("TG_API_HASH")
+        env_api_id = os.getenv("TG_API_ID") or None
+        env_api_hash = os.getenv("TG_API_HASH") or None
+        if env_api_id:
+            api_id = env_api_id
+        if env_api_hash:
+            api_hash = env_api_hash
+
+        try:
+            api_id = int(api_id) if api_id is not None else None
+        except (TypeError, ValueError):
+            api_id = None
+
+        if isinstance(api_hash, str):
+            api_hash = api_hash.strip()
+
+        if not api_id or not api_hash:
+            _release_account_lock()
+            raise ValueError("Telegram API ID / API Hash 未配置或无效")
 
         proxy_dict = None
         if proxy:
@@ -225,7 +252,7 @@ class TelegramService:
         session_path = str(self.session_dir / account_name)
         client = Client(
             name=session_path,
-            api_id=int(api_id),
+            api_id=api_id,
             api_hash=api_hash,
             proxy=proxy_dict,
             in_memory=False,
@@ -236,6 +263,13 @@ class TelegramService:
 
             self._accounts_cache = None
 
+            if hasattr(client, "storage") and getattr(client.storage, "conn", None):
+                try:
+                    client.storage.conn.execute("PRAGMA journal_mode=WAL")
+                    client.storage.conn.execute("PRAGMA busy_timeout=30000")
+                except Exception:
+                    pass
+
             sent_code = await client.send_code(phone_number)
 
             session_key = f"{account_name}_{phone_number}"
@@ -243,6 +277,7 @@ class TelegramService:
                 "client": client,
                 "phone_code_hash": sent_code.phone_code_hash,
                 "phone_number": phone_number,
+                "lock": account_lock,
             }
 
             # 保持连接，避免 session 变化导致验证码失效 (PhoneCodeExpired)
@@ -263,12 +298,14 @@ class TelegramService:
                 await client.disconnect()
             except Exception:
                 pass
+            _release_account_lock()
             raise ValueError("手机号格式无效，请使用国际格式（如 +8613800138000）")
         except FloodWait as e:
             try:
                 await client.disconnect()
             except Exception:
                 pass
+            _release_account_lock()
             raise ValueError(f"请求过于频繁，请等待 {e.value} 秒后重试")
         except Exception as e:
             import traceback
@@ -278,6 +315,7 @@ class TelegramService:
                 await client.disconnect()
             except Exception:
                 pass
+            _release_account_lock()
 
             error_details = str(e)
             if (
@@ -329,6 +367,15 @@ class TelegramService:
 
         client = session_data["client"]
 
+        account_lock = session_data.get("lock")
+
+        def _release_account_lock() -> None:
+            if account_lock and account_lock.locked():
+                account_lock.release()
+
+        if account_lock and not account_lock.locked():
+            await account_lock.acquire()
+
         try:
             # 重新连接 (因为 start_login 中断开了)
             if not client.is_connected:
@@ -347,6 +394,7 @@ class TelegramService:
                 # 断开连接并清理
                 await client.disconnect()
                 _login_sessions.pop(session_key, None)
+                _release_account_lock()
 
                 return {
                     "success": True,
@@ -369,6 +417,7 @@ class TelegramService:
                     # 断开连接并清理
                     await client.disconnect()
                     _login_sessions.pop(session_key, None)
+                    _release_account_lock()
 
                     return {
                         "success": True,
@@ -386,6 +435,7 @@ class TelegramService:
             except Exception:
                 pass
             _login_sessions.pop(session_key, None)
+            _release_account_lock()
             raise ValueError("验证码错误，请检查验证码是否正确")
         except PhoneCodeExpired:
             # 清理 session
@@ -394,6 +444,7 @@ class TelegramService:
             except Exception:
                 pass
             _login_sessions.pop(session_key, None)
+            _release_account_lock()
             raise ValueError("验证码已过期，请重新获取")
         except ValueError as e:
             # 如果是 2FA 错误，不清理 session
@@ -403,6 +454,7 @@ class TelegramService:
                 except Exception:
                     pass
                 _login_sessions.pop(session_key, None)
+                _release_account_lock()
             raise e
         except Exception as e:
             # 清理 session
@@ -411,6 +463,7 @@ class TelegramService:
             except Exception:
                 pass
             _login_sessions.pop(session_key, None)
+            _release_account_lock()
 
             # 更详细的错误信息
             error_msg = str(e)
