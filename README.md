@@ -88,7 +88,14 @@ backend/      # FastAPI 后端与调度器
 tg_signer/    # Telegram 自动化核心（Pyrogram）
 frontend/     # Next.js 管理面板
 ```
-
+## 更新
+20260129：
+- 新增账号级共享锁（修复database is locked问题）
+- 避免同一账号的登录/任务/聊天刷新并发写入
+- 登录流程强化
+- 完善TG/API/Secret/AI环境变量解析
+- 添加添加账号字符限制
+- 任务弹窗时间范围对齐
 ## 致谢
 
 本项目基于原项目改造与扩展，特别感谢：
