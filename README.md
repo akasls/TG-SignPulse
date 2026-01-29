@@ -1,6 +1,6 @@
 # TG-SignPulse
 
-[English README](https://www.google.com/search?q=README_EN.md)
+[English README](https://github.com/akasls/TG-SignPulse/blob/main/README_EN.md)
 
 **TG-SignPulse** 是一款专为 Telegram 设计的自动化管理面板。它集成了多账号管理、自动签到、定时任务及按钮交互等功能，旨在为用户提供高效、智能的 Telegram 自动化方案。
 
