@@ -1,24 +1,28 @@
 # TG-SignPulse
 
-[English README](README_EN.md)
+[English README](https://www.google.com/search?q=README_EN.md)
 
-TG-SignPulse 是一个 Telegram 自动化与管理面板，面向多账号签到、定时任务与按钮点击。
+**TG-SignPulse** 是一款专为 Telegram 设计的自动化管理面板。它集成了多账号管理、自动签到、定时任务及按钮交互等功能，旨在为用户提供高效、智能的 Telegram 自动化方案。
 
-本项目包含 AI 辅助能力，并由 AI 参与开发。
+> 💡 **AI 驱动**：本项目深度集成 AI 辅助能力，部分代码及逻辑由 AI 协作开发。
 
-## 功能特性
+## ✨ 功能特性
 
-- 多账号任务与定时调度
-- 签到自动化、消息发送、按钮点击流程
-- 时间段随机执行，降低风险
-- 现代化管理面板（Next.js）
-- 原生 Docker 部署
-- 可选 AI 辅助：图片选项识别、计算题回复
+* **多账号管理**：支持多账号同时在线，统一调度自动化任务。
+* **全自动工作流**：涵盖自动签到、定时消息发送、模拟点击按钮等核心流程。
+* **安全策略**：内置任务时间随机化机制，有效降低账号风控风险。
+* **现代化 UI**：基于 **Next.js** 构建的响应式管理后台，简洁易用。
+* **AI 辅助增强**：集成 AI 视觉与逻辑处理，支持图片选项识别及自动计算题解答。
+* **容器化部署**：支持原生 Docker 及 Docker Compose，实现一键部署与迁移。
 
-## 部署
-默认账号：admin
-默认密码：admin123
-### Docker Run
+## 🚀 快速开始
+
+**默认凭据**：
+
+* **账号**: `admin`
+* **密码**: `admin123`
+
+### 使用 Docker Run
 
 ```bash
 docker run -d \
@@ -27,25 +31,22 @@ docker run -d \
   -p 8080:8080 \
   -v $(pwd)/data:/data \
   -e TZ=Asia/Shanghai \
-  # 可选：Telegram API
+  # 可选：配置 Telegram API 以获得更佳稳定性
   # -e TG_API_ID=123456 \
-  # -e TG_API_HASH=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
-  # 可选：后端密钥
-  # -e APP_SECRET_KEY=your_secret \
-  # 可选：AI接入
-  # -e OPENAI_API_KEY=sk-xxxxxxxx \
+  # -e TG_API_HASH=xxxxxxxxxxxxxxxx \
+  # 可选：自定义后端密钥
+  # -e APP_SECRET_KEY=your_secret_key \
+  # 可选：AI 接入 (OpenAI 或兼容接口)
+  # -e OPENAI_API_KEY=sk-xxxx \
   # -e OPENAI_BASE_URL=https://api.openai.com/v1 \
-  # -e OPENAI_MODEL=gpt-4.1 \
+  # -e OPENAI_MODEL=gpt-4o \
   ghcr.io/akasls/tg-signpulse:latest
+
 ```
 
-- 数据持久化：`./data` -> `/data`
-- 访问地址：`http://localhost:8080`
-
-### Docker Compose
+### 使用 Docker Compose
 
 ```yaml
-version: "3.8"
 services:
   app:
     image: ghcr.io/akasls/tg-signpulse:latest
@@ -56,56 +57,41 @@ services:
       - ./data:/data
     environment:
       - TZ=Asia/Shanghai
-      # 可选：Telegram API
-      # - TG_API_ID=123456
-      # - TG_API_HASH=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-      # 可选：后端密钥
-      # - APP_SECRET_KEY=your_secret
-      # 可选：AI接入
-      # - OPENAI_API_KEY=sk-xxxxxxxx
-      # - OPENAI_BASE_URL=https://api.openai.com/v1
-      # - OPENAI_MODEL=gpt-4.1
+      - APP_SECRET_KEY=pTyOBjWYarWrwThf9uXX81GR64mAEEZH
     restart: unless-stopped
-```
-
-```bash
-docker compose up -d
-```
-
-### Zeabur
-
-<a href="https://zeabur.com/referral?referralCode=akasls&utm_source=7764877&utm_campaign=oss"><img src=https://zeabur.com/deployed-on-zeabur-dark.svg alt="Deployed on Zeabur"/></a>
-
-
-1. 在 Zeabur 控制台创建新项目并从 GitHub 部署。  
-2. 挂载持久化目录到 `/data`（必需）。  
-3. 确保端口为 `8080`。
-
-## 项目结构
 
 ```
-backend/      # FastAPI 后端与调度器
-tg_signer/    # Telegram 自动化核心（Pyrogram）
-frontend/     # Next.js 管理面板
+
+### Zeabur 部署
+
+1. 在 Zeabur 控制台创建项目并选择从 GitHub 部署。
+2. **务必**挂载持久化目录到 `/data`。
+3. 暴露端口 `8080`。
+
+## 📂 项目结构
+
+```text
+backend/      # 基于 FastAPI 的后端服务与任务调度器
+tg_signer/    # 基于 Pyrogram 的 Telegram 自动化核心引擎
+frontend/     # 基于 Next.js 的现代化管理面板
+
 ```
-## 更新
-20260129：
-- 新增账号级共享锁（修复database is locked问题）
-- 避免同一账号的登录/任务/聊天刷新并发写入
-- 登录流程强化
-- 完善TG/API/Secret/AI环境变量解析
-- 添加添加账号字符限制
-- 任务弹窗时间范围对齐
-## 致谢
 
-本项目基于原项目改造与扩展，特别感谢：
-- 原项目：`tg-signer` by amchii  
-  https://github.com/amchii/tg-signer
+## 🔄 最近更新
 
-并感谢以下依赖与社区：
-- FastAPI, Uvicorn
-- APScheduler
-- Pyrogram / Kurigram
-- Next.js, Tailwind CSS
-- OpenAI SDK and related AI tooling
+### 2026-01-29
 
+* **并发优化**：引入账号级共享锁，彻底解决 `database is locked` 报错。
+* **写入保护**：防止同一账号在登录、任务执行或聊天刷新时的并发冲突。
+* **流程强化**：增强了登录流程的鲁棒性。
+* **配置优化**：完善了 TG API、Secret 及 AI 相关环境变量的解析逻辑。
+* **UI 改进**：新增账号字符长度限制，并优化了任务弹窗的时间范围显示。
+
+## 🤝 致谢
+
+本项目在原项目基础上进行了大量的重构与功能扩展，感谢：
+
+* **tg-signer** by [amchii](https://github.com/amchii/tg-signer)
+
+**技术栈支持：**
+FastAPI, Uvicorn, APScheduler, Pyrogram/Kurigram, Next.js, Tailwind CSS, OpenAI SDK.
