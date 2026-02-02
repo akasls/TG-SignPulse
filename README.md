@@ -114,6 +114,8 @@ python -m tools.migrate_session
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/akasls/tg-signpulse:latest --push .
 ```
 
+GitHub Actions：推送到 `main` 或发布 `v*` 标签会自动构建并推送 GHCR 镜像（`latest` 与提交 SHA 标签）。
+
 ## 项目结构
 
 ```

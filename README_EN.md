@@ -114,6 +114,8 @@ python -m tools.migrate_session
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/akasls/tg-signpulse:latest --push .
 ```
 
+GitHub Actions: pushes to `main` or tags `v*` will auto-build and push GHCR images (`latest` and commit SHA tags).
+
 ## Project Structure
 
 ```
