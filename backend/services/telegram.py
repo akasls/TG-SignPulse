@@ -15,6 +15,7 @@ from backend.utils.tg_session import (
     delete_account_session_string,
     delete_session_string_file,
     get_account_session_string,
+    get_account_profile,
     get_global_semaphore,
     get_no_updates_flag,
     get_session_mode,
@@ -62,6 +63,7 @@ class TelegramService:
                 for session_file in self.session_dir.glob("*.session_string"):
                     account_name = session_file.stem
                     seen.add(account_name)
+                    profile = get_account_profile(account_name)
                     accounts.append(
                         {
                             "name": account_name,
@@ -70,6 +72,8 @@ class TelegramService:
                             "size": session_file.stat().st_size
                             if session_file.exists()
                             else 0,
+                            "remark": profile.get("remark"),
+                            "proxy": profile.get("proxy"),
                         }
                     )
 
@@ -77,6 +81,7 @@ class TelegramService:
                     if account_name in seen:
                         continue
                     session_file = self.session_dir / f"{account_name}.session_string"
+                    profile = get_account_profile(account_name)
                     accounts.append(
                         {
                             "name": account_name,
@@ -85,11 +90,14 @@ class TelegramService:
                             "size": session_file.stat().st_size
                             if session_file.exists()
                             else 0,
+                            "remark": profile.get("remark"),
+                            "proxy": profile.get("proxy"),
                         }
                     )
             else:
                 for session_file in self.session_dir.glob("*.session"):
                     account_name = session_file.stem  # 文件名（不含扩展名）
+                    profile = get_account_profile(account_name)
 
                     accounts.append(
                         {
@@ -99,6 +107,8 @@ class TelegramService:
                             "size": session_file.stat().st_size
                             if session_file.exists()
                             else 0,
+                            "remark": profile.get("remark"),
+                            "proxy": profile.get("proxy"),
                         }
                     )
 
@@ -458,6 +468,12 @@ class TelegramService:
             save_session_string_file(self.session_dir, account_name, session_string)
             self._accounts_cache = None
 
+        def _persist_proxy_setting() -> None:
+            if proxy:
+                from backend.utils.tg_session import set_account_profile
+
+                set_account_profile(account_name, proxy=proxy)
+
         if account_lock and not account_lock.locked():
             await account_lock.acquire()
 
@@ -477,6 +493,7 @@ class TelegramService:
                     # 登录成功，获取用户信息
                     me = await client.get_me()
                     await _persist_session_string()
+                    _persist_proxy_setting()
 
                     # 断开连接并清理
                     await client.disconnect()
@@ -501,6 +518,7 @@ class TelegramService:
                         await client.check_password(password)
                         me = await client.get_me()
                         await _persist_session_string()
+                        _persist_proxy_setting()
 
                         # 断开连接并清理
                         await client.disconnect()

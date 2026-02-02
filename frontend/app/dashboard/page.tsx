@@ -7,6 +7,7 @@ import { getToken } from "../../lib/auth";
 import {
   listAccounts,
   startAccountLogin,
+  updateAccount,
   verifyAccountLogin,
   deleteAccount,
   getAccountLogs,
@@ -24,6 +25,7 @@ import {
   Clock,
   Spinner,
   X,
+  PencilSimple,
   PaperPlaneRight,
   Trash,
   GithubLogo,
@@ -57,6 +59,14 @@ export default function Dashboard() {
     phone_code: "",
     password: "",
     phone_code_hash: "",
+  });
+
+  // 编辑账号对话框
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editData, setEditData] = useState({
+    account_name: "",
+    remark: "",
+    proxy: "",
   });
 
   const normalizeAccountName = (name: string) => name.trim();
@@ -180,6 +190,34 @@ export default function Dashboard() {
     }
   };
 
+  const handleEditAccount = (acc: AccountInfo) => {
+    setEditData({
+      account_name: acc.name,
+      remark: acc.remark || "",
+      proxy: acc.proxy || "",
+    });
+    setShowEditDialog(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!token) return;
+    if (!editData.account_name) return;
+    try {
+      setLoading(true);
+      await updateAccount(token, editData.account_name, {
+        remark: editData.remark || "",
+        proxy: editData.proxy || "",
+      });
+      addToast(t("save_changes"), "success");
+      setShowEditDialog(false);
+      loadData(token);
+    } catch (err: any) {
+      addToast(err.message || (language === "zh" ? "保存失败" : "Save failed"), "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleShowLogs = async (name: string) => {
     if (!token) return;
     setLogsAccountName(name);
@@ -267,6 +305,13 @@ export default function Dashboard() {
                         onClick={(e) => { e.stopPropagation(); handleShowLogs(acc.name); }}
                       >
                         <ListDashes weight="bold" size={16} />
+                      </div>
+                      <div
+                        className="action-icon !w-8 !h-8"
+                        title={t("edit_account")}
+                        onClick={(e) => { e.stopPropagation(); handleEditAccount(acc); }}
+                      >
+                        <PencilSimple weight="bold" size={16} />
                       </div>
                       <div
                         className="action-icon delete !w-8 !h-8"
@@ -364,6 +409,55 @@ export default function Dashboard() {
                 <button className="btn-secondary flex-1 h-10 !py-0 !text-xs" onClick={() => setShowAddDialog(false)}>{t("cancel")}</button>
                 <button className="btn-gradient flex-1 h-10 !py-0 !text-xs" onClick={handleVerifyLogin} disabled={loading}>
                   {loading ? <Spinner className="animate-spin" /> : t("confirm_connect")}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEditDialog && (
+        <div className="modal-overlay active">
+          <div className="glass-panel modal-content !max-w-[420px] !p-6" onClick={e => e.stopPropagation()}>
+            <div className="modal-header !mb-5">
+              <div className="modal-title !text-lg">{t("edit_account")}</div>
+              <div className="modal-close" onClick={() => setShowEditDialog(false)}><X weight="bold" /></div>
+            </div>
+
+            <div className="animate-float-up space-y-4">
+              <div>
+                <label className="text-[11px] mb-1">{t("session_name")}</label>
+                <input
+                  type="text"
+                  className="!py-2.5 !px-4 !mb-4"
+                  value={editData.account_name}
+                  disabled
+                />
+
+                <label className="text-[11px] mb-1">{t("remark")}</label>
+                <input
+                  type="text"
+                  className="!py-2.5 !px-4 !mb-4"
+                  placeholder={t("remark_placeholder")}
+                  value={editData.remark}
+                  onChange={(e) => setEditData({ ...editData, remark: e.target.value })}
+                />
+
+                <label className="text-[11px] mb-1">{t("proxy")}</label>
+                <input
+                  type="text"
+                  className="!py-2.5 !px-4"
+                  placeholder={t("proxy_placeholder")}
+                  style={{ marginBottom: 0 }}
+                  value={editData.proxy}
+                  onChange={(e) => setEditData({ ...editData, proxy: e.target.value })}
+                />
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button className="btn-secondary flex-1 h-10 !py-0 !text-xs" onClick={() => setShowEditDialog(false)}>{t("cancel")}</button>
+                <button className="btn-gradient flex-1 h-10 !py-0 !text-xs" onClick={handleSaveEdit} disabled={loading}>
+                  {loading ? <Spinner className="animate-spin" /> : t("save")}
                 </button>
               </div>
             </div>

@@ -5,7 +5,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from backend.core.config import get_settings
 
@@ -102,10 +102,12 @@ def set_account_session_string(account_name: str, session_string: str) -> None:
     if not isinstance(accounts, dict):
         accounts = {}
         data["accounts"] = accounts
-    accounts[account_name] = {
-        "session_string": session_string.strip(),
-        "updated_at": datetime.utcnow().isoformat(),
-    }
+    entry = accounts.get(account_name)
+    if not isinstance(entry, dict):
+        entry = {}
+    entry["session_string"] = session_string.strip()
+    entry["updated_at"] = datetime.utcnow().isoformat()
+    accounts[account_name] = entry
     _save_account_store(data)
 
 
@@ -115,6 +117,53 @@ def delete_account_session_string(account_name: str) -> None:
     if isinstance(accounts, dict) and account_name in accounts:
         accounts.pop(account_name, None)
         _save_account_store(data)
+
+
+def get_account_profile(account_name: str) -> dict[str, Any]:
+    data = _load_account_store()
+    entry = data.get("accounts", {}).get(account_name)
+    if not isinstance(entry, dict):
+        return {}
+    return {
+        "remark": entry.get("remark"),
+        "proxy": entry.get("proxy"),
+    }
+
+
+def get_account_proxy(account_name: str) -> Optional[str]:
+    profile = get_account_profile(account_name)
+    proxy = profile.get("proxy")
+    if isinstance(proxy, str) and proxy.strip():
+        return proxy.strip()
+    return None
+
+
+def get_account_remark(account_name: str) -> Optional[str]:
+    profile = get_account_profile(account_name)
+    remark = profile.get("remark")
+    if isinstance(remark, str) and remark.strip():
+        return remark.strip()
+    return None
+
+
+def set_account_profile(
+    account_name: str, *, remark: Optional[str] = None, proxy: Optional[str] = None
+) -> None:
+    data = _load_account_store()
+    accounts = data.get("accounts")
+    if not isinstance(accounts, dict):
+        accounts = {}
+        data["accounts"] = accounts
+    entry = accounts.get(account_name)
+    if not isinstance(entry, dict):
+        entry = {}
+    if remark is not None:
+        entry["remark"] = remark.strip() if isinstance(remark, str) else remark
+    if proxy is not None:
+        entry["proxy"] = proxy.strip() if isinstance(proxy, str) else proxy
+    entry["updated_at"] = datetime.utcnow().isoformat()
+    accounts[account_name] = entry
+    _save_account_store(data)
 
 
 def session_string_file_path(session_dir: Path, account_name: str) -> Path:

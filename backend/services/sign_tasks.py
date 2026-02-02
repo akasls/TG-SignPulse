@@ -19,6 +19,7 @@ from backend.core.config import get_settings
 from backend.utils.account_locks import get_account_lock
 from backend.utils.tg_session import (
     get_account_session_string,
+    get_account_proxy,
     get_global_semaphore,
     get_no_updates_flag,
     get_session_mode,
@@ -690,6 +691,20 @@ class SignTaskService:
             raise ValueError("未配置 Telegram API ID 或 API Hash")
 
         # 使用 get_client 获取（可能共享的）客户端实例
+        proxy_dict = None
+        proxy_value = get_account_proxy(account_name)
+        if proxy_value:
+            from urllib.parse import urlparse
+
+            parsed = urlparse(proxy_value)
+            if parsed.scheme and parsed.hostname and parsed.port:
+                proxy_dict = {
+                    "scheme": parsed.scheme,
+                    "hostname": parsed.hostname,
+                    "port": parsed.port,
+                    "username": parsed.username,
+                    "password": parsed.password,
+                }
         client_kwargs = {
             "name": account_name,
             "workdir": session_dir,
@@ -697,6 +712,7 @@ class SignTaskService:
             "api_hash": api_hash,
             "session_string": session_string,
             "in_memory": session_mode == "string",
+            "proxy": proxy_dict,
         }
         if session_mode == "string":
             client_kwargs["no_updates"] = get_no_updates_flag()
@@ -859,6 +875,20 @@ class SignTaskService:
                 session_mode = get_session_mode()
                 session_string = None
                 use_in_memory = False
+                proxy_dict = None
+                proxy_value = get_account_proxy(account_name)
+                if proxy_value:
+                    from urllib.parse import urlparse
+
+                    parsed = urlparse(proxy_value)
+                    if parsed.scheme and parsed.hostname and parsed.port:
+                        proxy_dict = {
+                            "scheme": parsed.scheme,
+                            "hostname": parsed.hostname,
+                            "port": parsed.port,
+                            "username": parsed.username,
+                            "password": parsed.password,
+                        }
 
                 if session_mode == "string":
                     session_string = (
@@ -884,6 +914,7 @@ class SignTaskService:
                     session_dir=str(session_dir),
                     account=account_name,
                     workdir=self.workdir,
+                    proxy=proxy_dict,
                     session_string=session_string,
                     in_memory=use_in_memory,
                     api_id=api_id,

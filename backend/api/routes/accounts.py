@@ -65,6 +65,8 @@ class AccountInfo(BaseModel):
     session_file: str
     exists: bool
     size: int
+    remark: Optional[str] = None
+    proxy: Optional[str] = None
 
 
 class AccountListResponse(BaseModel):
@@ -79,6 +81,13 @@ class DeleteAccountResponse(BaseModel):
 
     success: bool
     message: str
+
+
+class AccountUpdateRequest(BaseModel):
+    """更新账号备注/代理"""
+
+    remark: Optional[str] = None
+    proxy: Optional[str] = None
 
 
 # ============ API Routes ============
@@ -210,6 +219,36 @@ def check_account_exists(
     """检查账号是否存在"""
     exists = telegram_service.account_exists(account_name)
     return {"exists": exists, "account_name": account_name}
+
+
+@router.patch("/{account_name}")
+def update_account(
+    account_name: str,
+    request: AccountUpdateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    更新账号备注/代理（不影响登录状态）
+    """
+    if not telegram_service.account_exists(account_name):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"账号 {account_name} 不存在",
+        )
+    try:
+        from backend.utils.tg_session import set_account_profile
+
+        set_account_profile(
+            account_name,
+            remark=request.remark,
+            proxy=request.proxy,
+        )
+        return {"success": True, "message": "账号信息已更新"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"更新账号信息失败: {str(e)}",
+        )
 
 
 class AccountLogItem(BaseModel):

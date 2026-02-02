@@ -121,6 +121,8 @@ export interface AccountInfo {
   session_file: string;
   exists: boolean;
   size: number;
+  remark?: string | null;
+  proxy?: string | null;
 }
 
 export const startAccountLogin = (token: string, data: LoginStartRequest) =>
@@ -145,6 +147,16 @@ export const deleteAccount = (token: string, accountName: string) =>
 
 export const checkAccountExists = (token: string, accountName: string) =>
   request<{ exists: boolean; account_name: string }>(`/accounts/${accountName}/exists`, {}, token);
+
+export const updateAccount = (
+  token: string,
+  accountName: string,
+  data: { remark?: string | null; proxy?: string | null }
+) =>
+  request<{ success: boolean; message: string }>(`/accounts/${accountName}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  }, token);
 
 // ============ 任务管理 ============
 

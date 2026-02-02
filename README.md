@@ -1,24 +1,22 @@
-# TG-SignPulse
+﻿# TG-SignPulse
 
 [English README](README_EN.md)
 
 TG-SignPulse 是一款专为 Telegram 设计的自动化管理面板。它集成了多账号管理、自动签到、定时任务及按钮交互等功能，旨在为用户提供高效、智能的 Telegram 自动化方案。
-
 > AI 驱动：本项目深度集成 AI 辅助能力，部分代码及逻辑由 AI 协作开发。
 
-## ✨ 功能特性
+## ✨ 功能特色
 
 - 多账号管理：支持多账号同时在线，统一调度自动化任务。
 - 全自动工作流：涵盖自动签到、定时消息发送、模拟点击按钮等核心流程。
 - 安全策略：内置任务时间随机化机制，有效降低账号风控风险。
 - 现代化 UI：基于 Next.js 构建的响应式管理后台，简洁易用。
 - AI 辅助增强：集成 AI 视觉与逻辑处理，支持图片选项识别及自动计算题解答。
-- 容器化部署：支持原生 Docker 及 Docker Compose，实现一键部署与迁移。
+- 容器化部署：支持原生 Docker 和 Docker Compose，实现一键部署与迁移。
 
 ## 快速开始
 
 默认凭据：
-
 - 账号: `admin`
 - 密码: `admin123`
 
@@ -35,7 +33,7 @@ docker run -d \
   # 可选：配置 Telegram API 以获得更佳稳定性
   # -e TG_API_ID=123456 \
   # -e TG_API_HASH=xxxxxxxxxxxxxxxx \
-  # 可选：arm64 推荐无 SQLite session 模式（避免 database is locked）
+  # 可选：arm64 推荐启用 SQLite session 替代模式（避免 database is locked）
   # -e TG_SESSION_MODE=string \
   # -e TG_SESSION_NO_UPDATES=1 \
   # -e TG_GLOBAL_CONCURRENCY=1 \
@@ -64,7 +62,7 @@ services:
     environment:
       - PORT=8080
       - TZ=Asia/Shanghai
-      # 可选：arm64 推荐无 SQLite session 模式（避免 database is locked）
+      # 可选：arm64 推荐启用 SQLite session 替代模式（避免 database is locked）
       # - TG_SESSION_MODE=string
       # - TG_SESSION_NO_UPDATES=1
       # - TG_GLOBAL_CONCURRENCY=1
@@ -93,7 +91,7 @@ services:
 - `TG_SESSION_MODE`: `file`（默认）或 `string`。`string` 模式使用 session_string + in_memory，避免 `.session` SQLite 锁（arm64 推荐）。
 - `TG_SESSION_NO_UPDATES`: `1` 启用 `no_updates`（仅在 `string` 模式生效，默认 `0`）。
 - `TG_GLOBAL_CONCURRENCY`: 全局并发限制（默认 `1`，arm64 建议保持 `1`）。
-- `APP_TOTP_VALID_WINDOW`: 面板 2FA 容差窗口（默认 `0`，设为 `1` 允许前后各 1 个 30s 窗口）。
+- `APP_TOTP_VALID_WINDOW`: 面板 2FA 容错窗口（默认 `0`，设为 `1` 允许前后各 1 个 30s 窗口）。
 - `PORT`: 监听端口（默认 `8080`，由容器启动命令读取）。
 
 ## Session 迁移（可选）
@@ -102,8 +100,7 @@ services:
 
 ```bash
 python -m tools.migrate_session
-# 或
-python tools/migrate_session.py --account your_account
+# 或 python tools/migrate_session.py --account your_account
 ```
 
 ## 健康检查
@@ -132,7 +129,7 @@ frontend/     # 基于 Next.js 的现代化管理面板
 - 并发优化：引入账号级共享锁，彻底解决 `database is locked` 报错。
 - 写入保护：防止同一账号在登录、任务执行或聊天刷新时的并发冲突。
 - 流程强化：增强了登录流程的鲁棒性。
-- 配置优化：完善了 TG API、Secret 及 AI 相关环境变量的解析逻辑。
+- 配置优化：完善了 TG API、Secret 与 AI 相关环境变量的解析逻辑。
 - UI 改进：新增账号字符长度限制，并优化了任务弹窗的时间范围显示。
 
 ### 2026-02-02
@@ -142,10 +139,13 @@ frontend/     # 基于 Next.js 的现代化管理面板
 - 新增全局并发限制 `TG_GLOBAL_CONCURRENCY`（默认 1），并确保同账号串行。
 - 启动阶段移除重活，`/healthz` 可在 1~2 秒内响应；新增 `/readyz`。
 - 新增面板 2FA 容错窗口 `APP_TOTP_VALID_WINDOW`（默认 0，不影响旧行为）。
+- 新增账号备注与代理编辑入口，账号卡片支持编辑。
+- 任务执行/刷新聊天时自动使用账号代理（若配置）。
+- Docker 构建：arm64 跳过 tgcrypto 编译，避免 NAS 本地构建报错。
 
 ## 致谢
 
-本项目在原项目基础上进行了大量的重构与功能扩展，感谢：
+本项目在原项目基础上进行了大量重构与功能扩展，感谢：
 
 - tg-signer by amchii
 
