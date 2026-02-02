@@ -118,7 +118,8 @@ export default function Dashboard() {
       setLoading(true);
       const res = await startAccountLogin(token, {
         phone_number: loginData.phone_number,
-        account_name: trimmedAccountName
+        account_name: trimmedAccountName,
+        proxy: loginData.proxy || undefined,
       });
       setLoginData({ ...loginData, account_name: trimmedAccountName, phone_code_hash: res.phone_code_hash });
       addToast(t("code_sent"), "success");
