@@ -17,6 +17,13 @@ from typing import Any, Dict, List, Optional
 
 from backend.core.config import get_settings
 from backend.utils.account_locks import get_account_lock
+from backend.utils.tg_session import (
+    get_account_session_string,
+    get_global_semaphore,
+    get_no_updates_flag,
+    get_session_mode,
+    load_session_string_file,
+)
 from tg_signer.core import UserSigner, get_client
 
 settings = get_settings()
@@ -653,10 +660,19 @@ class SignTaskService:
 
         settings = get_settings()
         session_dir = Path(settings.data_dir) / "sessions"
+        session_mode = get_session_mode()
+        session_string = None
 
-        # 兼容: 如果 session 文件不存在但有 session 字符串的情况? 暂不考虑，只考 session 文件
-        if not (session_dir / f"{account_name}.session").exists():
-            raise ValueError(f"账号 {account_name} 的 Session 文件不存在")
+        if session_mode == "string":
+            session_string = (
+                get_account_session_string(account_name)
+                or load_session_string_file(session_dir, account_name)
+            )
+            if not session_string:
+                raise ValueError(f"账号 {account_name} 的 session_string 不存在")
+        else:
+            if not (session_dir / f"{account_name}.session").exists():
+                raise ValueError(f"账号 {account_name} 的 Session 文件不存在")
 
         tg_config = config_service.get_telegram_config()
         api_id = os.getenv("TG_API_ID") or tg_config.get("api_id")
@@ -674,13 +690,17 @@ class SignTaskService:
             raise ValueError("未配置 Telegram API ID 或 API Hash")
 
         # 使用 get_client 获取（可能共享的）客户端实例
-        client = get_client(
-            name=account_name,
-            workdir=session_dir,
-            api_id=api_id,
-            api_hash=api_hash,
-            in_memory=False,
-        )
+        client_kwargs = {
+            "name": account_name,
+            "workdir": session_dir,
+            "api_id": api_id,
+            "api_hash": api_hash,
+            "session_string": session_string,
+            "in_memory": session_mode == "string",
+        }
+        if session_mode == "string":
+            client_kwargs["no_updates"] = get_no_updates_flag()
+        client = get_client(**client_kwargs)
 
         chats = []
         try:
@@ -692,32 +712,33 @@ class SignTaskService:
             
             # 使用上下文管理器处理生命周期和锁
             async with account_lock:
-                async with client:
-                    try:
-                        # 尝试获取用户信息，如果失败说明 session 无效
-                        await client.get_me()
-                    except Exception as e:
-                        # 捕获所有异常，如果是 401 等错误则说明 session 失效
-                        raise ValueError(f"Session 无效或已过期: {e}")
+                async with get_global_semaphore():
+                    async with client:
+                        try:
+                            # 尝试获取用户信息，如果失败说明 session 无效
+                            await client.get_me()
+                        except Exception as e:
+                            # 捕获所有异常，如果是 401 等错误则说明 session 失效
+                            raise ValueError(f"Session 无效或已过期: {e}")
 
-                    async for dialog in client.get_dialogs():
-                        chat = dialog.chat
+                        async for dialog in client.get_dialogs():
+                            chat = dialog.chat
 
-                        chat_info = {
-                            "id": chat.id,
-                            "title": chat.title
-                            or chat.first_name
-                            or chat.username
-                            or str(chat.id),
-                            "username": chat.username,
-                            "type": chat.type.name.lower(),
-                        }
+                            chat_info = {
+                                "id": chat.id,
+                                "title": chat.title
+                                or chat.first_name
+                                or chat.username
+                                or str(chat.id),
+                                "username": chat.username,
+                                "type": chat.type.name.lower(),
+                            }
 
-                        # 特殊处理机器人和私聊
-                        if chat.type == ChatType.BOT:
-                            chat_info["title"] = f"🤖 {chat_info['title']}"
+                            # 特殊处理机器人和私聊
+                            if chat.type == ChatType.BOT:
+                                chat_info["title"] = f"🤖 {chat_info['title']}"
 
-                        chats.append(chat_info)
+                            chats.append(chat_info)
 
             # 保存到缓存
             account_dir = self.signs_dir / account_name
@@ -835,21 +856,26 @@ class SignTaskService:
                     raise ValueError("未配置 Telegram API ID 或 API Hash")
 
                 session_dir = Path(settings.data_dir) / "sessions"
-                session_string_file = session_dir / f"{account_name}.session_string"
+                session_mode = get_session_mode()
                 session_string = None
                 use_in_memory = False
-                if session_string_file.exists():
-                    try:
-                        session_string = session_string_file.read_text(
-                            encoding="utf-8"
-                        ).strip()
-                        use_in_memory = bool(session_string)
-                    except Exception:
-                        session_string = None
-                        use_in_memory = False
 
-                if os.getenv("SIGN_TASK_FORCE_IN_MEMORY") == "1":
+                if session_mode == "string":
+                    session_string = (
+                        get_account_session_string(account_name)
+                        or load_session_string_file(session_dir, account_name)
+                    )
+                    if not session_string:
+                        raise ValueError(f"账号 {account_name} 的 session_string 不存在")
                     use_in_memory = True
+                else:
+                    session_string = load_session_string_file(
+                        session_dir, account_name
+                    )
+                    use_in_memory = bool(session_string)
+
+                    if os.getenv("SIGN_TASK_FORCE_IN_MEMORY") == "1":
+                        use_in_memory = True
 
                 # 实例化 UserSigner (使用 BackendUserSigner)
                 # 注意: UserSigner 内部会使用 get_client 复用 client
@@ -862,24 +888,26 @@ class SignTaskService:
                     in_memory=use_in_memory,
                     api_id=api_id,
                     api_hash=api_hash,
+                    no_updates=get_no_updates_flag() if session_mode == "string" else None,
                 )
 
                 # 执行任务（数据库锁冲突时重试）
-                max_retries = 3
-                for attempt in range(max_retries):
-                    try:
-                        await signer.run_once(num_of_dialogs=20)
-                        break
-                    except Exception as e:
-                        if "database is locked" in str(e).lower():
-                            if attempt < max_retries - 1:
-                                delay = (attempt + 1) * 3
-                                self._active_logs[task_key].append(
-                                    f"Session 被锁定，{delay} 秒后重试..."
-                                )
-                                await asyncio.sleep(delay)
-                                continue
-                        raise
+                async with get_global_semaphore():
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            await signer.run_once(num_of_dialogs=20)
+                            break
+                        except Exception as e:
+                            if "database is locked" in str(e).lower():
+                                if attempt < max_retries - 1:
+                                    delay = (attempt + 1) * 3
+                                    self._active_logs[task_key].append(
+                                        f"Session 被锁定，{delay} 秒后重试..."
+                                    )
+                                    await asyncio.sleep(delay)
+                                    continue
+                            raise
 
                 success = True
                 output_str = "\n".join(self._active_logs[task_key])

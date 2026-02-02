@@ -66,7 +66,7 @@ EXPOSE 8080
 
 # 健康检查 - 使用环境变量 PORT
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.getenv(\"PORT\", \"8080\")}/health').read()"
+  CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.getenv(\"PORT\", \"8080\")}/healthz').read()"
 
 # 使用环境变量 PORT 启动，Zeabur 会自动设置此变量
 USER app

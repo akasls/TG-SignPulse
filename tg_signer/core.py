@@ -381,6 +381,7 @@ class BaseUserWorker(Generic[ConfigT]):
         in_memory: bool = False,
         api_id: int = None,
         api_hash: str = None,
+        no_updates: Optional[bool] = None,
         *,
         loop: Optional[asyncio.AbstractEventLoop] = None,
     ):
@@ -390,15 +391,21 @@ class BaseUserWorker(Generic[ConfigT]):
         self._proxy = proxy
         if workdir:
             self._workdir = pathlib.Path(workdir)
+        client_kwargs = {
+            "workdir": self._session_dir,
+            "session_string": session_string,
+            "in_memory": in_memory,
+            "api_id": api_id,
+            "api_hash": api_hash,
+            "loop": loop,
+        }
+        if no_updates is not None:
+            client_kwargs["no_updates"] = no_updates
+
         self.app = get_client(
             account,
             proxy,
-            workdir=self._session_dir,
-            session_string=session_string,
-            in_memory=in_memory,
-            api_id=api_id,
-            api_hash=api_hash,
-            loop=loop,
+            **client_kwargs,
         )
         self.loop = self.app.loop
         self.user: Optional[User] = None

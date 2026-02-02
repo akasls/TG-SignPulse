@@ -204,7 +204,7 @@ async def sync_jobs() -> None:
         db.close()
 
 
-async def init_scheduler() -> AsyncIOScheduler:
+async def init_scheduler(sync_on_startup: bool = True) -> AsyncIOScheduler:
     global scheduler
     if scheduler is None:
         from backend.core.config import get_settings
@@ -228,7 +228,8 @@ async def init_scheduler() -> AsyncIOScheduler:
             replace_existing=True,
         )
 
-        await sync_jobs()
+        if sync_on_startup:
+            await sync_jobs()
     return scheduler
 
 

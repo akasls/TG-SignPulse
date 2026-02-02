@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import sqlite3
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
@@ -29,7 +30,7 @@ sqlite3.connect = _patched_sqlite3_connect
 from backend.api import router as api_router  # noqa: E402
 from backend.core.config import get_settings  # noqa: E402
 from backend.core.database import Base, SessionLocal, engine  # noqa: E402
-from backend.scheduler import init_scheduler, shutdown_scheduler  # noqa: E402
+from backend.scheduler import init_scheduler, shutdown_scheduler, sync_jobs  # noqa: E402
 from backend.services.users import ensure_admin  # noqa: E402
 from backend.utils.paths import ensure_data_dirs  # noqa: E402
 
@@ -37,7 +38,12 @@ from backend.utils.paths import ensure_data_dirs  # noqa: E402
 # Silence /health check logs
 class HealthCheckFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        return record.getMessage().find("/health") == -1
+        msg = record.getMessage()
+        return (
+            "/health" not in msg
+            and "/healthz" not in msg
+            and "/readyz" not in msg
+        )
 
 
 logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
@@ -45,6 +51,7 @@ logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
 settings = get_settings()
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
+app.state.ready = False
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
@@ -65,6 +72,19 @@ app.include_router(api_router, prefix="/api")
 @app.get("/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/healthz")
+def health_checkz() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+def ready_check(response: Response) -> dict[str, str]:
+    if app.state.ready:
+        return {"status": "ready"}
+    response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return {"status": "starting"}
 
 
 # 静态前端托管（Mode A: 单容器，FastAPI 提供静态文件）
@@ -111,7 +131,19 @@ async def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         ensure_admin(db)
-    await init_scheduler()
+    await init_scheduler(sync_on_startup=False)
+
+    async def _post_startup() -> None:
+        try:
+            await sync_jobs()
+        except Exception as exc:
+            logging.getLogger("backend.startup").error(
+                f"Delayed scheduler sync failed: {exc}"
+            )
+        finally:
+            app.state.ready = True
+
+    asyncio.create_task(_post_startup())
 
 
 @app.on_event("shutdown")

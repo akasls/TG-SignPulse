@@ -11,6 +11,19 @@ from typing import Any, Dict, List, Optional
 
 from backend.core.config import get_settings
 from backend.utils.account_locks import get_account_lock
+from backend.utils.tg_session import (
+    delete_account_session_string,
+    delete_session_string_file,
+    get_account_session_string,
+    get_global_semaphore,
+    get_no_updates_flag,
+    get_session_mode,
+    is_string_session_mode,
+    list_account_names,
+    load_session_string_file,
+    save_session_string_file,
+    set_account_session_string,
+)
 
 settings = get_settings()
 
@@ -44,19 +57,50 @@ class TelegramService:
 
         # 扫描 session 目录
         try:
-            for session_file in self.session_dir.glob("*.session"):
-                account_name = session_file.stem  # 文件名（不含扩展名）
+            if is_string_session_mode():
+                seen = set()
+                for session_file in self.session_dir.glob("*.session_string"):
+                    account_name = session_file.stem
+                    seen.add(account_name)
+                    accounts.append(
+                        {
+                            "name": account_name,
+                            "session_file": str(session_file),
+                            "exists": session_file.exists(),
+                            "size": session_file.stat().st_size
+                            if session_file.exists()
+                            else 0,
+                        }
+                    )
 
-                accounts.append(
-                    {
-                        "name": account_name,
-                        "session_file": str(session_file),
-                        "exists": session_file.exists(),
-                        "size": session_file.stat().st_size
-                        if session_file.exists()
-                        else 0,
-                    }
-                )
+                for account_name in list_account_names():
+                    if account_name in seen:
+                        continue
+                    session_file = self.session_dir / f"{account_name}.session_string"
+                    accounts.append(
+                        {
+                            "name": account_name,
+                            "session_file": str(session_file),
+                            "exists": session_file.exists(),
+                            "size": session_file.stat().st_size
+                            if session_file.exists()
+                            else 0,
+                        }
+                    )
+            else:
+                for session_file in self.session_dir.glob("*.session"):
+                    account_name = session_file.stem  # 文件名（不含扩展名）
+
+                    accounts.append(
+                        {
+                            "name": account_name,
+                            "session_file": str(session_file),
+                            "exists": session_file.exists(),
+                            "size": session_file.stat().st_size
+                            if session_file.exists()
+                            else 0,
+                        }
+                    )
 
             self._accounts_cache = sorted(accounts, key=lambda x: x["name"])
             return self._accounts_cache
@@ -75,6 +119,13 @@ class TelegramService:
             # 考虑到 start_login 会更新缓存，应该可以信任。
             # 但为了稳妥，如果缓存没命中，再查文件
             pass
+
+        if is_string_session_mode():
+            if get_account_session_string(account_name):
+                return True
+            if load_session_string_file(self.session_dir, account_name):
+                return True
+            return False
 
         session_file = self.session_dir / f"{account_name}.session"
         return session_file.exists()
@@ -99,26 +150,40 @@ class TelegramService:
             print(f"DEBUG: 关闭 Account Client 失败: {e}")
 
         session_file = self.session_dir / f"{account_name}.session"
-
-        if not session_file.exists():
-            return False
+        session_mode = get_session_mode()
+        has_session_string = False
+        if session_mode == "string":
+            has_session_string = bool(
+                get_account_session_string(account_name)
+                or load_session_string_file(self.session_dir, account_name)
+            )
+            if not session_file.exists() and not has_session_string:
+                return False
+        else:
+            if not session_file.exists():
+                return False
 
         try:
-            session_file.unlink()
+            if session_file.exists():
+                session_file.unlink()
 
-            # 同时删除可能存在的 .session-journal 文件
-            journal_file = self.session_dir / f"{account_name}.session-journal"
-            if journal_file.exists():
-                journal_file.unlink()
+                # 同时删除可能存在的 .session-journal 文件
+                journal_file = self.session_dir / f"{account_name}.session-journal"
+                if journal_file.exists():
+                    journal_file.unlink()
 
-            # 删除 shm 和 wal 文件 (sqlite3)
-            shm_file = self.session_dir / f"{account_name}.session-shm"
-            if shm_file.exists():
-                shm_file.unlink()
+                # 删除 shm 和 wal 文件 (sqlite3)
+                shm_file = self.session_dir / f"{account_name}.session-shm"
+                if shm_file.exists():
+                    shm_file.unlink()
 
-            wal_file = self.session_dir / f"{account_name}.session-wal"
-            if wal_file.exists():
-                wal_file.unlink()
+                wal_file = self.session_dir / f"{account_name}.session-wal"
+                if wal_file.exists():
+                    wal_file.unlink()
+
+            if session_mode == "string" and has_session_string:
+                delete_account_session_string(account_name)
+                delete_session_string_file(self.session_dir, account_name)
 
             # 更新缓存
             if self._accounts_cache is not None:
@@ -157,6 +222,9 @@ class TelegramService:
         from tg_signer.core import close_client_by_name
 
         account_lock = get_account_lock(account_name)
+        session_mode = get_session_mode()
+        no_updates = get_no_updates_flag()
+        global_semaphore = get_global_semaphore()
 
         # 1. 清理全局 _login_sessions 中可能存在的残留连接
         # _login_sessions key 格式: f"{account_name}_{phone_number}"
@@ -232,45 +300,50 @@ class TelegramService:
 
         # 4. 如果是重新登录，尝试先清理旧的 session 文件 (避免 SQLite 锁或损坏)
         # 注意: 如果 session 有效但用户只是想重登，删除也没问题，因为反正要重新验证
-        session_file = self.session_dir / f"{account_name}.session"
-        if session_file.exists():
-            try:
-                # 尝试删除主文件
-                session_file.unlink()
-                # 顺便删掉 journal/wal/shm
-                for ext in [".session-journal", ".session-wal", ".session-shm"]:
-                    aux_file = self.session_dir / f"{account_name}{ext}"
-                    if aux_file.exists():
-                        aux_file.unlink()
-            except OSError as e:
-                # 如果删除失败，说明真的被锁得很死，或者权限问题
-                print(f"DEBUG: 删除旧 Session 文件失败: {e} - 可能文件仍被占用")
-                # 这里不抛出异常，尝试继续，也许 Pyrogram 能处理?
-                # 但通常 "unable to open database file" 就是因为这个。
-                pass
-
-        session_path = str(self.session_dir / account_name)
-        client = Client(
-            name=session_path,
-            api_id=api_id,
-            api_hash=api_hash,
-            proxy=proxy_dict,
-            in_memory=False,
-        )
-
-        try:
-            await client.connect()
-
-            self._accounts_cache = None
-
-            if hasattr(client, "storage") and getattr(client.storage, "conn", None):
+        if session_mode == "file":
+            session_file = self.session_dir / f"{account_name}.session"
+            if session_file.exists():
                 try:
-                    client.storage.conn.execute("PRAGMA journal_mode=WAL")
-                    client.storage.conn.execute("PRAGMA busy_timeout=30000")
-                except Exception:
+                    # 尝试删除主文件
+                    session_file.unlink()
+                    # 顺便删掉 journal/wal/shm
+                    for ext in [".session-journal", ".session-wal", ".session-shm"]:
+                        aux_file = self.session_dir / f"{account_name}{ext}"
+                        if aux_file.exists():
+                            aux_file.unlink()
+                except OSError as e:
+                    # 如果删除失败，说明真的被锁得很死，或者权限问题
+                    print(f"DEBUG: 删除旧 Session 文件失败: {e} - 可能文件仍被占用")
+                    # 这里不抛出异常，尝试继续，也许 Pyrogram 能处理?
+                    # 但通常 "unable to open database file" 就是因为这个。
                     pass
 
-            sent_code = await client.send_code(phone_number)
+        session_path = str(self.session_dir / account_name)
+        client_kwargs = {
+            "name": session_path,
+            "api_id": api_id,
+            "api_hash": api_hash,
+            "proxy": proxy_dict,
+            "in_memory": session_mode == "string",
+        }
+        if session_mode == "string":
+            client_kwargs["no_updates"] = no_updates
+        client = Client(**client_kwargs)
+
+        try:
+            async with global_semaphore:
+                await client.connect()
+
+                self._accounts_cache = None
+
+                if hasattr(client, "storage") and getattr(client.storage, "conn", None):
+                    try:
+                        client.storage.conn.execute("PRAGMA journal_mode=WAL")
+                        client.storage.conn.execute("PRAGMA busy_timeout=30000")
+                    except Exception:
+                        pass
+
+                sent_code = await client.send_code(phone_number)
 
             session_key = f"{account_name}_{phone_number}"
             _login_sessions[session_key] = {
@@ -366,6 +439,8 @@ class TelegramService:
             raise ValueError("登录会话已过期，请重新发送验证码")
 
         client = session_data["client"]
+        session_mode = get_session_mode()
+        global_semaphore = get_global_semaphore()
 
         account_lock = session_data.get("lock")
 
@@ -373,46 +448,35 @@ class TelegramService:
             if account_lock and account_lock.locked():
                 account_lock.release()
 
+        async def _persist_session_string() -> None:
+            if session_mode != "string":
+                return
+            session_string = await client.export_session_string()
+            if not session_string:
+                raise ValueError("导出 session_string 失败")
+            set_account_session_string(account_name, session_string)
+            save_session_string_file(self.session_dir, account_name, session_string)
+            self._accounts_cache = None
+
         if account_lock and not account_lock.locked():
             await account_lock.acquire()
 
         try:
-            # 重新连接 (因为 start_login 中断开了)
-            if not client.is_connected:
-                await client.connect()
+            async with global_semaphore:
+                # 重新连接 (因为 start_login 中断开了)
+                if not client.is_connected:
+                    await client.connect()
 
-            # 移除验证码中的空格和横线
-            phone_code = phone_code.strip().replace(" ", "").replace("-", "")
+                # 移除验证码中的空格和横线
+                phone_code = phone_code.strip().replace(" ", "").replace("-", "")
 
-            # 尝试使用验证码登录
-            try:
-                await client.sign_in(phone_number, phone_code_hash, phone_code)
-
-                # 登录成功，获取用户信息
-                me = await client.get_me()
-
-                # 断开连接并清理
-                await client.disconnect()
-                _login_sessions.pop(session_key, None)
-                _release_account_lock()
-
-                return {
-                    "success": True,
-                    "user_id": me.id,
-                    "first_name": me.first_name,
-                    "username": me.username,
-                }
-
-            except SessionPasswordNeeded:
-                # 需要 2FA 密码
-                if not password:
-                    # 不断开连接，等待用户输入 2FA 密码
-                    raise ValueError("此账号启用了两步验证，请输入 2FA 密码")
-
-                # 使用 2FA 密码登录
+                # 尝试使用验证码登录
                 try:
-                    await client.check_password(password)
+                    await client.sign_in(phone_number, phone_code_hash, phone_code)
+
+                    # 登录成功，获取用户信息
                     me = await client.get_me()
+                    await _persist_session_string()
 
                     # 断开连接并清理
                     await client.disconnect()
@@ -425,8 +489,32 @@ class TelegramService:
                         "first_name": me.first_name,
                         "username": me.username,
                     }
-                except PasswordHashInvalid:
-                    raise ValueError("2FA 密码错误")
+
+                except SessionPasswordNeeded:
+                    # 需要 2FA 密码
+                    if not password:
+                        # 不断开连接，等待用户输入 2FA 密码
+                        raise ValueError("此账号启用了两步验证，请输入 2FA 密码")
+
+                    # 使用 2FA 密码登录
+                    try:
+                        await client.check_password(password)
+                        me = await client.get_me()
+                        await _persist_session_string()
+
+                        # 断开连接并清理
+                        await client.disconnect()
+                        _login_sessions.pop(session_key, None)
+                        _release_account_lock()
+
+                        return {
+                            "success": True,
+                            "user_id": me.id,
+                            "first_name": me.first_name,
+                            "username": me.username,
+                        }
+                    except PasswordHashInvalid:
+                        raise ValueError("2FA 密码错误")
 
         except PhoneCodeInvalid:
             # 清理 session

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Optional
 
+import os
 import pyotp
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -31,7 +32,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def verify_totp(secret: str, code: str) -> bool:
     try:
         totp = pyotp.TOTP(secret)
-        return totp.verify(code)
+        raw_window = os.getenv("APP_TOTP_VALID_WINDOW", "0").strip()
+        try:
+            valid_window = int(raw_window)
+        except ValueError:
+            valid_window = 0
+        if valid_window < 0:
+            valid_window = 0
+        return totp.verify(code, valid_window=valid_window)
     except Exception:
         return False
 
