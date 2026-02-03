@@ -29,7 +29,7 @@ sqlite3.connect = _patched_sqlite3_connect
 
 from backend.api import router as api_router  # noqa: E402
 from backend.core.config import get_settings  # noqa: E402
-from backend.core.database import Base, SessionLocal, engine  # noqa: E402
+from backend.core.database import Base, get_engine, get_session_local, init_engine  # noqa: E402
 from backend.scheduler import init_scheduler, shutdown_scheduler, sync_jobs  # noqa: E402
 from backend.services.users import ensure_admin  # noqa: E402
 from backend.utils.paths import ensure_data_dirs  # noqa: E402
@@ -128,8 +128,9 @@ async def serve_spa(full_path: str):
 @app.on_event("startup")
 async def on_startup() -> None:
     ensure_data_dirs(settings)
-    Base.metadata.create_all(bind=engine)
-    with SessionLocal() as db:
+    init_engine()
+    Base.metadata.create_all(bind=get_engine())
+    with get_session_local()() as db:
         ensure_admin(db)
     await init_scheduler(sync_on_startup=False)
 

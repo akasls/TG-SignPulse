@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from backend.core.config import get_settings
 from backend.utils.account_locks import get_account_lock
+from backend.utils.proxy import build_proxy_dict
 from backend.utils.tg_session import (
     get_account_session_string,
     get_account_proxy,
@@ -82,7 +83,7 @@ class SignTaskService:
         from backend.core.config import get_settings
 
         settings = get_settings()
-        self.workdir = Path(settings.data_dir) / ".signer"
+        self.workdir = settings.resolve_workdir()
         self.signs_dir = self.workdir / "signs"
         self.run_history_dir = self.workdir / "history"
         self.signs_dir.mkdir(parents=True, exist_ok=True)
@@ -259,6 +260,18 @@ class SignTaskService:
         except Exception as e:
             print(f"DEBUG: 保存运行信息失败: {str(e)}")
 
+    def _append_scheduler_log(self, filename: str, message: str) -> None:
+        try:
+            logs_dir = settings.resolve_logs_dir()
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            log_path = logs_dir / filename
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(f'{message}\n')
+        except Exception as e:
+            logging.getLogger('backend.sign_tasks').warning(
+                'Failed to write scheduler log %s: %s', filename, e
+            )
+
     def list_tasks(
         self, account_name: Optional[str] = None, force_refresh: bool = False
     ) -> List[Dict[str, Any]]:
@@ -409,7 +422,7 @@ class SignTaskService:
         """
         import random
 
-        from backend.services.config import config_service
+        from backend.services.config import get_config_service
 
         if not account_name:
             raise ValueError("必须指定账号名称")
@@ -422,6 +435,7 @@ class SignTaskService:
 
         # 获取 sign_interval
         if sign_interval is None:
+            config_service = get_config_service()
             global_settings = config_service.get_global_settings()
             sign_interval = global_settings.get("sign_interval")
 
@@ -555,13 +569,14 @@ class SignTaskService:
         except Exception as e:
             msg = f"DEBUG: 更新调度任务失败: {e}"
             print(msg)
-            with open("scheduler_error.log", "a", encoding="utf-8") as f:
-                f.write(f"{datetime.now()}: {msg}\n")
+            self._append_scheduler_log(
+                "scheduler_error.log", f"{datetime.now()}: {msg}"
+            )
         else:
-            with open("scheduler_update.log", "a", encoding="utf-8") as f:
-                f.write(
-                    f"{datetime.now()}: Updated task {task_name} with cron {config.get('range_start') if config.get('execution_mode') == 'range' else config['sign_at']}\n"
-                )
+            self._append_scheduler_log(
+                "scheduler_update.log",
+                f"{datetime.now()}: Updated task {task_name} with cron {config.get('range_start') if config.get('execution_mode') == 'range' else config['sign_at']}",
+            )
 
         return {
             "name": task_name,
@@ -657,10 +672,10 @@ class SignTaskService:
 
         # 获取 session 文件路径
         from backend.core.config import get_settings
-        from backend.services.config import config_service
+        from backend.services.config import get_config_service
 
         settings = get_settings()
-        session_dir = Path(settings.data_dir) / "sessions"
+        session_dir = settings.resolve_session_dir()
         session_mode = get_session_mode()
         session_string = None
 
@@ -675,6 +690,7 @@ class SignTaskService:
             if not (session_dir / f"{account_name}.session").exists():
                 raise ValueError(f"账号 {account_name} 的 Session 文件不存在")
 
+        config_service = get_config_service()
         tg_config = config_service.get_telegram_config()
         api_id = os.getenv("TG_API_ID") or tg_config.get("api_id")
         api_hash = os.getenv("TG_API_HASH") or tg_config.get("api_hash")
@@ -694,17 +710,7 @@ class SignTaskService:
         proxy_dict = None
         proxy_value = get_account_proxy(account_name)
         if proxy_value:
-            from urllib.parse import urlparse
-
-            parsed = urlparse(proxy_value)
-            if parsed.scheme and parsed.hostname and parsed.port:
-                proxy_dict = {
-                    "scheme": parsed.scheme,
-                    "hostname": parsed.hostname,
-                    "port": parsed.port,
-                    "username": parsed.username,
-                    "password": parsed.password,
-                }
+            proxy_dict = build_proxy_dict(proxy_value)
         client_kwargs = {
             "name": account_name,
             "workdir": session_dir,
@@ -854,8 +860,9 @@ class SignTaskService:
                 )
 
                 # 配置 API 凭据
-                from backend.services.config import config_service
+                from backend.services.config import get_config_service
 
+                config_service = get_config_service()
                 tg_config = config_service.get_telegram_config()
                 api_id = os.getenv("TG_API_ID") or tg_config.get("api_id")
                 api_hash = os.getenv("TG_API_HASH") or tg_config.get("api_hash")
@@ -871,24 +878,14 @@ class SignTaskService:
                 if not api_id or not api_hash:
                     raise ValueError("未配置 Telegram API ID 或 API Hash")
 
-                session_dir = Path(settings.data_dir) / "sessions"
+                session_dir = settings.resolve_session_dir()
                 session_mode = get_session_mode()
                 session_string = None
                 use_in_memory = False
                 proxy_dict = None
                 proxy_value = get_account_proxy(account_name)
                 if proxy_value:
-                    from urllib.parse import urlparse
-
-                    parsed = urlparse(proxy_value)
-                    if parsed.scheme and parsed.hostname and parsed.port:
-                        proxy_dict = {
-                            "scheme": parsed.scheme,
-                            "hostname": parsed.hostname,
-                            "port": parsed.port,
-                            "username": parsed.username,
-                            "password": parsed.password,
-                        }
+                    proxy_dict = build_proxy_dict(proxy_value)
 
                 if session_mode == "string":
                     session_string = (
@@ -979,4 +976,11 @@ class SignTaskService:
 
 
 # 创建全局实例
-sign_task_service = SignTaskService()
+_sign_task_service: Optional[SignTaskService] = None
+
+
+def get_sign_task_service() -> SignTaskService:
+    global _sign_task_service
+    if _sign_task_service is None:
+        _sign_task_service = SignTaskService()
+    return _sign_task_service

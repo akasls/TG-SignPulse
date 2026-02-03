@@ -9,12 +9,12 @@ from pathlib import Path
 from pyrogram import Client
 
 from backend.core.config import get_settings
-from backend.services.config import config_service
+from backend.services.config import get_config_service
 from backend.utils.tg_session import save_session_string_file, set_account_session_string
 
 
 def _resolve_api_credentials() -> tuple[int | None, str | None]:
-    tg_config = config_service.get_telegram_config()
+    tg_config = get_config_service().get_telegram_config()
     api_id = os.getenv("TG_API_ID") or tg_config.get("api_id")
     api_hash = os.getenv("TG_API_HASH") or tg_config.get("api_hash")
 

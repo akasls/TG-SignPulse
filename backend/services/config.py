@@ -423,8 +423,8 @@ class ConfigService:
 
             # 关键修复：清除 SignTaskService 缓存，否则前端刷新也看不到新任务
             try:
-                from backend.services.sign_tasks import sign_task_service
-                sign_task_service._tasks_cache = None
+                from backend.services.sign_tasks import get_sign_task_service
+                get_sign_task_service()._tasks_cache = None
                 
                 # 可选：触发调度同步？
                 # 如果导入了新任务，调度器并不知道。
@@ -700,4 +700,11 @@ class ConfigService:
 
 
 # 创建全局实例
-config_service = ConfigService()
+_config_service: Optional[ConfigService] = None
+
+
+def get_config_service() -> ConfigService:
+    global _config_service
+    if _config_service is None:
+        _config_service = ConfigService()
+    return _config_service

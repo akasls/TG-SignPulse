@@ -84,6 +84,26 @@ services:
   - Persistent volume: ID `data`, path `/data`
 - Deploy and then bind a domain in the service details.
 
+## Non-root / NAS / ClawCloud Permission Notes
+
+- Default data directory is `/data`. When `/data` is writable, all data (sessions/accounts/tasks/import-export/logs) stays under `/data` as before.
+- If `/data` is not writable, the service automatically falls back to `/tmp/tg-signpulse` and prints a warning (data may be non-persistent).
+- For production, mount a writable persistent volume to `/data` instead of relying on `/tmp`.
+
+Troubleshooting inside the container (do NOT use chmod 777):
+
+```bash
+id
+ls -ld /data
+touch /data/.probe && rm /data/.probe
+```
+
+If using a host mount, also check:
+
+```bash
+ls -ld ./data
+```
+
 ## Optional Environment Variables
 
 All variables are optional; default behavior matches the previous version when not set:
@@ -126,13 +146,12 @@ frontend/     # Next.js admin UI
 
 ## Recent Updates
 
-### 2026-01-29
+### 2026-02-03
 
-- Concurrency improvements: account-level shared lock to fix `database is locked`.
-- Write protection: avoid concurrent conflicts during login/task/chat refresh.
-- Login flow hardening.
-- Config improvements for TG API/Secret/AI env parsing.
-- UI tweaks: account name length limit and task modal time range.
+- Permission compatibility: probe `/data` on startup; fall back to `/tmp/tg-signpulse` with a warning if not writable (no behavior change when `/data` is writable).
+- Startup stability: removed import-time service singletons and DB engine initialization to prevent PaaS/ClawCloud import crashes.
+- Task updates: scheduler logs now write under `logs/`; logging failures won't break updates.
+- Proxy UX: SOCKS5 placeholder text updated; legacy inputs remain compatible.
 
 ### 2026-02-02
 
@@ -144,6 +163,14 @@ frontend/     # Next.js admin UI
 - Added account remark/proxy editing entry on account cards.
 - Task runs/chat refresh now use account proxy when configured.
 - Docker build: skip tgcrypto on arm64 to avoid NAS local build failures.
+
+### 2026-01-29
+
+- Concurrency improvements: account-level shared lock to fix `database is locked`.
+- Write protection: avoid concurrent conflicts during login/task/chat refresh.
+- Login flow hardening.
+- Config improvements for TG API/Secret/AI env parsing.
+- UI tweaks: account name length limit and task modal time range.
 
 ## Credits
 

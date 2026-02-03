@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from backend.core.config import get_settings
 from backend.utils.account_locks import get_account_lock
+from backend.utils.proxy import build_proxy_dict
 from backend.utils.tg_session import (
     delete_account_session_string,
     delete_session_string_file,
@@ -272,8 +273,9 @@ class TelegramService:
         gc.collect()
 
         # 获取 API credentials
-        from backend.services.config import config_service
+        from backend.services.config import get_config_service
 
+        config_service = get_config_service()
         tg_config = config_service.get_telegram_config()
         api_id = tg_config.get("api_id")
         api_hash = tg_config.get("api_hash")
@@ -297,16 +299,7 @@ class TelegramService:
             _release_account_lock()
             raise ValueError("Telegram API ID / API Hash 未配置或无效")
 
-        proxy_dict = None
-        if proxy:
-            from urllib.parse import urlparse
-
-            parsed = urlparse(proxy)
-            proxy_dict = {
-                "scheme": parsed.scheme,
-                "hostname": parsed.hostname,
-                "port": parsed.port,
-            }
+        proxy_dict = build_proxy_dict(proxy) if proxy else None
 
         # 4. 如果是重新登录，尝试先清理旧的 session 文件 (避免 SQLite 锁或损坏)
         # 注意: 如果 session 有效但用户只是想重登，删除也没问题，因为反正要重新验证
@@ -637,4 +630,11 @@ class TelegramService:
 
 
 # 创建全局实例
-telegram_service = TelegramService()
+_telegram_service: Optional[TelegramService] = None
+
+
+def get_telegram_service() -> TelegramService:
+    global _telegram_service
+    if _telegram_service is None:
+        _telegram_service = TelegramService()
+    return _telegram_service

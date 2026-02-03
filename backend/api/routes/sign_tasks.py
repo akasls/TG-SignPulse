@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from backend.core.auth import get_current_user, verify_token
 from backend.core.database import get_db
-from backend.services.sign_tasks import sign_task_service
+from backend.services.sign_tasks import get_sign_task_service
 
 router = APIRouter()
 
@@ -174,7 +174,7 @@ def list_sign_tasks(
     Args:
         account_name: 可选，按账号名筛选任务
     """
-    tasks = sign_task_service.list_tasks(account_name=account_name)
+    tasks = get_sign_task_service().list_tasks(account_name=account_name)
     return tasks
 
 
@@ -190,7 +190,7 @@ async def create_sign_task(
         # 转换 chats 为字典列表
         chats_dict = [chat.dict() for chat in payload.chats]
 
-        task = sign_task_service.create_task(
+        task = get_sign_task_service().create_task(
             task_name=payload.name,
             account_name=payload.account_name,
             sign_at=payload.sign_at,
@@ -221,7 +221,7 @@ def get_sign_task(
     current_user=Depends(get_current_user),
 ):
     """获取单个签到任务的详细信息"""
-    task = sign_task_service.get_task(task_name, account_name=account_name)
+    task = get_sign_task_service().get_task(task_name, account_name=account_name)
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_name} 不存在")
     return task
@@ -237,7 +237,7 @@ async def update_sign_task(
     """更新签到任务"""
     try:
         # 检查任务是否存在
-        existing = sign_task_service.get_task(task_name, account_name=account_name)
+        existing = get_sign_task_service().get_task(task_name, account_name=account_name)
         if not existing:
             raise HTTPException(status_code=404, detail=f"任务 {task_name} 不存在")
 
@@ -246,7 +246,7 @@ async def update_sign_task(
         if payload.chats is not None:
             chats_dict = [chat.dict() for chat in payload.chats]
 
-        task = sign_task_service.update_task(
+        task = get_sign_task_service().update_task(
             task_name=task_name,
             sign_at=payload.sign_at,
             chats=chats_dict,
@@ -281,7 +281,7 @@ async def delete_sign_task(
     current_user=Depends(get_current_user),
 ):
     """删除签到任务"""
-    success = sign_task_service.delete_task(task_name, account_name=account_name)
+    success = get_sign_task_service().delete_task(task_name, account_name=account_name)
     if not success:
         raise HTTPException(status_code=404, detail=f"任务 {task_name} 不存在")
 
@@ -301,11 +301,11 @@ async def run_sign_task(
 ):
     """手动运行签到任务"""
     # 检查任务是否存在
-    task = sign_task_service.get_task(task_name, account_name=account_name)
+    task = get_sign_task_service().get_task(task_name, account_name=account_name)
     if not task:
         raise HTTPException(status_code=404, detail=f"任务 {task_name} 不存在")
 
-    result = await sign_task_service.run_task_with_logs(account_name, task_name)
+    result = await get_sign_task_service().run_task_with_logs(account_name, task_name)
     return result
 
 
@@ -316,7 +316,7 @@ def get_sign_task_logs(
     current_user=Depends(get_current_user),
 ):
     """获取正在运行任务的实时日志"""
-    logs = sign_task_service.get_active_logs(task_name, account_name=account_name)
+    logs = get_sign_task_service().get_active_logs(task_name, account_name=account_name)
     return logs
 
 
@@ -328,7 +328,7 @@ async def get_account_chats(
 ):
     """获取账号的 Chat 列表"""
     try:
-        return await sign_task_service.get_account_chats(
+        return await get_sign_task_service().get_account_chats(
             account_name, force_refresh=force_refresh
         )
     except ValueError as e:
@@ -367,7 +367,7 @@ async def sign_task_logs_ws(
     try:
         while True:
             # 获取当前所有日志
-            active_logs = sign_task_service.get_active_logs(
+            active_logs = get_sign_task_service().get_active_logs(
                 task_name, account_name=account_name
             )
 
@@ -378,7 +378,7 @@ async def sign_task_logs_ws(
                     {
                         "type": "logs",
                         "data": new_logs,
-                        "is_running": sign_task_service.is_task_running(
+                        "is_running": get_sign_task_service().is_task_running(
                             task_name, account_name=account_name
                         ),
                     }
@@ -387,7 +387,7 @@ async def sign_task_logs_ws(
 
             # 如果任务已结束且日志已推完
             if (
-                not sign_task_service.is_task_running(
+                not get_sign_task_service().is_task_running(
                     task_name, account_name=account_name
                 )
                 and last_idx >= len(active_logs)

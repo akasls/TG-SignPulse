@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from backend.core.auth import get_current_user
 from backend.models.user import User
-from backend.services.telegram import telegram_service
+from backend.services.telegram import get_telegram_service
 
 router = APIRouter()
 
@@ -105,7 +105,7 @@ async def start_account_login(
     3. 返回 phone_code_hash 用于后续验证
     """
     try:
-        result = await telegram_service.start_login(
+        result = await get_telegram_service().start_login(
             account_name=request.account_name,
             phone_number=request.phone_number,
             proxy=request.proxy,
@@ -134,7 +134,7 @@ async def verify_account_login(
     3. 验证成功后，生成 session 文件
     """
     try:
-        result = await telegram_service.verify_login(
+        result = await get_telegram_service().verify_login(
             account_name=request.account_name,
             phone_number=request.phone_number,
             phone_code=request.phone_code,
@@ -168,7 +168,7 @@ def list_accounts(current_user: User = Depends(get_current_user)):
     返回所有 session 文件对应的账号
     """
     try:
-        accounts = telegram_service.list_accounts()
+        accounts = get_telegram_service().list_accounts()
 
         return AccountListResponse(
             accounts=[AccountInfo(**acc) for acc in accounts], total=len(accounts)
@@ -191,7 +191,7 @@ async def delete_account(
     注意：删除后无法恢复，需要重新登录
     """
     try:
-        success = await telegram_service.delete_account(account_name)
+        success = await get_telegram_service().delete_account(account_name)
 
         if success:
             return DeleteAccountResponse(
@@ -217,7 +217,7 @@ def check_account_exists(
     account_name: str, current_user: User = Depends(get_current_user)
 ):
     """检查账号是否存在"""
-    exists = telegram_service.account_exists(account_name)
+    exists = get_telegram_service().account_exists(account_name)
     return {"exists": exists, "account_name": account_name}
 
 
@@ -230,7 +230,7 @@ def update_account(
     """
     更新账号备注/代理（不影响登录状态）
     """
-    if not telegram_service.account_exists(account_name):
+    if not get_telegram_service().account_exists(account_name):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"账号 {account_name} 不存在",
@@ -267,9 +267,9 @@ def get_account_logs(
     account_name: str, limit: int = 100, current_user: User = Depends(get_current_user)
 ):
     """获取账号的任务执行历史日志"""
-    from backend.services.sign_tasks import sign_task_service
+    from backend.services.sign_tasks import get_sign_task_service
 
-    history = sign_task_service.get_account_history_logs(account_name)
+    history = get_sign_task_service().get_account_history_logs(account_name)
 
     logs = []
     for i, item in enumerate(history[:limit]):
@@ -295,9 +295,9 @@ def export_account_logs(
     """导出账号日志为 txt 文件"""
     from fastapi.responses import Response
 
-    from backend.services.sign_tasks import sign_task_service
+    from backend.services.sign_tasks import get_sign_task_service
 
-    history = sign_task_service.get_account_history_logs(account_name)
+    history = get_sign_task_service().get_account_history_logs(account_name)
 
     content = f"Account Logs for: {account_name}\n"
     content += "=" * 40 + "\n\n"

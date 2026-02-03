@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from backend.core.auth import get_current_user
 from backend.models.user import User
-from backend.services.config import config_service
+from backend.services.config import get_config_service
 
 router = APIRouter()
 
@@ -79,8 +79,8 @@ def list_all_tasks(current_user: User = Depends(get_current_user)):
     获取所有任务列表（签到任务和监控任务）
     """
     try:
-        sign_tasks = config_service.list_sign_tasks()
-        monitor_tasks = config_service.list_monitor_tasks()
+        sign_tasks = get_config_service().list_sign_tasks()
+        monitor_tasks = get_config_service().list_monitor_tasks()
 
         return TaskListResponse(
             sign_tasks=sign_tasks,
@@ -107,7 +107,7 @@ def export_sign_task(
     返回 JSON 格式的配置文件，可以保存后导入
     """
     try:
-        config_json = config_service.export_sign_task(
+        config_json = get_config_service().export_sign_task(
             task_name, account_name=account_name
         )
 
@@ -150,7 +150,7 @@ def import_sign_task(
     可以指定新的任务名称，如果不指定则使用原名称
     """
     try:
-        success = config_service.import_sign_task(
+        success = get_config_service().import_sign_task(
             request.config_json, request.task_name, request.account_name
         )
 
@@ -193,7 +193,7 @@ def export_all_configs(current_user: User = Depends(get_current_user)):
     返回包含所有配置的 JSON 文件
     """
     try:
-        config_json = config_service.export_all_configs()
+        config_json = get_config_service().export_all_configs()
 
         from fastapi import Response
 
@@ -223,7 +223,7 @@ def import_all_configs(
     可以选择是否覆盖已存在的配置
     """
     try:
-        result = config_service.import_all_configs(
+        result = get_config_service().import_all_configs(
             request.config_json, request.overwrite
         )
 
@@ -268,7 +268,7 @@ def delete_sign_task(
     注意：删除后无法恢复
     """
     try:
-        success = config_service.delete_sign_config(
+        success = get_config_service().delete_sign_config(
             task_name, account_name=account_name
         )
 
@@ -339,7 +339,7 @@ def get_ai_config(current_user: User = Depends(get_current_user)):
     获取 AI 配置（不返回完整的 API Key）
     """
     try:
-        config = config_service.get_ai_config()
+        config = get_config_service().get_ai_config()
 
         if not config:
             return AIConfigResponse(has_config=False)
@@ -377,7 +377,7 @@ def save_ai_config(
     保存 AI 配置
     """
     try:
-        config_service.save_ai_config(
+        get_config_service().save_ai_config(
             api_key=request.api_key, base_url=request.base_url, model=request.model
         )
 
@@ -396,7 +396,7 @@ async def test_ai_connection(current_user: User = Depends(get_current_user)):
     测试 AI 连接
     """
     try:
-        result = await config_service.test_ai_connection()
+        result = await get_config_service().test_ai_connection()
         return AITestResponse(**result)
 
     except Exception as e:
@@ -409,7 +409,7 @@ def delete_ai_config(current_user: User = Depends(get_current_user)):
     删除 AI 配置
     """
     try:
-        config_service.delete_ai_config()
+        get_config_service().delete_ai_config()
 
         return AIConfigSaveResponse(success=True, message="AI 配置已删除")
 
@@ -443,7 +443,7 @@ def get_global_settings(current_user: User = Depends(get_current_user)):
     获取全局设置
     """
     try:
-        settings = config_service.get_global_settings()
+        settings = get_config_service().get_global_settings()
         return GlobalSettingsResponse(**settings)
 
     except Exception as e:
@@ -465,7 +465,7 @@ def save_global_settings(
             "sign_interval": request.sign_interval,
             "log_retention_days": request.log_retention_days,
         }
-        config_service.save_global_settings(settings)
+        get_config_service().save_global_settings(settings)
 
         return AIConfigSaveResponse(success=True, message="全局设置已保存")
 
@@ -512,14 +512,14 @@ def get_telegram_config(current_user: User = Depends(get_current_user)):
     返回当前配置（可能是默认值或自定义值）
     """
     try:
-        config = config_service.get_telegram_config()
+        config = get_config_service().get_telegram_config()
 
         return TelegramConfigResponse(
             api_id=config.get("api_id", ""),
             api_hash=config.get("api_hash", ""),
             is_custom=config.get("is_custom", False),
-            default_api_id=config_service.DEFAULT_TG_API_ID,
-            default_api_hash=config_service.DEFAULT_TG_API_HASH,
+            default_api_id=get_config_service().DEFAULT_TG_API_ID,
+            default_api_hash=get_config_service().DEFAULT_TG_API_HASH,
         )
 
     except Exception as e:
@@ -546,7 +546,7 @@ def save_telegram_config(
                 detail="API ID 和 API Hash 不能为空",
             )
 
-        success = config_service.save_telegram_config(
+        success = get_config_service().save_telegram_config(
             api_id=request.api_id, api_hash=request.api_hash
         )
 
@@ -574,7 +574,7 @@ def reset_telegram_config(current_user: User = Depends(get_current_user)):
     重置 Telegram API 配置（恢复默认）
     """
     try:
-        config_service.reset_telegram_config()
+        get_config_service().reset_telegram_config()
 
         return TelegramConfigSaveResponse(
             success=True, message="Telegram API 配置已重置为默认值"

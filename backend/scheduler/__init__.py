@@ -4,7 +4,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
 
-from backend.core.database import SessionLocal
+from backend.core.database import get_session_local
 from backend.models.task import Task
 from backend.services.tasks import run_task_once
 
@@ -23,7 +23,7 @@ def time_to_cron(time_str: str) -> str:
 
 
 async def _job_run_task(task_id: int) -> None:
-    db: Session = SessionLocal()
+    db: Session = get_session_local()()
     try:
         # 这里的查询是同步的，对于 SQLite 且任务量不大可以接受
         task = db.query(Task).filter(Task.id == task_id).first()
@@ -42,13 +42,14 @@ async def _job_run_sign_task(account_name: str, task_name: str) -> None:
     import random
     from datetime import datetime, time, timedelta
 
-    from backend.services.sign_tasks import sign_task_service
+    from backend.services.sign_tasks import get_sign_task_service
 
     logger = logging.getLogger("backend.scheduler")
     try:
         logger.info(f"Scheduler: 正在运行签到任务 {task_name} (账号: {account_name})")
 
         # 获取任务配置，检查是否为随机时间段模式
+        sign_task_service = get_sign_task_service()
         task_config = sign_task_service.get_task(task_name, account_name)
         if task_config and task_config.get("execution_mode") == "range":
             range_start_str = task_config.get("range_start")
@@ -99,6 +100,7 @@ async def _job_run_sign_task(account_name: str, task_name: str) -> None:
                     logger.error(f"Scheduler: 计算随机时间段延迟失败: {e}，将立即执行")
 
         # run_task_with_logs 是 async 的，我们使用它
+        sign_task_service = get_sign_task_service()
         result = await sign_task_service.run_task_with_logs(account_name, task_name)
         if result.get("success"):
             logger.info(f"Scheduler: 任务 {task_name} 执行成功")
@@ -110,9 +112,9 @@ async def _job_run_sign_task(account_name: str, task_name: str) -> None:
 
 async def _job_maintenance() -> None:
     """每日维护任务：清理旧日志等"""
-    db: Session = SessionLocal()
+    db: Session = get_session_local()()
     try:
-        from backend.services.sign_tasks import sign_task_service
+        from backend.services.sign_tasks import get_sign_task_service
         from backend.services.tasks import cleanup_old_logs
 
         # 清理数据库任务日志
@@ -120,7 +122,7 @@ async def _job_maintenance() -> None:
         print(f"Maintenance: 已清理 {count} 条数据库任务日志")
 
         # 清理签到任务日志
-        sign_task_service._cleanup_old_logs()
+        get_sign_task_service()._cleanup_old_logs()
     finally:
         db.close()
 
@@ -132,9 +134,9 @@ async def sync_jobs() -> None:
     if scheduler is None:
         return
 
-    from backend.services.sign_tasks import sign_task_service
+    from backend.services.sign_tasks import get_sign_task_service
 
-    db: Session = SessionLocal()
+    db: Session = get_session_local()()
     try:
         # 1. 同步数据库任务
         tasks = db.query(Task).filter(Task.enabled).all()
@@ -166,6 +168,7 @@ async def sync_jobs() -> None:
 
         # 2. 同步签到任务 (SignTask)
         # 使用缓存的任务列表，减少 I/O
+        sign_task_service = get_sign_task_service()
         sign_tasks = sign_task_service.list_tasks(force_refresh=False)
         for st in sign_tasks:
             job_id = f"sign-{st['account_name']}-{st['name']}"
