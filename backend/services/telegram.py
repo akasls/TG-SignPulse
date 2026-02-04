@@ -930,6 +930,20 @@ class TelegramService:
                     except Exception:
                         me = user
 
+                    try:
+                        password_state = await client.get_password()
+                    except Exception:
+                        password_state = None
+
+                    if password_state and getattr(password_state, "has_password", False):
+                        data["status"] = "password_required"
+                        data["scan_seen"] = True
+                        return {
+                            "status": "password_required",
+                            "expires_at": data.get("expires_at"),
+                            "message": "需要 2FA 密码",
+                        }
+
                     await self._persist_client_session(
                         client, data.get("account_name"), data.get("proxy")
                     )
@@ -1048,10 +1062,56 @@ class TelegramService:
 
         global_semaphore = get_global_semaphore()
 
+        async def _finalize_password_login(user_fallback=None) -> Dict[str, Any]:
+            try:
+                await client.check_password(password)
+            except PasswordHashInvalid:
+                await self._cleanup_qr_login(login_id)
+                raise ValueError("两步验证密码错误")
+
+            try:
+                me = await client.get_me()
+            except Exception:
+                me = user_fallback
+
+            await self._persist_client_session(
+                client, data.get("account_name"), data.get("proxy")
+            )
+
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+
+            account_name = data.get("account_name")
+            await self._cleanup_qr_login(login_id, preserve_session=True)
+
+            account = None
+            try:
+                accounts = self.list_accounts(force_refresh=True)
+                account = next(
+                    (acc for acc in accounts if acc.get("name") == account_name),
+                    None,
+                )
+            except Exception:
+                account = None
+
+            return {
+                "status": "success",
+                "message": "登录成功",
+                "account": account,
+                "user_id": getattr(me, "id", None),
+                "first_name": getattr(me, "first_name", None),
+                "username": getattr(me, "username", None),
+            }
+
         try:
             async with global_semaphore:
                 if not client.is_connected:
                     await client.connect()
+
+                if data.get("status") == "password_required":
+                    return await _finalize_password_login()
 
                 token = data.get("token")
                 migrate_dc_id = data.get("migrate_dc_id")
@@ -1078,50 +1138,19 @@ class TelegramService:
                 except SessionPasswordNeeded:
                     data["status"] = "password_required"
                     data["scan_seen"] = True
-
-                    try:
-                        await client.check_password(password)
-                    except PasswordHashInvalid:
-                        await self._cleanup_qr_login(login_id)
-                        raise ValueError("两步验证密码错误")
-
-                    try:
-                        me = await client.get_me()
-                    except Exception:
-                        me = None
-
-                    await self._persist_client_session(
-                        client, data.get("account_name"), data.get("proxy")
-                    )
-
-                    try:
-                        await client.disconnect()
-                    except Exception:
-                        pass
-
-                    account_name = data.get("account_name")
-                    await self._cleanup_qr_login(login_id, preserve_session=True)
-
-                    account = None
-                    try:
-                        accounts = self.list_accounts(force_refresh=True)
-                        account = next(
-                            (acc for acc in accounts if acc.get("name") == account_name),
-                            None,
-                        )
-                    except Exception:
-                        account = None
-
-                    return {
-                        "status": "success",
-                        "message": "登录成功",
-                        "account": account,
-                        "user_id": getattr(me, "id", None),
-                        "first_name": getattr(me, "first_name", None),
-                        "username": getattr(me, "username", None),
-                    }
+                    return await _finalize_password_login()
 
                 if isinstance(result, raw.types.auth.LoginToken):
+                    token_expires = getattr(result, "expires", None)
+                    if token_expires:
+                        data["expires_ts"] = self._normalize_login_token_expires(
+                            token_expires
+                        )
+                        data["expires_at"] = datetime.utcfromtimestamp(
+                            data["expires_ts"]
+                        ).isoformat() + "Z"
+                    if data.get("token") != result.token:
+                        data["token"] = result.token
                     raise ValueError("请先在手机端确认登录")
 
                 if isinstance(result, raw.types.auth.LoginTokenSuccess):
@@ -1135,24 +1164,21 @@ class TelegramService:
                         except Exception:
                             me = user
 
+                        try:
+                            password_state = await client.get_password()
+                        except Exception:
+                            password_state = None
+
+                        if password_state and getattr(password_state, "has_password", False):
+                            return await _finalize_password_login(user)
+
                         await self._persist_client_session(
                             client, data.get("account_name"), data.get("proxy")
                         )
                     except SessionPasswordNeeded:
                         data["status"] = "password_required"
                         data["scan_seen"] = True
-                        try:
-                            await client.check_password(password)
-                        except PasswordHashInvalid:
-                            await self._cleanup_qr_login(login_id)
-                            raise ValueError("两步验证密码错误")
-                        try:
-                            me = await client.get_me()
-                        except Exception:
-                            me = user
-                        await self._persist_client_session(
-                            client, data.get("account_name"), data.get("proxy")
-                        )
+                        return await _finalize_password_login(user)
 
                     try:
                         await client.disconnect()
