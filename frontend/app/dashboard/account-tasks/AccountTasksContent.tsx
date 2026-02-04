@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, memo, useMemo, useCallback } from "react";
+import { useEffect, useState, memo, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getToken } from "../../../lib/auth";
@@ -149,6 +149,16 @@ export default function AccountTasksContent() {
     const [loading, setLoading] = useState(false);
     const [refreshingChats, setRefreshingChats] = useState(false);
 
+    const addToastRef = useRef(addToast);
+    const tRef = useRef(t);
+    const languageRef = useRef(language);
+
+    useEffect(() => {
+        addToastRef.current = addToast;
+        tRef.current = t;
+        languageRef.current = language;
+    }, [addToast, t, language]);
+
     // 创建任务对话框
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [newTask, setNewTask] = useState({
@@ -196,11 +206,15 @@ export default function AccountTasksContent() {
             setTasks(tasksData);
             setChats(chatsData);
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "加载数据失败" : "Load failed"), "error");
+            const toast = addToastRef.current;
+            const lang = languageRef.current;
+            if (toast) {
+                toast(err.message || (lang === "zh" ? "??????" : "Load failed"), "error");
+            }
         } finally {
             setLoading(false);
         }
-    }, [accountName, addToast, language]);
+    }, [accountName]);
 
     useEffect(() => {
         const tokenStr = getToken();
@@ -235,7 +249,11 @@ export default function AccountTasksContent() {
                 }
             } catch (err: any) {
                 if (!cancelled) {
-                    addToast(err.message || (language === "zh" ? "搜索失败" : "Search failed"), "error");
+                    const toast = addToastRef.current;
+                    const lang = languageRef.current;
+                    if (toast) {
+                        toast(err.message || (lang === "zh" ? "????" : "Search failed"), "error");
+                    }
                     setChatSearchResults([]);
                 }
             } finally {
@@ -248,7 +266,7 @@ export default function AccountTasksContent() {
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [chatSearch, token, accountName, addToast, language]);
+    }, [chatSearch, token, accountName]);
 
     useEffect(() => {
         if (!showCreateDialog && !showEditDialog) {

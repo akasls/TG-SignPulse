@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getToken } from "../../../lib/auth";
@@ -43,6 +43,14 @@ export default function SignTasksPage() {
     const [runLogs, setRunLogs] = useState<string[]>([]);
     const [isDone, setIsDone] = useState(false);
 
+    const addToastRef = useRef(addToast);
+    const tRef = useRef(t);
+
+    useEffect(() => {
+        addToastRef.current = addToast;
+        tRef.current = t;
+    }, [addToast, t]);
+
     const loadData = useCallback(async (tokenStr: string) => {
         try {
             setLoading(true);
@@ -53,11 +61,15 @@ export default function SignTasksPage() {
             setTasks(tasksData);
             setAccounts(accountsData.accounts);
         } catch (err: any) {
-            addToast(err.message || t("login_failed"), "error");
+            const toast = addToastRef.current;
+            const tr = tRef.current;
+            if (toast) {
+                toast(err.message || (tr ? tr("login_failed") : "Login failed"), "error");
+            }
         } finally {
             setLoading(false);
         }
-    }, [addToast, t]);
+    }, []);
 
     useEffect(() => {
         const tokenStr = getToken();
