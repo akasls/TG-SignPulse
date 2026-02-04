@@ -458,6 +458,10 @@ export default function Dashboard() {
         if (qrPollSeqRef.current !== seq) return;
 
         const status = res.status as "waiting_scan" | "scanned_wait_confirm" | "success" | "expired" | "failed";
+        if (status === "failed" && qrPhaseRef.current === "ready") {
+          debugQr({ login_id: loginId, pollResult: status, ignored: true, reason: "failed_before_scan" });
+          return;
+        }
         debugQr({ login_id: loginId, pollResult: status, message: res.message || "" });
         setQrStatus(status);
         setQrMessage(res.message || "");

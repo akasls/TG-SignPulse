@@ -96,7 +96,7 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onDelete, t, language }: 
                 </div>
             </div>
 
-            <div className="flex flex-col items-center gap-3 border-l border-white/5 pl-3 w-14 self-start md:w-auto md:border-0 md:flex-row md:items-center md:gap-4 md:self-auto">
+            <div className="flex flex-col items-center gap-3 w-14 self-start md:w-auto md:flex-row md:items-center md:gap-4 md:self-auto">
                 {task.last_run ? (
                     <div className="hidden md:flex flex-col items-end">
                         <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${task.last_run.success ? 'text-emerald-400' : 'text-rose-400'}`}>

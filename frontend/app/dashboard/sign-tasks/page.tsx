@@ -216,31 +216,33 @@ export default function SignTasksPage() {
                                                     {task.chats[0]?.chat_id || "-"}
                                                 </span>
                                             </div>
-                                        <span className="text-[11px] font-mono text-main/50">
-                                            {task.execution_mode === "range" && task.range_start && task.range_end
-                                                ? `${task.range_start} - ${task.range_end}`
-                                                : task.sign_at}
-                                        </span>
-                                            <span className={`inline-flex text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest border ${task.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-main/30 border-white/10'}`}>
-                                                {task.enabled ? 'Active' : 'Paused'}
+                                            <span className="text-[11px] font-mono text-main/50">
+                                                {task.execution_mode === "range" && task.range_start && task.range_end
+                                                    ? `${task.range_start} - ${task.range_end}`
+                                                    : task.sign_at}
                                             </span>
-                                            {task.last_run ? (
-                                                <div className="text-[10px] font-mono text-main/40 flex items-center gap-2">
-                                                    <span className={task.last_run.success ? 'text-emerald-400' : 'text-rose-400'}>
-                                                        {task.last_run.success ? t("success") : t("failure")}
-                                                    </span>
-                                                    <span>
-                                                        {new Date(task.last_run.time).toLocaleString(undefined, {
-                                                            month: '2-digit',
-                                                            day: '2-digit',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit'
-                                                        })}
-                                                    </span>
-                                                </div>
-                                            ) : null}
+                                            <div className="space-y-1">
+                                                <span className={`inline-flex text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest border ${task.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-main/30 border-white/10'}`}>
+                                                    {task.enabled ? 'Active' : 'Paused'}
+                                                </span>
+                                                {task.last_run ? (
+                                                    <div className="text-[10px] font-mono text-main/40 flex items-center gap-2">
+                                                        <span className={task.last_run.success ? 'text-emerald-400' : 'text-rose-400'}>
+                                                            {task.last_run.success ? t("success") : t("failure")}
+                                                        </span>
+                                                        <span>
+                                                            {new Date(task.last_run.time).toLocaleString(undefined, {
+                                                                month: '2-digit',
+                                                                day: '2-digit',
+                                                                hour: '2-digit',
+                                                                minute: '2-digit'
+                                                            })}
+                                                        </span>
+                                                    </div>
+                                                ) : null}
+                                            </div>
                                         </div>
-                                        <div className="w-14 flex flex-col items-center gap-2 pt-[2px] border-l border-white/5 pl-2">
+                                        <div className="w-14 flex flex-col items-center gap-2 pt-[2px]">
                                             <button
                                                 onClick={() => handleRun(task.name)}
                                                 disabled={loading}
