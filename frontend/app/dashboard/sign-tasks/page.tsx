@@ -32,7 +32,7 @@ import { useLanguage } from "../../../context/LanguageContext";
 
 export default function SignTasksPage() {
     const router = useRouter();
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const { toasts, addToast, removeToast } = useToast();
     const [token, setLocalToken] = useState<string | null>(null);
     const [tasks, setTasks] = useState<SignTask[]>([]);
@@ -51,6 +51,12 @@ export default function SignTasksPage() {
         tRef.current = t;
     }, [addToast, t]);
 
+    const formatErrorMessage = useCallback((key: string, err?: any) => {
+        const base = tRef.current ? tRef.current(key) : key;
+        const code = err?.code;
+        return code ? `${base} (${code})` : base;
+    }, []);
+
     const loadData = useCallback(async (tokenStr: string) => {
         try {
             setLoading(true);
@@ -62,14 +68,13 @@ export default function SignTasksPage() {
             setAccounts(accountsData.accounts);
         } catch (err: any) {
             const toast = addToastRef.current;
-            const tr = tRef.current;
             if (toast) {
-                toast(err.message || (tr ? tr("login_failed") : "Login failed"), "error");
+                toast(formatErrorMessage("load_failed", err), "error");
             }
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [formatErrorMessage]);
 
     useEffect(() => {
         const tokenStr = getToken();
@@ -92,10 +97,10 @@ export default function SignTasksPage() {
         try {
             setLoading(true);
             await deleteSignTask(token, task.name, task.account_name);
-            addToast(t("delete") + " " + task.name + " " + t("login_success"), "success");
+            addToast(t("task_deleted").replace("{name}", task.name), "success");
             await loadData(token);
         } catch (err: any) {
-            addToast(err.message || t("login_failed"), "error");
+            addToast(formatErrorMessage("delete_failed", err), "error");
         } finally {
             setLoading(false);
         }
@@ -104,7 +109,7 @@ export default function SignTasksPage() {
     const handleRun = async (taskName: string) => {
         if (!token) return;
 
-        const accountName = prompt(t("username"));
+        const accountName = prompt(t("account_name_prompt"));
         if (!accountName) return;
 
         try {
@@ -140,13 +145,13 @@ export default function SignTasksPage() {
             const result = await runSignTask(token, taskName, accountName);
 
             if (!result.success) {
-                addToast(t("login_failed") + ": " + result.error, "error");
+                addToast(t("task_run_failed"), "error");
                 setIsDone(true);
             } else {
-                addToast(taskName + " " + t("run") + " " + t("login_success"), "success");
+                addToast(t("task_run_success").replace("{name}", taskName), "success");
             }
         } catch (err: any) {
-            addToast(err.message || t("login_failed"), "error");
+            addToast(formatErrorMessage("task_run_failed", err), "error");
             setRunningTask(null);
         } finally {
             setLoading(false);
@@ -173,7 +178,7 @@ export default function SignTasksPage() {
                         onClick={() => loadData(token)}
                         disabled={loading}
                         className="action-btn !w-8 !h-8"
-                        title={t("refresh")}
+                        title={t("refresh_list")}
                     >
                         <ArrowClockwise weight="bold" size={18} className={loading ? 'animate-spin' : ''} />
                     </button>
@@ -199,8 +204,8 @@ export default function SignTasksPage() {
                         <div className="w-20 h-20 rounded-3xl bg-main/5 flex items-center justify-center text-main/20 mb-6 group-hover:scale-110 transition-transform group-hover:bg-[#8a3ffc]/10 group-hover:text-[#8a3ffc]">
                             <Plus size={40} weight="bold" />
                         </div>
-                        <h3 className="text-xl font-bold mb-2">部署第一个任务</h3>
-                        <p className="text-sm text-[#9496a1] mb-8">点击此处或右上角按钮开始创建您的首个自动签到任务</p>
+                        <h3 className="text-xl font-bold mb-2">{t("no_tasks")}</h3>
+                        <p className="text-sm text-[#9496a1] mb-8">{t("no_tasks_desc")}</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -223,7 +228,7 @@ export default function SignTasksPage() {
                                             </span>
                                             <div className="space-y-1 pt-2">
                                                 <span className={`inline-flex text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest border ${task.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-main/30 border-white/10'}`}>
-                                                    {task.enabled ? 'Active' : 'Paused'}
+                                                    {task.enabled ? t("status_active") : t("status_paused")}
                                                 </span>
                                                 {task.last_run ? (
                                                     <div className="text-[10px] font-mono text-main/40 flex items-center gap-2">
@@ -279,7 +284,7 @@ export default function SignTasksPage() {
                                             <h3 className="font-bold text-lg truncate pr-2" title={task.name}>{task.name}</h3>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest border ${task.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-main/30 border-white/10'}`}>
-                                                    {task.enabled ? 'Active' : 'Paused'}
+                                                    {task.enabled ? t("status_active") : t("status_paused")}
                                                 </span>
                                             </div>
                                         </div>
@@ -290,16 +295,36 @@ export default function SignTasksPage() {
                                     <div className="flex items-center justify-between p-3 bg-white/2 rounded-xl border border-white/5">
                                         <div className="flex items-center gap-2 text-main/40">
                                             <Clock weight="bold" size={14} />
-                                            <span className="text-[10px] font-bold uppercase tracking-wider">Schedule</span>
+                                            <span className="text-[10px] font-bold uppercase tracking-wider">{t("task_schedule")}</span>
                                         </div>
                                         <span className="text-xs font-mono font-bold text-[#b57dff]">{task.sign_at}</span>
                                     </div>
                                     <div className="flex items-center justify-between p-3 bg-white/2 rounded-xl border border-white/5">
                                         <div className="flex items-center gap-2 text-main/40">
                                             <ChatCircleText weight="bold" size={14} />
-                                            <span className="text-[10px] font-bold uppercase tracking-wider">Channels</span>
+                                            <span className="text-[10px] font-bold uppercase tracking-wider">{t("task_channels")}</span>
                                         </div>
-                                        <span className="text-xs font-mono font-bold text-[#e83ffc]">{task.chats.length} Hits</span>
+                                        <span className="text-xs font-mono font-bold text-[#e83ffc]">
+                                            {t("task_hits").replace("{count}", task.chats.length.toString())}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between p-3 bg-white/2 rounded-xl border border-white/5">
+                                        <div className="flex items-center gap-2 text-main/40">
+                                            <Clock weight="bold" size={14} />
+                                            <span className="text-[10px] font-bold uppercase tracking-wider">{t("task_last_run")}</span>
+                                        </div>
+                                        {task.last_run ? (
+                                            <span className={`text-xs font-mono font-bold ${task.last_run.success ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                {task.last_run.success ? t("success") : t("failure")} · {new Date(task.last_run.time).toLocaleString(language === "zh" ? 'zh-CN' : 'en-US', {
+                                                    month: '2-digit',
+                                                    day: '2-digit',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })}
+                                            </span>
+                                        ) : (
+                                            <span className="text-xs font-mono font-bold text-main/30">{t("no_data")}</span>
+                                        )}
                                     </div>
                                 </div>
 
@@ -348,7 +373,9 @@ export default function SignTasksPage() {
                                 <div className="w-8 h-8 rounded-lg bg-[#8a3ffc]/20 flex items-center justify-center text-[#b57dff]">
                                     <Lightning weight="fill" size={18} />
                                 </div>
-                                <h3 className="font-bold tracking-tight">任务运行日志: {runningTask}</h3>
+                                <h3 className="font-bold tracking-tight">
+                                    {t("task_run_logs_title").replace("{name}", runningTask)}
+                                </h3>
                             </div>
                             {isDone && (
                                 <button
@@ -363,7 +390,7 @@ export default function SignTasksPage() {
                             {runLogs.length === 0 ? (
                                 <div className="flex items-center gap-2 text-main/30 italic">
                                     <Spinner className="animate-spin" size={12} />
-                                    等待日志输出...
+                                    {t("logs_waiting")}
                                 </div>
                             ) : (
                                 <div className="space-y-1">
@@ -376,13 +403,13 @@ export default function SignTasksPage() {
                                     {!isDone && (
                                         <div className="flex items-center gap-2 text-[#8a3ffc] mt-2 italic animate-pulse">
                                             <Spinner className="animate-spin" size={12} />
-                                            正在运行中...
+                                            {t("task_running")}
                                         </div>
                                     )}
                                     {isDone && (
                                         <div className="text-emerald-400 mt-4 font-bold border-t border-emerald-500/20 pt-4 flex items-center gap-2">
                                             <Lightning weight="fill" />
-                                            任务执行完成
+                                            {t("task_done")}
                                         </div>
                                     )}
                                 </div>
@@ -394,7 +421,7 @@ export default function SignTasksPage() {
                                 disabled={!isDone}
                                 className={`px-6 py-2 rounded-xl font-bold text-xs transition-all ${isDone ? 'btn-gradient shadow-lg' : 'bg-white/5 text-main/20 cursor-not-allowed'}`}
                             >
-                                {isDone ? '关闭' : '正在执行...'}
+                                {isDone ? t("close") : t("task_executing")}
                             </button>
                         </div>
                     </div>

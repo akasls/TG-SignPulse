@@ -14,7 +14,7 @@ import { useLanguage } from "../context/LanguageContext";
 
 export default function LoginForm() {
   const router = useRouter();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -31,14 +31,16 @@ export default function LoginForm() {
       setToken(res.access_token);
       router.push("/dashboard");
     } catch (err: any) {
-      const msg = err?.message || t("login_failed");
-      let displayMsg = msg;
+      const msg = err?.message || "";
+      let displayMsg = t("login_failed");
       const lowerMsg = msg.toLowerCase();
 
       if (lowerMsg.includes("totp")) {
         displayMsg = t("totp_error");
       } else if (lowerMsg.includes("invalid") || lowerMsg.includes("credentials") || lowerMsg.includes("password")) {
         displayMsg = t("user_or_pass_error");
+      } else if (!msg) {
+        displayMsg = t("login_failed");
       }
       setErrorMsg(displayMsg);
     } finally {
@@ -92,7 +94,7 @@ export default function LoginForm() {
               className="!py-3 !px-4 text-center tracking-[4px] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl font-bold"
               value={totp}
               onChange={(e) => setTotp(e.target.value)}
-              placeholder={language === "zh" ? "留空即跳过" : "Skip if disabled"}
+              placeholder={t("totp_placeholder")}
               autoComplete="off"
             />
           </div>
@@ -122,7 +124,7 @@ export default function LoginForm() {
             target="_blank"
             rel="noreferrer"
             className="action-btn !w-9 !h-9 !text-xl"
-            title="GitHub Repository"
+            title={t("github_repo")}
           >
             <GithubLogo weight="bold" />
           </a>

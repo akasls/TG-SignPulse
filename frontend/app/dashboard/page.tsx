@@ -15,7 +15,7 @@ import {
   verifyAccountLogin,
   deleteAccount,
   getAccountLogs,
-  exportAccountLogs,
+  clearAccountLogs,
   listSignTasks,
   AccountInfo,
   AccountLog,
@@ -31,9 +31,7 @@ import {
   X,
   PencilSimple,
   PaperPlaneRight,
-  Trash,
-  GithubLogo,
-  DownloadSimple
+  Trash
 } from "@phosphor-icons/react";
 import { ToastContainer, useToast } from "../../components/ui/toast";
 import { ThemeLanguageToggle } from "../../components/ThemeLanguageToggle";
@@ -41,7 +39,7 @@ import { useLanguage } from "../../context/LanguageContext";
 
 export default function Dashboard() {
   const router = useRouter();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const { toasts, addToast, removeToast } = useToast();
   const [token, setLocalToken] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<AccountInfo[]>([]);
@@ -125,6 +123,12 @@ export default function Dashboard() {
     tRef.current = t;
   }, [t]);
 
+  const formatErrorMessage = useCallback((key: string, err?: any) => {
+    const base = tRef.current ? tRef.current(key) : key;
+    const code = err?.code;
+    return code ? `${base} (${code})` : base;
+  }, []);
+
   const loadData = useCallback(async (tokenStr: string) => {
     try {
       setLoading(true);
@@ -135,11 +139,11 @@ export default function Dashboard() {
       setAccounts(accountsData.accounts);
       setTasks(tasksData);
     } catch (err: any) {
-      addToastRef.current(err.message || tRef.current("login_failed"), "error");
+      addToastRef.current(formatErrorMessage("load_failed", err), "error");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [formatErrorMessage]);
 
   useEffect(() => {
     const tokenStr = getToken();
@@ -160,11 +164,11 @@ export default function Dashboard() {
     if (!token) return;
     const trimmedAccountName = normalizeAccountName(loginData.account_name);
     if (!trimmedAccountName || !loginData.phone_number) {
-      addToast(language === "zh" ? "?????????????????" : "Please fill in account name and phone number", "error");
+      addToast(t("account_name_phone_required"), "error");
       return;
     }
     if (isDuplicateAccountName(trimmedAccountName)) {
-      addToast(language === "zh" ? "???????????" : "Account name already exists. Please change it.", "error");
+      addToast(t("account_name_duplicate"), "error");
       return;
     }
     try {
@@ -177,7 +181,7 @@ export default function Dashboard() {
       setLoginData({ ...loginData, account_name: trimmedAccountName, phone_code_hash: res.phone_code_hash });
       addToast(t("code_sent"), "success");
     } catch (err: any) {
-      addToast(err.message || (language === "zh" ? "???????" : "Failed to send"), "error");
+      addToast(formatErrorMessage("send_code_failed", err), "error");
     } finally {
       setLoading(false);
     }
@@ -186,16 +190,16 @@ export default function Dashboard() {
   const handleVerifyLogin = async () => {
     if (!token) return;
     if (!loginData.phone_code) {
-      addToast(language === "zh" ? "?????????" : "Please enter code", "error");
+      addToast(t("login_code_required"), "error");
       return;
     }
     const trimmedAccountName = normalizeAccountName(loginData.account_name);
     if (!trimmedAccountName) {
-      addToast(language === "zh" ? "???????" : "Please fill in account name", "error");
+      addToast(t("account_name_required"), "error");
       return;
     }
     if (isDuplicateAccountName(trimmedAccountName)) {
-      addToast(language === "zh" ? "???????????" : "Account name already exists. Please change it.", "error");
+      addToast(t("account_name_duplicate"), "error");
       return;
     }
     try {
@@ -212,7 +216,7 @@ export default function Dashboard() {
       setShowAddDialog(false);
       loadData(token);
     } catch (err: any) {
-      addToast(err.message || (language === "zh" ? "??????" : "Verification failed"), "error");
+      addToast(formatErrorMessage("verify_failed", err), "error");
     } finally {
       setLoading(false);
     }
@@ -220,14 +224,14 @@ export default function Dashboard() {
 
   const handleDeleteAccount = async (name: string) => {
     if (!token) return;
-    if (!confirm(language === "zh" ? `确定要删除账号 ${name} 吗？` : `Are you sure you want to delete ${name}?`)) return;
+    if (!confirm(t("confirm_delete_account").replace("{name}", name))) return;
     try {
       setLoading(true);
       await deleteAccount(token, name);
-      addToast(language === "zh" ? "账号已删除" : "Account deleted", "success");
+      addToast(t("account_deleted"), "success");
       loadData(token);
     } catch (err: any) {
-      addToast(err.message || (language === "zh" ? "删除失败" : "Failed to delete"), "error");
+      addToast(formatErrorMessage("delete_failed", err), "error");
     } finally {
       setLoading(false);
     }
@@ -255,7 +259,7 @@ export default function Dashboard() {
       setShowEditDialog(false);
       loadData(token);
     } catch (err: any) {
-      addToast(err.message || (language === "zh" ? "保存失败" : "Save failed"), "error");
+      addToast(formatErrorMessage("save_failed", err), "error");
     } finally {
       setLoading(false);
     }
@@ -327,11 +331,11 @@ export default function Dashboard() {
     if (!token) return;
     const trimmedAccountName = normalizeAccountName(loginData.account_name);
     if (!trimmedAccountName) {
-      addToast(language === "zh" ? "请输入账号名称" : "Please enter account name", "error");
+      addToast(t("account_name_required"), "error");
       return;
     }
     if (isDuplicateAccountName(trimmedAccountName)) {
-      addToast(language === "zh" ? "账号名已存在，请更换" : "Account name already exists. Please change it.", "error");
+      addToast(t("account_name_duplicate"), "error");
       return;
     }
     try {
@@ -353,7 +357,7 @@ export default function Dashboard() {
       setQrMessage("");
     } catch (err: any) {
       setQrPhaseSafe("error", "start_failed");
-      addToast(err.message || (language === "zh" ? "生成二维码失败" : "Failed to create QR"), "error");
+      addToast(formatErrorMessage("qr_create_failed", err), "error");
     } finally {
       setQrLoading(false);
     }
@@ -368,7 +372,7 @@ export default function Dashboard() {
       setQrLoading(true);
       await cancelQrLogin(token, qrLogin.login_id);
     } catch (err: any) {
-      addToast(err.message || (language === "zh" ? "取消失败" : "Cancel failed"), "error");
+      addToast(formatErrorMessage("cancel_failed", err), "error");
     } finally {
       setQrLoading(false);
       resetQrState();
@@ -391,21 +395,26 @@ export default function Dashboard() {
       const logs = await getAccountLogs(token, name, 100);
       setAccountLogs(logs);
     } catch (err: any) {
-      addToast(err.message || (language === "zh" ? "获取日志失败" : "Failed to get logs"), "error");
+      addToast(formatErrorMessage("logs_fetch_failed", err), "error");
     } finally {
       setLogsLoading(false);
     }
   };
 
-  const handleExportLogs = async () => {
+  const handleClearLogs = async () => {
     if (!token || !logsAccountName) return;
+    if (!confirm(t("clear_logs_confirm").replace("{name}", logsAccountName))) return;
     try {
       setLoading(true);
-      await exportAccountLogs(token, logsAccountName);
-      addToast(language === "zh" ? "日志导出成功" : "Logs exported", "success");
+      await clearAccountLogs(token, logsAccountName);
+      addToast(t("clear_logs_success"), "success");
+      setLogsLoading(true);
+      const logs = await getAccountLogs(token, logsAccountName, 100);
+      setAccountLogs(logs);
     } catch (err: any) {
-      addToast(err.message || "Export failed", "error");
+      addToast(formatErrorMessage("clear_logs_failed", err), "error");
     } finally {
+      setLogsLoading(false);
       setLoading(false);
     }
   };
@@ -484,7 +493,7 @@ export default function Dashboard() {
         }
         debugQr({ login_id: loginId, pollResult: status, message: res.message || "" });
         setQrStatus(status);
-        setQrMessage(res.message || "");
+        setQrMessage("");
         if (res.expires_at) {
           setQrLogin((prev) => (prev ? { ...prev, expires_at: res.expires_at } : prev));
         }
@@ -519,11 +528,11 @@ export default function Dashboard() {
           setQrPhaseSafe(nextPhase, "poll_terminal", { status });
           stopPolling();
           if (!hasToastShown(loginId, "expired") && status === "expired") {
-            addToast(res.message || (language === "zh" ? "二维码已过期或不存在" : "QR expired or not found"), "error");
+            addToast(t("qr_expired_not_found"), "error");
             markToastShown(loginId, "expired");
           }
           if (!hasToastShown(loginId, "error") && status === "failed") {
-            addToast(res.message || (language === "zh" ? "扫码登录失败" : "QR login failed"), "error");
+            addToast(t("qr_login_failed"), "error");
             markToastShown(loginId, "error");
           }
         }
@@ -538,7 +547,7 @@ export default function Dashboard() {
           return;
         }
         if (!hasToastShown(loginId, "error")) {
-          addToast(err.message || (language === "zh" ? "获取扫码状态失败" : "Failed to get QR status"), "error");
+          addToast(formatErrorMessage("qr_status_failed", err), "error");
           markToastShown(loginId, "error");
         }
       }
@@ -561,7 +570,7 @@ export default function Dashboard() {
         qrPollDelayRef.current = null;
       }
     };
-  }, [token, qrLogin?.login_id, loginMode, showAddDialog, qrPhase, addToast, language, loadData, resetQrState, t, hasToastShown, markToastShown, setQrPhaseSafe, debugQr]);
+  }, [token, qrLogin?.login_id, loginMode, showAddDialog, qrPhase, addToast, loadData, resetQrState, t, hasToastShown, markToastShown, setQrPhaseSafe, debugQr, formatErrorMessage]);
 
   if (!token || checking) {
     return null;
@@ -700,7 +709,7 @@ export default function Dashboard() {
                     <input
                       type="text"
                       className="!py-2.5 !px-4 !mb-4"
-                      placeholder="e.g. Work_Account_01"
+                      placeholder={t("account_name_placeholder")}
                       value={loginData.account_name}
                       onChange={(e) => {
                         const cleaned = sanitizeAccountName(e.target.value);
@@ -712,7 +721,7 @@ export default function Dashboard() {
                     <input
                       type="text"
                       className="!py-2.5 !px-4 !mb-4"
-                      placeholder="+86 138 0000 0000"
+                      placeholder={t("phone_number_placeholder")}
                       value={loginData.phone_number}
                       onChange={(e) => setLoginData({ ...loginData, phone_number: e.target.value })}
                     />
@@ -765,7 +774,7 @@ export default function Dashboard() {
                     <input
                       type="text"
                       className="!py-2.5 !px-4 !mb-4"
-                      placeholder="e.g. Work_Account_01"
+                      placeholder={t("account_name_placeholder")}
                       value={loginData.account_name}
                       onChange={(e) => {
                         const cleaned = sanitizeAccountName(e.target.value);
@@ -787,7 +796,7 @@ export default function Dashboard() {
                     <div className="text-xs text-main/60">{t("qr_tip")}</div>
                     <div className="flex items-center justify-center">
                       {qrLogin?.qr_image ? (
-                        <Image src={qrLogin.qr_image} alt="QR" width={160} height={160} className="rounded-lg bg-white p-2" />
+                        <Image src={qrLogin.qr_image} alt={t("qr_alt")} width={160} height={160} className="rounded-lg bg-white p-2" />
                       ) : (
                         <div className="w-40 h-40 rounded-lg bg-white/5 flex items-center justify-center text-xs text-main/40">
                           {t("qr_start")}
@@ -898,12 +907,12 @@ export default function Dashboard() {
               </div>
               {accountLogs.length > 0 && (
                 <button
-                  onClick={handleExportLogs}
+                  onClick={handleClearLogs}
                   disabled={loading}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#8a3ffc]/10 text-[#8a3ffc] text-[10px] font-bold hover:bg-[#8a3ffc]/20 transition-all disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 text-[10px] font-bold hover:bg-rose-500/20 transition-all disabled:opacity-50"
                 >
-                  <DownloadSimple weight="bold" size={14} />
-                  {t("export_logs")}
+                  <Trash weight="bold" size={14} />
+                  {t("clear_logs")}
                 </button>
               )}
             </div>

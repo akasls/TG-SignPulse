@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, memo, useMemo, useCallback, useRef } from "react";
+import { useEffect, useState, memo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getToken } from "../../../lib/auth";
@@ -165,13 +165,16 @@ export default function AccountTasksContent() {
 
     const addToastRef = useRef(addToast);
     const tRef = useRef(t);
-    const languageRef = useRef(language);
-
     useEffect(() => {
         addToastRef.current = addToast;
         tRef.current = t;
-        languageRef.current = language;
-    }, [addToast, t, language]);
+    }, [addToast, t]);
+
+    const formatErrorMessage = useCallback((key: string, err?: any) => {
+        const base = tRef.current ? tRef.current(key) : key;
+        const code = err?.code;
+        return code ? `${base} (${code})` : base;
+    }, []);
 
     // 创建任务对话框
     const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -221,14 +224,13 @@ export default function AccountTasksContent() {
             setChats(chatsData);
         } catch (err: any) {
             const toast = addToastRef.current;
-            const lang = languageRef.current;
             if (toast) {
-                toast(err.message || (lang === "zh" ? "??????" : "Load failed"), "error");
+                toast(formatErrorMessage("load_failed", err), "error");
             }
         } finally {
             setLoading(false);
         }
-    }, [accountName]);
+    }, [accountName, formatErrorMessage]);
 
     useEffect(() => {
         const tokenStr = getToken();
@@ -264,9 +266,8 @@ export default function AccountTasksContent() {
             } catch (err: any) {
                 if (!cancelled) {
                     const toast = addToastRef.current;
-                    const lang = languageRef.current;
                     if (toast) {
-                        toast(err.message || (lang === "zh" ? "????" : "Search failed"), "error");
+                        toast(formatErrorMessage("search_failed", err), "error");
                     }
                     setChatSearchResults([]);
                 }
@@ -280,7 +281,7 @@ export default function AccountTasksContent() {
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [chatSearch, token, accountName]);
+    }, [chatSearch, token, accountName, formatErrorMessage]);
 
     useEffect(() => {
         if (!showCreateDialog && !showEditDialog) {
@@ -296,9 +297,9 @@ export default function AccountTasksContent() {
             setRefreshingChats(true);
             const chatsData = await getAccountChats(token, accountName, true);
             setChats(chatsData);
-            addToast(language === "zh" ? "对话列表已刷新" : "Chat list refreshed", "success");
+            addToast(t("chats_refreshed"), "success");
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "刷新失败" : "Refresh failed"), "error");
+            addToast(formatErrorMessage("refresh_failed", err), "error");
         } finally {
             setRefreshingChats(false);
         }
@@ -310,9 +311,9 @@ export default function AccountTasksContent() {
             setLoading(true);
             const chatsData = await getAccountChats(token, accountName);
             setChats(chatsData);
-            addToast(language === "zh" ? "Chat 列表已刷新" : "Chats refreshed", "success");
+            addToast(t("chats_refreshed"), "success");
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "刷新失败" : "Refresh failed"), "error");
+            addToast(formatErrorMessage("refresh_failed", err), "error");
         } finally {
             setLoading(false);
         }
@@ -352,7 +353,7 @@ export default function AccountTasksContent() {
         } catch (err: any) {
             // Only show error if it's NOT a 404 (already deleted/doesn't exist)
             if (err.status !== 404 && !err.message?.includes("not exist")) {
-                addToast(err.message || (language === "zh" ? "删除任务失败" : "Delete failed"), "error");
+                addToast(formatErrorMessage("delete_failed", err), "error");
             } else {
                 await loadData(token); // Refresh anyway if it doesn't exist
             }
@@ -369,12 +370,12 @@ export default function AccountTasksContent() {
             const result = await runSignTask(token, taskName, accountName);
 
             if (result.success) {
-                addToast(language === "zh" ? `任务 ${taskName} 运行成功` : `Task ${taskName} running`, "success");
+                addToast(t("task_run_success").replace("{name}", taskName), "success");
             } else {
-                addToast((language === "zh" ? "任务运行失败: " : "Run failed: ") + result.error, "error");
+                addToast(t("task_run_failed"), "error");
             }
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "运行任务失败" : "Run failed"), "error");
+            addToast(formatErrorMessage("task_run_failed", err), "error");
         } finally {
             setLoading(false);
         }
@@ -384,12 +385,12 @@ export default function AccountTasksContent() {
         if (!token) return;
 
         if (!newTask.name) {
-            addToast(language === "zh" ? "请输入任务名称" : "Enter task name", "error");
+            addToast(t("task_name_required"), "error");
             return;
         }
 
         if (!newTask.sign_at) {
-            addToast(language === "zh" ? "请输入签到时间" : "Enter sign-in time", "error");
+            addToast(t("cron_required"), "error");
             return;
         }
 
@@ -397,18 +398,18 @@ export default function AccountTasksContent() {
         if (newTask.chat_id_manual) {
             chatId = parseInt(newTask.chat_id_manual);
             if (isNaN(chatId)) {
-                addToast(language === "zh" ? "手动输入的 Chat ID 必须是数字" : "Chat ID must be a number", "error");
+                addToast(t("chat_id_numeric"), "error");
                 return;
             }
         }
 
         if (chatId === 0) {
-            addToast(language === "zh" ? "请选择或输入 Chat ID" : "Select or enter Chat ID", "error");
+            addToast(t("select_chat_error"), "error");
             return;
         }
 
         if (newTask.actions.length === 0 || !newTask.actions[0].text && newTask.actions[0].action !== 2 && newTask.actions[0].action !== 4 && newTask.actions[0].action !== 5) {
-            addToast(language === "zh" ? "请确认动作配置" : "Confirm action config", "error");
+            addToast(t("add_action_error"), "error");
             return;
         }
 
@@ -421,7 +422,7 @@ export default function AccountTasksContent() {
                 sign_at: newTask.sign_at,
                 chats: [{
                     chat_id: chatId,
-                    name: newTask.chat_name || `Chat ${chatId}`,
+                    name: newTask.chat_name || t("chat_default_name").replace("{id}", String(chatId)),
                     actions: newTask.actions,
                     delete_after: newTask.delete_after,
                     action_interval: newTask.action_interval,
@@ -433,7 +434,7 @@ export default function AccountTasksContent() {
             };
 
             await createSignTask(token, request);
-            addToast(language === "zh" ? "任务创建成功！" : "Task created!", "success");
+            addToast(t("create_success"), "success");
             setShowCreateDialog(false);
             setNewTask({
                 name: "",
@@ -451,7 +452,7 @@ export default function AccountTasksContent() {
             });
             await loadData(token);
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "创建任务失败" : "Create failed"), "error");
+            addToast(formatErrorMessage("create_failed", err), "error");
         } finally {
             setLoading(false);
         }
@@ -501,7 +502,7 @@ export default function AccountTasksContent() {
 
         const chatId = editTask.chat_id || parseInt(editTask.chat_id_manual) || 0;
         if (!chatId) {
-            addToast(language === "zh" ? "请选择或输入 Chat ID" : "Select or enter Chat ID", "error");
+            addToast(t("select_chat_error"), "error");
             return;
         }
 
@@ -513,7 +514,7 @@ export default function AccountTasksContent() {
                 random_seconds: editTask.random_minutes * 60,
                 chats: [{
                     chat_id: chatId,
-                    name: editTask.chat_name || `Chat ${chatId}`,
+                    name: editTask.chat_name || t("chat_default_name").replace("{id}", String(chatId)),
                     actions: editTask.actions,
                     delete_after: editTask.delete_after,
                     action_interval: editTask.action_interval,
@@ -523,11 +524,11 @@ export default function AccountTasksContent() {
                 range_end: editTask.range_end,
             }, accountName);
 
-            addToast(language === "zh" ? "任务更新成功！" : "Task updated!", "success");
+            addToast(t("update_success"), "success");
             setShowEditDialog(false);
             await loadData(token);
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "更新任务失败" : "Update failed"), "error");
+            addToast(formatErrorMessage("update_failed", err), "error");
         } finally {
             setLoading(false);
         }

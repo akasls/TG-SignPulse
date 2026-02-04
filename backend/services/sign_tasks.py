@@ -165,6 +165,102 @@ class SignTaskService:
         all_history.sort(key=lambda x: x.get("time", ""), reverse=True)
         return all_history
 
+    def clear_account_history_logs(self, account_name: str) -> Dict[str, int]:
+        """娓呯悊鏌愯处鍙风殑鍘嗗彶鏃ュ織锛屼笉褰卞搷鍏朵粬璐﹀彿"""
+        removed_files = 0
+        removed_entries = 0
+
+        if not self.run_history_dir.exists():
+            return {"removed_files": 0, "removed_entries": 0}
+
+        def _count_entries(data: Any) -> int:
+            if isinstance(data, list):
+                return len(data)
+            if isinstance(data, dict):
+                return 1
+            return 0
+
+        tasks = self.list_tasks(account_name=account_name)
+        for task in tasks:
+            task_name = task.get("name") or ""
+            if not task_name:
+                continue
+
+            history_file = self._history_file_path(task_name, account_name)
+            if history_file.exists():
+                try:
+                    with open(history_file, "r", encoding="utf-8") as f:
+                        removed_entries += _count_entries(json.load(f))
+                except Exception:
+                    pass
+                try:
+                    history_file.unlink()
+                    removed_files += 1
+                except Exception:
+                    pass
+                continue
+
+            legacy_file = self.run_history_dir / f"{self._safe_history_key(task_name)}.json"
+            if not legacy_file.exists():
+                continue
+
+            try:
+                with open(legacy_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    data_list = [data]
+                elif isinstance(data, list):
+                    data_list = data
+                else:
+                    data_list = []
+            except Exception:
+                continue
+
+            if not data_list:
+                try:
+                    legacy_file.unlink()
+                    removed_files += 1
+                except Exception:
+                    pass
+                continue
+
+            # legacy 鏂囦欢鍙兘娌℃湁 account_name 锛屾槸鏃х増鍗曡处鍙峰湺鏅?
+            has_account_field = any(
+                isinstance(item, dict) and "account_name" in item for item in data_list
+            )
+            if not has_account_field:
+                removed_entries += len(data_list)
+                try:
+                    legacy_file.unlink()
+                    removed_files += 1
+                except Exception:
+                    pass
+                continue
+
+            kept: List[Dict[str, Any]] = []
+            for item in data_list:
+                if not isinstance(item, dict):
+                    continue
+                if item.get("account_name") == account_name:
+                    removed_entries += 1
+                else:
+                    kept.append(item)
+
+            if not kept:
+                try:
+                    legacy_file.unlink()
+                    removed_files += 1
+                except Exception:
+                    pass
+            else:
+                try:
+                    with open(legacy_file, "w", encoding="utf-8") as f:
+                        json.dump(kept, f, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
+
+        return {"removed_files": removed_files, "removed_entries": removed_entries}
+
     def _get_last_run_info(
         self, task_dir: Path, account_name: str = ""
     ) -> Optional[Dict[str, Any]]:

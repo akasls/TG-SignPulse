@@ -33,9 +33,15 @@ async function request<T>(
   if (!res.ok) {
     // 尝试解析 JSON 错误响应
     let errorMessage = "请求失败";
+    let errorCode: string | undefined;
     try {
       const errorData = await res.json();
-      errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+      if (errorData && typeof errorData === "object") {
+        errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+        errorCode = errorData.code;
+      } else {
+        errorMessage = JSON.stringify(errorData);
+      }
     } catch {
       // 如果不是 JSON，使用文本
       try {
@@ -54,7 +60,12 @@ async function request<T>(
       }
     }
 
-    throw new Error(errorMessage);
+    const err: any = new Error(errorMessage);
+    err.status = res.status;
+    if (errorCode) {
+      err.code = errorCode;
+    }
+    throw err;
   }
   if (res.status === 204) {
     return {} as T;
@@ -452,6 +463,13 @@ export interface AccountLog {
 
 export const getAccountLogs = (token: string, accountName: string, limit: number = 100) =>
   request<AccountLog[]>(`/accounts/${accountName}/logs?limit=${limit}`, {}, token);
+
+export const clearAccountLogs = (token: string, accountName: string) =>
+  request<{ success: boolean; cleared: number; message: string; code?: string }>(
+    `/accounts/${accountName}/logs/clear`,
+    { method: "POST" },
+    token
+  );
 
 export const exportAccountLogs = async (token: string, accountName: string) => {
   const res = await fetch(`${API_BASE}/accounts/${accountName}/logs/export`, {

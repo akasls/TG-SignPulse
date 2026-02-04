@@ -51,7 +51,7 @@ import { useLanguage } from "../../../context/LanguageContext";
 
 export default function SettingsPage() {
     const router = useRouter();
-    const { t, language } = useLanguage();
+    const { t } = useLanguage();
     const { toasts, addToast, removeToast } = useToast();
     const [token, setLocalToken] = useState<string | null>(null);
     const [userLoading, setUserLoading] = useState(false);
@@ -91,6 +91,7 @@ export default function SettingsPage() {
         model: "gpt-4o",
     });
     const [aiTestResult, setAITestResult] = useState<string | null>(null);
+    const [aiTestStatus, setAITestStatus] = useState<"success" | "error" | null>(null);
     const [aiTesting, setAITesting] = useState(false);
 
     // 全局设置
@@ -104,6 +105,12 @@ export default function SettingsPage() {
     });
 
     const [checking, setChecking] = useState(true);
+
+    const formatErrorMessage = (key: string, err?: any) => {
+        const base = t(key);
+        const code = err?.code;
+        return code ? `${base} (${code})` : base;
+    };
 
     useEffect(() => {
         const tokenStr = getToken();
@@ -163,20 +170,20 @@ export default function SettingsPage() {
     const handleChangeUsername = async () => {
         if (!token) return;
         if (!usernameForm.newUsername || !usernameForm.password) {
-            addToast(language === "zh" ? "请填写完整信息" : "Please fill in all information", "error");
+            addToast(t("form_incomplete"), "error");
             return;
         }
         try {
             setUserLoading(true);
             const res = await changeUsername(token, usernameForm.newUsername, usernameForm.password);
-            addToast(language === "zh" ? "用户名修改成功" : "Username changed successfully", "success");
+            addToast(t("username_changed"), "success");
             if (res.access_token) {
                 localStorage.setItem("tg-signer-token", res.access_token);
                 setLocalToken(res.access_token);
             }
             setUsernameForm({ newUsername: "", password: "" });
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "修改失败" : "Failed to change"), "error");
+            addToast(formatErrorMessage("change_failed", err), "error");
         } finally {
             setUserLoading(false);
         }
@@ -185,20 +192,20 @@ export default function SettingsPage() {
     const handleChangePassword = async () => {
         if (!token) return;
         if (!passwordForm.oldPassword || !passwordForm.newPassword) {
-            addToast(language === "zh" ? "请填写完整信息" : "Please fill in all information", "error");
+            addToast(t("form_incomplete"), "error");
             return;
         }
         if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-            addToast(language === "zh" ? "两次输入的密码不一致" : "Passwords do not match", "error");
+            addToast(t("password_mismatch"), "error");
             return;
         }
         try {
             setPwdLoading(true);
             await changePassword(token, passwordForm.oldPassword, passwordForm.newPassword);
-            addToast(language === "zh" ? "密码修改成功" : "Password changed successfully", "success");
+            addToast(t("password_changed"), "success");
             setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" });
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "修改失败" : "Failed to change"), "error");
+            addToast(formatErrorMessage("change_failed", err), "error");
         } finally {
             setPwdLoading(false);
         }
@@ -212,7 +219,7 @@ export default function SettingsPage() {
             setTotpSecret(res.secret);
             setShowTotpSetup(true);
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "准备失败" : "Setup failed"), "error");
+            addToast(formatErrorMessage("setup_failed", err), "error");
         } finally {
             setTotpLoading(false);
         }
@@ -221,18 +228,18 @@ export default function SettingsPage() {
     const handleEnableTOTP = async () => {
         if (!token) return;
         if (!totpCode) {
-            addToast(language === "zh" ? "请输入验证码" : "Please enter code", "error");
+            addToast(t("login_code_required"), "error");
             return;
         }
         try {
             setTotpLoading(true);
             await enableTOTP(token, totpCode);
-            addToast(language === "zh" ? "两步验证已启用" : "2FA enabled", "success");
+            addToast(t("two_factor_enabled"), "success");
             setTotpEnabled(true);
             setShowTotpSetup(false);
             setTotpCode("");
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "启用失败" : "Enable failed"), "error");
+            addToast(formatErrorMessage("enable_failed", err), "error");
         } finally {
             setTotpLoading(false);
         }
@@ -240,16 +247,16 @@ export default function SettingsPage() {
 
     const handleDisableTOTP = async () => {
         if (!token) return;
-        const msg = language === "zh" ? "请输入两步验证码以停用：" : "Enter 2FA code to disable:";
+        const msg = t("two_factor_disable_prompt");
         const code = prompt(msg);
         if (!code) return;
         try {
             setTotpLoading(true);
             await disableTOTP(token, code);
-            addToast(language === "zh" ? "两步验证已停用" : "2FA disabled", "success");
+            addToast(t("two_factor_disabled"), "success");
             setTotpEnabled(false);
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "停用失败" : "Disable failed"), "error");
+            addToast(formatErrorMessage("disable_failed", err), "error");
         } finally {
             setTotpLoading(false);
         }
@@ -266,9 +273,9 @@ export default function SettingsPage() {
             a.href = url;
             a.download = "tg-signer-config.json";
             a.click();
-            addToast(language === "zh" ? "配置导出成功" : "Config exported", "success");
+            addToast(t("export_success"), "success");
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "导出失败" : "Export failed"), "error");
+            addToast(formatErrorMessage("export_failed", err), "error");
         } finally {
             setConfigLoading(false);
         }
@@ -277,19 +284,19 @@ export default function SettingsPage() {
     const handleImport = async () => {
         if (!token) return;
         if (!importConfig) {
-            addToast(language === "zh" ? "请粘贴配置内容" : "Please paste config", "error");
+            addToast(t("import_empty"), "error");
             return;
         }
         try {
             setConfigLoading(true);
-            const res = await importAllConfigs(token, importConfig, overwriteConfig);
-            addToast(res.message, "success");
+            await importAllConfigs(token, importConfig, overwriteConfig);
+            addToast(t("import_success"), "success");
             setImportConfig("");
             loadAIConfig(token);
             loadGlobalSettings(token);
             loadTelegramConfig(token);
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "导入失败" : "Import failed"), "error");
+            addToast(formatErrorMessage("import_failed", err), "error");
         } finally {
             setConfigLoading(false);
         }
@@ -300,10 +307,10 @@ export default function SettingsPage() {
         try {
             setConfigLoading(true);
             await saveAIConfig(token, aiForm);
-            addToast(language === "zh" ? "AI 配置保存成功" : "AI config saved", "success");
+            addToast(t("ai_save_success"), "success");
             loadAIConfig(token);
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "保存失败" : "Save failed"), "error");
+            addToast(formatErrorMessage("save_failed", err), "error");
         } finally {
             setConfigLoading(false);
         }
@@ -314,14 +321,18 @@ export default function SettingsPage() {
         try {
             setAITesting(true);
             setAITestResult(null);
+            setAITestStatus(null);
             const res = await testAIConnection(token);
             if (res.success) {
-                setAITestResult((language === "zh" ? "连接成功: " : "Connect Success: ") + res.message);
+                setAITestStatus("success");
+                setAITestResult(t("connect_success"));
             } else {
-                setAITestResult((language === "zh" ? "连接失败: " : "Connect Failed: ") + res.message);
+                setAITestStatus("error");
+                setAITestResult(t("connect_failed"));
             }
         } catch (err: any) {
-            setAITestResult((language === "zh" ? "测试出错: " : "Test Error: ") + err.message);
+            setAITestStatus("error");
+            setAITestResult(formatErrorMessage("test_failed", err));
         } finally {
             setAITesting(false);
         }
@@ -329,15 +340,15 @@ export default function SettingsPage() {
 
     const handleDeleteAI = async () => {
         if (!token) return;
-        if (!confirm(language === "zh" ? "确定要删除 AI 配置吗？" : "Are you sure you want to delete AI config?")) return;
+        if (!confirm(t("confirm_delete_ai"))) return;
         try {
             setConfigLoading(true);
             await deleteAIConfig(token);
-            addToast(language === "zh" ? "AI 配置已删除" : "AI config deleted", "success");
+            addToast(t("ai_delete_success"), "success");
             setAIConfigState(null);
             setAIForm({ api_key: "", base_url: "", model: "gpt-4o" });
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "删除失败" : "Delete failed"), "error");
+            addToast(formatErrorMessage("delete_failed", err), "error");
         } finally {
             setConfigLoading(false);
         }
@@ -348,9 +359,9 @@ export default function SettingsPage() {
         try {
             setConfigLoading(true);
             await saveGlobalSettings(token, globalSettings);
-            addToast(language === "zh" ? "全局设置保存成功" : "Global settings saved", "success");
+            addToast(t("global_save_success"), "success");
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "保存失败" : "Save failed"), "error");
+            addToast(formatErrorMessage("save_failed", err), "error");
         } finally {
             setConfigLoading(false);
         }
@@ -359,7 +370,7 @@ export default function SettingsPage() {
     const handleSaveTelegram = async () => {
         if (!token) return;
         if (!telegramForm.api_id || !telegramForm.api_hash) {
-            addToast(language === "zh" ? "请填写完整信息" : "Please fill in all information", "error");
+            addToast(t("form_incomplete"), "error");
             return;
         }
         try {
@@ -368,10 +379,10 @@ export default function SettingsPage() {
                 api_id: telegramForm.api_id,
                 api_hash: telegramForm.api_hash,
             });
-            addToast(language === "zh" ? "Telegram 配置保存成功" : "Telegram config saved", "success");
+            addToast(t("telegram_save_success"), "success");
             loadTelegramConfig(token);
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "保存失败" : "Save failed"), "error");
+            addToast(formatErrorMessage("save_failed", err), "error");
         } finally {
             setTelegramLoading(false);
         }
@@ -379,14 +390,14 @@ export default function SettingsPage() {
 
     const handleResetTelegram = async () => {
         if (!token) return;
-        if (!confirm(language === "zh" ? "确定要重置 Telegram 配置为默认值吗？" : "Are you sure you want to reset Telegram config to default?")) return;
+        if (!confirm(t("confirm_reset_telegram"))) return;
         try {
             setTelegramLoading(true);
             await resetTelegramConfig(token);
-            addToast(language === "zh" ? "配置已重置" : "Config reset", "success");
+            addToast(t("config_reset"), "success");
             loadTelegramConfig(token);
         } catch (err: any) {
-            addToast(err.message || (language === "zh" ? "操作失败" : "Operation failed"), "error");
+            addToast(formatErrorMessage("operation_failed", err), "error");
         } finally {
             setTelegramLoading(false);
         }
@@ -413,7 +424,7 @@ export default function SettingsPage() {
                         target="_blank"
                         rel="noreferrer"
                         className="action-btn"
-                        title="GitHub Repository"
+                        title={t("github_repo")}
                     >
                         <GithubLogo weight="bold" />
                     </a>
@@ -448,7 +459,7 @@ export default function SettingsPage() {
                                 <input
                                     type="text"
                                     className="!py-2.5 !px-4"
-                                    placeholder="New Username"
+                                    placeholder={t("new_username_placeholder")}
                                     value={usernameForm.newUsername}
                                     onChange={(e) => setUsernameForm({ ...usernameForm, newUsername: e.target.value })}
                                 />
@@ -458,7 +469,7 @@ export default function SettingsPage() {
                                 <input
                                     type="password"
                                     className="!py-2.5 !px-4"
-                                    placeholder="Verify Current Password"
+                                    placeholder={t("current_password_placeholder")}
                                     value={usernameForm.password}
                                     onChange={(e) => setUsernameForm({ ...usernameForm, password: e.target.value })}
                                 />
@@ -522,7 +533,7 @@ export default function SettingsPage() {
                                 <h2 className="text-lg font-bold">{t("2fa_settings")}</h2>
                             </div>
                             <div className={`shrink-0 bg-${totpEnabled ? 'emerald' : 'rose'}-500/10 border border-${totpEnabled ? 'emerald' : 'rose'}-500/20 text-${totpEnabled ? 'emerald' : 'rose'}-400 px-3 py-0.5 rounded-full text-[10px] font-bold`}>
-                                {totpEnabled ? "ENABLED" : "DISABLED"}
+                                {totpEnabled ? t("status_enabled") : t("status_disabled")}
                             </div>
                         </div>
 
@@ -549,7 +560,7 @@ export default function SettingsPage() {
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
                                             src={`/api/user/totp/qrcode?token=${token}`}
-                                            alt="QR Code"
+                                            alt={t("qr_alt")}
                                             className="w-28 h-28"
                                         />
                                     </div>
@@ -575,7 +586,7 @@ export default function SettingsPage() {
                                         <input
                                             value={totpCode}
                                             onChange={(e) => setTotpCode(e.target.value)}
-                                            placeholder="6 digits"
+                                            placeholder={t("totp_code_placeholder")}
                                             className="text-center text-3xl tracking-[0.8em] h-14 !py-0 w-full min-w-0 flex-[2] border-2 border-black/10 dark:border-white/10 focus:border-[#8a3ffc]/50 bg-white/5 dark:bg-white/5 rounded-2xl font-bold transition-all shadow-inner"
                                         />
                                         <button onClick={handleEnableTOTP} className="btn-gradient px-8 shrink-0 h-14 !text-sm font-bold shadow-lg flex-1" disabled={totpLoading}>
@@ -603,7 +614,7 @@ export default function SettingsPage() {
                                 <h2 className="text-lg font-bold">{t("ai_config")}</h2>
                             </div>
                             {aiConfig && (
-                                <button onClick={handleDeleteAI} className="action-btn !w-8 !h-8 !text-rose-400" title="删除 AI 配置">
+                                <button onClick={handleDeleteAI} className="action-btn !w-8 !h-8 !text-rose-400" title={t("delete_ai_config")}>
                                     <Trash weight="bold" size={16} />
                                 </button>
                             )}
@@ -626,7 +637,7 @@ export default function SettingsPage() {
                                     className="!py-2 !px-4"
                                     value={aiForm.base_url}
                                     onChange={(e) => setAIForm({ ...aiForm, base_url: e.target.value })}
-                                    placeholder="https://api.openai.com/v1"
+                                    placeholder={t("ai_base_url_placeholder")}
                                 />
                             </div>
                             <div>
@@ -649,9 +660,9 @@ export default function SettingsPage() {
                         </div>
 
                         {aiTestResult && (
-                            <div className={`mt-4 p-3 rounded-xl text-[11px] border ${aiTestResult.includes("成功") || aiTestResult.includes("Success") ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'} animate-float-up`}>
+                            <div className={`mt-4 p-3 rounded-xl text-[11px] border ${aiTestStatus === "success" ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'} animate-float-up`}>
                                 <div className="flex items-center gap-2 font-bold mb-0.5 uppercase tracking-wider text-[9px]">
-                                    {aiTestResult.includes("成功") || aiTestResult.includes("Success") ? t("process_successful") : t("process_error")}
+                                    {aiTestStatus === "success" ? t("process_successful") : t("process_error")}
                                 </div>
                                 {aiTestResult}
                             </div>
@@ -675,7 +686,7 @@ export default function SettingsPage() {
                                     className="!py-2 !px-4"
                                     value={globalSettings.sign_interval === null ? "" : globalSettings.sign_interval}
                                     onChange={(e) => setGlobalSettings({ ...globalSettings, sign_interval: e.target.value ? parseInt(e.target.value) : null })}
-                                    placeholder="留空则随机 1-120 秒"
+                                    placeholder={t("sign_interval_placeholder")}
                                 />
                                 <p className="mt-1 text-[9px] text-[#9496a1]">{t("sign_interval_desc")}</p>
                             </div>
@@ -715,7 +726,7 @@ export default function SettingsPage() {
                                     className="!py-2 !px-4"
                                     value={telegramForm.api_id}
                                     onChange={(e) => setTelegramForm({ ...telegramForm, api_id: e.target.value })}
-                                    placeholder="From my.telegram.org"
+                                    placeholder={t("tg_api_id_placeholder")}
                                 />
                             </div>
                             <div>
@@ -724,7 +735,7 @@ export default function SettingsPage() {
                                     className="!py-2 !px-4"
                                     value={telegramForm.api_hash}
                                     onChange={(e) => setTelegramForm({ ...telegramForm, api_hash: e.target.value })}
-                                    placeholder="From my.telegram.org"
+                                    placeholder={t("tg_api_hash_placeholder")}
                                 />
                             </div>
                         </div>

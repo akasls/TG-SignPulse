@@ -418,6 +418,15 @@ class AccountLogItem(BaseModel):
     created_at: str
 
 
+class ClearAccountLogsResponse(BaseModel):
+    """清理账号日志响应"""
+
+    success: bool
+    cleared: int
+    message: str
+    code: Optional[str] = None
+
+
 @router.get("/{account_name}/logs", response_model=list[AccountLogItem])
 def get_account_logs(
     account_name: str, limit: int = 100, current_user: User = Depends(get_current_user)
@@ -442,6 +451,33 @@ def get_account_logs(
         )
 
     return logs
+
+
+@router.post("/{account_name}/logs/clear", response_model=ClearAccountLogsResponse)
+def clear_account_logs(
+    account_name: str, current_user: User = Depends(get_current_user)
+):
+    """清理账号的历史日志"""
+    if not get_telegram_service().account_exists(account_name):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ACCOUNT_NOT_FOUND",
+        )
+    try:
+        from backend.services.sign_tasks import get_sign_task_service
+
+        result = get_sign_task_service().clear_account_history_logs(account_name)
+        return ClearAccountLogsResponse(
+            success=True,
+            cleared=result.get("removed_entries", 0),
+            message="Logs cleared",
+            code="LOGS_CLEARED",
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="CLEAR_LOGS_FAILED",
+        )
 
 
 @router.get("/{account_name}/logs/export")

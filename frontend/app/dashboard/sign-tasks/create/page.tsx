@@ -57,6 +57,12 @@ export default function CreateSignTaskPage() {
     const [chatSearchResults, setChatSearchResults] = useState<ChatInfo[]>([]);
     const [chatSearchLoading, setChatSearchLoading] = useState(false);
 
+    const formatErrorMessage = useCallback((key: string, err?: any) => {
+        const base = t(key);
+        const code = err?.code;
+        return code ? `${base} (${code})` : base;
+    }, [t]);
+
     // 当前编辑的 Chat
     const [editingChat, setEditingChat] = useState<{
         chat_id: number;
@@ -84,9 +90,9 @@ export default function CreateSignTaskPage() {
                 loadChats(tokenStr, data.accounts[0].name);
             }
         } catch (err: any) {
-            addToast(err.message || t("load_failed"), "error");
+            addToast(formatErrorMessage("load_failed", err), "error");
         }
-    }, [addToast, loadChats, t]);
+    }, [addToast, loadChats, formatErrorMessage]);
 
     useEffect(() => {
         const tokenStr = getToken();
@@ -123,7 +129,7 @@ export default function CreateSignTaskPage() {
                 }
             } catch (err: any) {
                 if (!cancelled) {
-                    addToast(err.message || t("load_failed"), "error");
+                    addToast(formatErrorMessage("search_failed", err), "error");
                     setChatSearchResults([]);
                 }
             } finally {
@@ -136,7 +142,7 @@ export default function CreateSignTaskPage() {
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [chatSearch, token, selectedAccount, addToast, t]);
+    }, [chatSearch, token, selectedAccount, addToast, t, formatErrorMessage]);
 
     useEffect(() => {
         if (!editingChat) {
@@ -204,7 +210,7 @@ export default function CreateSignTaskPage() {
             addToast(t("create_success"), "success");
             setTimeout(() => router.push("/dashboard/sign-tasks"), 1500);
         } catch (err: any) {
-            addToast(err.message || t("create_failed"), "error");
+            addToast(formatErrorMessage("create_failed", err), "error");
         } finally {
             setLoading(false);
         }

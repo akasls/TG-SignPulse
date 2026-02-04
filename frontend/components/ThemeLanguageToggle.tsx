@@ -6,7 +6,7 @@ import { Translate, Sun, Moon } from "@phosphor-icons/react";
 
 export function ThemeLanguageToggle() {
     const { theme, toggleTheme } = useTheme();
-    const { language, setLanguage } = useLanguage();
+    const { language, setLanguage, t } = useLanguage();
 
     return (
         <div className="flex items-center gap-4">
@@ -14,7 +14,7 @@ export function ThemeLanguageToggle() {
             <button
                 onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
                 className="action-btn"
-                title={language === 'zh' ? 'Switch to English' : '切换至中文'}
+                title={language === 'zh' ? t("switch_to_english") : t("switch_to_chinese")}
             >
                 <Translate weight="bold" />
             </button>
@@ -23,7 +23,7 @@ export function ThemeLanguageToggle() {
             <button
                 onClick={toggleTheme}
                 className="action-btn"
-                title={theme === 'dark' ? '切换至日间模式' : '切换至夜间模式'}
+                title={theme === 'dark' ? t("switch_to_light") : t("switch_to_dark")}
             >
                 {theme === 'dark' ? <Sun weight="bold" /> : <Moon weight="bold" />}
             </button>
