@@ -925,13 +925,22 @@ class TelegramService:
 
                 # 获取用户信息并持久化会话
                 try:
-                    me = await client.get_me()
-                except Exception:
-                    me = user
+                    try:
+                        me = await client.get_me()
+                    except Exception:
+                        me = user
 
-                await self._persist_client_session(
-                    client, data.get("account_name"), data.get("proxy")
-                )
+                    await self._persist_client_session(
+                        client, data.get("account_name"), data.get("proxy")
+                    )
+                except SessionPasswordNeeded:
+                    data["status"] = "password_required"
+                    data["scan_seen"] = True
+                    return {
+                        "status": "password_required",
+                        "expires_at": data.get("expires_at"),
+                        "message": "需要 2FA 密码",
+                    }
 
                 try:
                     await client.disconnect()
