@@ -922,6 +922,8 @@ class TelegramService:
                 user = types.User._parse(client, result.authorization.user)
                 await client.storage.user_id(user.id)
                 await client.storage.is_bot(False)
+                data["authorized"] = True
+                data["authorized_user"] = user
 
                 # 获取用户信息并持久化会话
                 try:
@@ -1110,8 +1112,8 @@ class TelegramService:
                 if not client.is_connected:
                     await client.connect()
 
-                if data.get("status") == "password_required":
-                    return await _finalize_password_login()
+                if data.get("status") == "password_required" or data.get("authorized"):
+                    return await _finalize_password_login(data.get("authorized_user"))
 
                 token = data.get("token")
                 migrate_dc_id = data.get("migrate_dc_id")
@@ -1157,6 +1159,8 @@ class TelegramService:
                     user = types.User._parse(client, result.authorization.user)
                     await client.storage.user_id(user.id)
                     await client.storage.is_bot(False)
+                    data["authorized"] = True
+                    data["authorized_user"] = user
 
                     try:
                         try:
