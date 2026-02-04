@@ -51,13 +51,13 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onDelete, t, language }: 
     language: string;
 }) => {
     return (
-        <div className="glass-panel p-5 flex flex-col md:flex-row md:items-center justify-between gap-5 group hover:border-[#8a3ffc]/30 transition-all">
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-[#8a3ffc]/10 flex items-center justify-center text-[#b57dff]">
+        <div className="glass-panel p-5 grid grid-cols-[1fr_auto] gap-4 md:flex md:flex-row md:items-center md:justify-between group hover:border-[#8a3ffc]/30 transition-all">
+            <div className="flex items-start gap-4 min-w-0 md:flex-1">
+                <div className="w-10 h-10 rounded-xl bg-[#8a3ffc]/10 flex items-center justify-center text-[#b57dff] shrink-0">
                     <ChatCircleText weight="bold" size={20} />
                 </div>
-                <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
                         <h3 className="font-bold truncate text-sm" title={task.name}>{task.name}</h3>
                         <span className="text-[9px] font-mono text-main/30 bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
                             {task.chats[0]?.chat_id || "-"}
@@ -79,12 +79,26 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onDelete, t, language }: 
                             </div>
                         )}
                     </div>
+                    {task.last_run ? (
+                        <div className="md:hidden text-[10px] font-mono text-main/40 flex items-center gap-2">
+                            <span className={task.last_run.success ? 'text-emerald-400' : 'text-rose-400'}>
+                                {task.last_run.success ? t("success") : t("failure")}
+                            </span>
+                            <span>
+                                {new Date(task.last_run.time).toLocaleString(language === "zh" ? 'zh-CN' : 'en-US', {
+                                    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+                                })}
+                            </span>
+                        </div>
+                    ) : (
+                        <div className="md:hidden text-[10px] text-main/20 font-bold uppercase tracking-widest italic">{t("no_data")}</div>
+                    )}
                 </div>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col items-center gap-3 border-l border-white/5 pl-3 w-14 self-start md:w-auto md:border-0 md:flex-row md:items-center md:gap-4 md:self-auto">
                 {task.last_run ? (
-                    <div className="flex flex-col items-end">
+                    <div className="hidden md:flex flex-col items-end">
                         <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${task.last_run.success ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {task.last_run.success ? <CheckCircle weight="bold" /> : <XCircle weight="bold" />}
                             {task.last_run.success ? t("success") : t("failure")}
@@ -96,14 +110,14 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onDelete, t, language }: 
                         </div>
                     </div>
                 ) : (
-                    <div className="text-[10px] text-main/20 font-bold uppercase tracking-widest italic">{t("no_data")}</div>
+                    <div className="hidden md:block text-[10px] text-main/20 font-bold uppercase tracking-widest italic">{t("no_data")}</div>
                 )}
 
-                <div className="flex flex-col md:flex-row items-center gap-1 bg-black/10 rounded-xl p-1 border border-white/5">
+                <div className="flex flex-col items-center gap-2 md:flex-row md:items-center md:gap-1 bg-black/10 rounded-xl p-1 border border-white/5">
                     <button
                         onClick={() => onRun(task.name)}
                         disabled={loading}
-                        className="action-btn !w-8 !h-8 !text-emerald-400 hover:bg-emerald-500/10"
+                        className="action-btn !w-11 !h-11 md:!w-8 md:!h-8 !text-emerald-400 hover:bg-emerald-500/10"
                         title={t("run")}
                     >
                         <Play weight="fill" size={14} />
@@ -111,7 +125,7 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onDelete, t, language }: 
                     <button
                         onClick={() => onEdit(task)}
                         disabled={loading}
-                        className="action-btn !w-8 !h-8"
+                        className="action-btn !w-11 !h-11 md:!w-8 md:!h-8"
                         title={t("edit")}
                     >
                         <PencilSimple weight="bold" size={14} />
@@ -119,7 +133,7 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onDelete, t, language }: 
                     <button
                         onClick={() => onDelete(task.name)}
                         disabled={loading}
-                        className="action-btn !w-8 !h-8 !text-rose-400 hover:bg-rose-500/10"
+                        className="action-btn !w-11 !h-11 md:!w-8 md:!h-8 !text-rose-400 hover:bg-rose-500/10"
                         title={t("delete")}
                     >
                         <Trash weight="bold" size={14} />

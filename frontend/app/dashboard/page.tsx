@@ -71,12 +71,25 @@ export default function Dashboard() {
     qr_image?: string | null;
     expires_at: string;
   } | null>(null);
+  type QrPhase = "idle" | "loading" | "ready" | "scanning" | "success" | "expired" | "error";
   const [qrStatus, setQrStatus] = useState<
     "waiting_scan" | "scanned_wait_confirm" | "success" | "expired" | "failed"
   >("waiting_scan");
+  const [qrPhase, setQrPhase] = useState<QrPhase>("idle");
   const [qrMessage, setQrMessage] = useState<string>("");
   const [qrCountdown, setQrCountdown] = useState<number>(0);
   const [qrLoading, setQrLoading] = useState(false);
+
+  const qrPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const qrCountdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const qrActiveLoginIdRef = useRef<string | null>(null);
+  const qrPollSeqRef = useRef(0);
+  const qrPhaseRef = useRef<QrPhase>(qrPhase);
+  const qrToastShownRef = useRef<Record<string, { expired?: boolean; error?: boolean }>>({});
+
+  useEffect(() => {
+    qrPhaseRef.current = qrPhase;
+  }, [qrPhase]);
 
   // 编辑账号对话框
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -246,13 +259,62 @@ export default function Dashboard() {
     }
   };
 
+  const debugQr = useCallback((payload: Record<string, any>) => {
+    if (process.env.NODE_ENV !== "production") {
+      // eslint-disable-next-line no-console
+      console.debug("[qr-login]", payload);
+    }
+  }, []);
+
+  const clearQrTimers = useCallback(() => {
+    if (qrPollTimerRef.current) {
+      clearInterval(qrPollTimerRef.current);
+      qrPollTimerRef.current = null;
+    }
+    if (qrCountdownTimerRef.current) {
+      clearInterval(qrCountdownTimerRef.current);
+      qrCountdownTimerRef.current = null;
+    }
+  }, []);
+
+  const setQrPhaseSafe = useCallback((next: QrPhase, reason: string, extra?: Record<string, any>) => {
+    setQrPhase((prev) => {
+      if (prev !== next) {
+        debugQr({
+          login_id: qrActiveLoginIdRef.current,
+          prev,
+          next,
+          reason,
+          ...extra,
+        });
+      }
+      return next;
+    });
+  }, [debugQr]);
+
+  const markToastShown = useCallback((loginId: string, kind: "expired" | "error") => {
+    if (!loginId) return;
+    if (!qrToastShownRef.current[loginId]) {
+      qrToastShownRef.current[loginId] = {};
+    }
+    qrToastShownRef.current[loginId][kind] = true;
+  }, []);
+
+  const hasToastShown = useCallback((loginId: string, kind: "expired" | "error") => {
+    if (!loginId) return false;
+    return Boolean(qrToastShownRef.current[loginId]?.[kind]);
+  }, []);
+
   const resetQrState = useCallback(() => {
+    clearQrTimers();
+    qrActiveLoginIdRef.current = null;
     setQrLogin(null);
     setQrStatus("waiting_scan");
+    setQrPhase("idle");
     setQrMessage("");
     setQrCountdown(0);
     setQrLoading(false);
-  }, []);
+  }, [clearQrTimers]);
 
   const handleStartQrLogin = async () => {
     if (!token) return;
@@ -266,16 +328,23 @@ export default function Dashboard() {
       return;
     }
     try {
+      clearQrTimers();
       setQrLoading(true);
+      setQrPhaseSafe("loading", "start");
+      qrPollSeqRef.current += 1;
       const res = await startQrLogin(token, {
         account_name: trimmedAccountName,
         proxy: loginData.proxy || undefined,
       });
       setLoginData({ ...loginData, account_name: trimmedAccountName });
       setQrLogin(res);
+      qrActiveLoginIdRef.current = res.login_id;
+      qrToastShownRef.current[res.login_id] = {};
       setQrStatus("waiting_scan");
+      setQrPhaseSafe("ready", "qr_ready", { expires_at: res.expires_at });
       setQrMessage("");
     } catch (err: any) {
+      setQrPhaseSafe("error", "start_failed");
       addToast(err.message || (language === "zh" ? "生成二维码失败" : "Failed to create QR"), "error");
     } finally {
       setQrLoading(false);
@@ -334,8 +403,17 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    if (!qrLogin?.expires_at) {
+    if (!qrLogin?.expires_at || !qrActiveLoginIdRef.current) {
       setQrCountdown(0);
+      clearQrTimers();
+      return;
+    }
+    if (!(qrPhase === "ready" || qrPhase === "scanning")) {
+      setQrCountdown(0);
+      if (qrCountdownTimerRef.current) {
+        clearInterval(qrCountdownTimerRef.current);
+        qrCountdownTimerRef.current = null;
+      }
       return;
     }
     const update = () => {
@@ -344,33 +422,51 @@ export default function Dashboard() {
       setQrCountdown(diff);
     };
     update();
-    const timer = setInterval(update, 1000);
-    return () => clearInterval(timer);
-  }, [qrLogin?.expires_at]);
+    if (qrCountdownTimerRef.current) {
+      clearInterval(qrCountdownTimerRef.current);
+    }
+    qrCountdownTimerRef.current = setInterval(update, 1000);
+    return () => {
+      if (qrCountdownTimerRef.current) {
+        clearInterval(qrCountdownTimerRef.current);
+        qrCountdownTimerRef.current = null;
+      }
+    };
+  }, [qrLogin?.expires_at, qrPhase, clearQrTimers]);
 
   useEffect(() => {
     if (!token || !qrLogin?.login_id || loginMode !== "qr" || !showAddDialog) return;
+    if (!(qrPhase === "ready" || qrPhase === "scanning")) return;
+    const loginId = qrLogin.login_id;
+    qrActiveLoginIdRef.current = loginId;
+    qrPollSeqRef.current += 1;
+    const seq = qrPollSeqRef.current;
     let stopped = false;
-    let interval: ReturnType<typeof setInterval> | null = null;
 
     const stopPolling = () => {
-      if (interval) {
-        clearInterval(interval);
-        interval = null;
+      if (qrPollTimerRef.current) {
+        clearInterval(qrPollTimerRef.current);
+        qrPollTimerRef.current = null;
       }
     };
 
     const poll = async () => {
       try {
-        const res = await getQrLoginStatus(token, qrLogin.login_id);
+        const res = await getQrLoginStatus(token, loginId);
         if (stopped) return;
-        setQrStatus(res.status as any);
+        if (qrActiveLoginIdRef.current !== loginId) return;
+        if (qrPollSeqRef.current !== seq) return;
+
+        const status = res.status as "waiting_scan" | "scanned_wait_confirm" | "success" | "expired" | "failed";
+        debugQr({ login_id: loginId, pollResult: status, message: res.message || "" });
+        setQrStatus(status);
         setQrMessage(res.message || "");
         if (res.expires_at) {
           setQrLogin((prev) => (prev ? { ...prev, expires_at: res.expires_at } : prev));
         }
 
-        if (res.status === "success") {
+        if (status === "success") {
+          setQrPhaseSafe("success", "poll_success", { status });
           addToast(t("login_success"), "success");
           stopPolling();
           resetQrState();
@@ -379,26 +475,55 @@ export default function Dashboard() {
           return;
         }
 
-        if (res.status === "expired" || res.status === "failed") {
-          if (res.message) {
-            addToast(res.message, "error");
-          }
+        if (status === "scanned_wait_confirm") {
+          setQrPhaseSafe("scanning", "poll_scanned", { status });
+          return;
+        }
+
+        if (status === "waiting_scan") {
+          setQrPhaseSafe("ready", "poll_waiting", { status });
+          return;
+        }
+
+        if (status === "expired" && qrPhaseRef.current === "scanning") {
+          debugQr({ login_id: loginId, status, ignored: true, reason: "scanning_ignore_expired" });
+          return;
+        }
+
+        if (status === "expired" || status === "failed") {
+          const nextPhase: QrPhase = status === "expired" ? "expired" : "error";
+          setQrPhaseSafe(nextPhase, "poll_terminal", { status });
           stopPolling();
+          if (!hasToastShown(loginId, "expired") && status === "expired") {
+            addToast(res.message || (language === "zh" ? "二维码已过期或不存在" : "QR expired or not found"), "error");
+            markToastShown(loginId, "expired");
+          }
+          if (!hasToastShown(loginId, "error") && status === "failed") {
+            addToast(res.message || (language === "zh" ? "扫码登录失败" : "QR login failed"), "error");
+            markToastShown(loginId, "error");
+          }
         }
       } catch (err: any) {
         if (stopped) return;
-        addToast(err.message || (language === "zh" ? "获取扫码状态失败" : "Failed to get QR status"), "error");
+        if (qrActiveLoginIdRef.current !== loginId) return;
+        if (qrPollSeqRef.current !== seq) return;
+        if (!hasToastShown(loginId, "error")) {
+          addToast(err.message || (language === "zh" ? "获取扫码状态失败" : "Failed to get QR status"), "error");
+          markToastShown(loginId, "error");
+        }
         stopPolling();
+        setQrPhaseSafe("error", "poll_error");
       }
     };
 
     poll();
-    interval = setInterval(poll, 1500);
+    stopPolling();
+    qrPollTimerRef.current = setInterval(poll, 1500);
     return () => {
       stopped = true;
       stopPolling();
     };
-  }, [token, qrLogin?.login_id, loginMode, showAddDialog, addToast, language, loadData, resetQrState, t]);
+  }, [token, qrLogin?.login_id, loginMode, showAddDialog, qrPhase, addToast, language, loadData, resetQrState, t, hasToastShown, markToastShown, setQrPhaseSafe, debugQr]);
 
   if (!token || checking) {
     return null;
@@ -631,17 +756,17 @@ export default function Dashboard() {
                         </div>
                       )}
                     </div>
-                    {qrLogin ? (
+                    {qrLogin && (qrPhase === "ready" || qrPhase === "scanning") ? (
                       <div className="text-[11px] text-main/40 font-mono text-center">
                         {t("qr_expires_in").replace("{seconds}", qrCountdown.toString())}
                       </div>
                     ) : null}
                     <div className="text-xs text-center font-bold">
-                      {qrStatus === "waiting_scan" && t("qr_waiting")}
-                      {qrStatus === "scanned_wait_confirm" && t("qr_scanned")}
-                      {qrStatus === "success" && t("qr_success")}
-                      {qrStatus === "expired" && t("qr_expired")}
-                      {qrStatus === "failed" && t("qr_failed")}
+                      {(qrPhase === "loading" || qrPhase === "ready") && t("qr_waiting")}
+                      {qrPhase === "scanning" && t("qr_scanned")}
+                      {qrPhase === "success" && t("qr_success")}
+                      {qrPhase === "expired" && t("qr_expired")}
+                      {qrPhase === "error" && t("qr_failed")}
                     </div>
                     {qrMessage ? (
                       <div className="text-[11px] text-rose-400 text-center">{qrMessage}</div>

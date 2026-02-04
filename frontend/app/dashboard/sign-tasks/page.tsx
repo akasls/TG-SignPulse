@@ -210,6 +210,7 @@ export default function SignTasksPage() {
                                     <div className="grid grid-cols-[1fr_auto] gap-3">
                                         <div className="min-w-0 space-y-2">
                                             <div className="flex items-center gap-2">
+                                                <Lightning weight="fill" size={12} className="text-[#b57dff] shrink-0" />
                                                 <span className="font-bold text-sm truncate" title={task.name}>{task.name}</span>
                                                 <span className="text-[9px] font-mono text-main/30 bg-white/5 px-1.5 py-0.5 rounded border border-white/5 shrink-0">
                                                     {task.chats[0]?.chat_id || "-"}
@@ -223,19 +224,34 @@ export default function SignTasksPage() {
                                             <span className={`inline-flex text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest border ${task.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-main/30 border-white/10'}`}>
                                                 {task.enabled ? 'Active' : 'Paused'}
                                             </span>
-                                    </div>
-                                        <div className="w-10 flex flex-col items-end gap-2 pt-[2px]">
+                                            {task.last_run ? (
+                                                <div className="text-[10px] font-mono text-main/40 flex items-center gap-2">
+                                                    <span className={task.last_run.success ? 'text-emerald-400' : 'text-rose-400'}>
+                                                        {task.last_run.success ? t("success") : t("failure")}
+                                                    </span>
+                                                    <span>
+                                                        {new Date(task.last_run.time).toLocaleString(undefined, {
+                                                            month: '2-digit',
+                                                            day: '2-digit',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        })}
+                                                    </span>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                        <div className="w-14 flex flex-col items-center gap-2 pt-[2px] border-l border-white/5 pl-2">
                                             <button
                                                 onClick={() => handleRun(task.name)}
                                                 disabled={loading}
-                                                className="action-btn !w-8 !h-8 !text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-20 disabled:cursor-not-allowed"
+                                                className="action-btn !w-11 !h-11 !text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-20 disabled:cursor-not-allowed"
                                                 title={t("run")}
                                             >
                                                 <Play weight="fill" size={14} />
                                             </button>
                                             <Link
                                                 href={`/dashboard/account-tasks/AccountTasksContent?name=${task.account_name}`}
-                                                className={`action-btn !w-8 !h-8 ${loading ? 'pointer-events-none opacity-20' : ''}`}
+                                                className={`action-btn !w-11 !h-11 ${loading ? 'pointer-events-none opacity-20' : ''}`}
                                                 title={t("edit")}
                                             >
                                                 <PencilSimple weight="bold" size={14} />
@@ -243,7 +259,7 @@ export default function SignTasksPage() {
                                             <button
                                                 onClick={() => handleDelete(task)}
                                                 disabled={loading}
-                                                className="action-btn !w-8 !h-8 !text-rose-400 hover:bg-rose-500/10 disabled:opacity-20 disabled:cursor-not-allowed"
+                                                className="action-btn !w-11 !h-11 !text-rose-400 hover:bg-rose-500/10 disabled:opacity-20 disabled:cursor-not-allowed"
                                                 title={t("delete")}
                                             >
                                                 <Trash weight="bold" size={14} />
