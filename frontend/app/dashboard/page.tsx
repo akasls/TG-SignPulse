@@ -433,14 +433,8 @@ export default function Dashboard() {
   }, [token, qrLogin?.login_id, addToast, resetQrState, loadData, t, formatErrorMessage]);
 
   const handleConfirmQrLogin = useCallback(() => {
-    if (qrPhase === "password") {
-      handleSubmitQrPassword(qrPassword);
-      return;
-    }
-    if (qrPassword) {
-      addToast(t("qr_password_saved"), "success");
-    }
-  }, [qrPhase, qrPassword, handleSubmitQrPassword, t, addToast]);
+    handleSubmitQrPassword(qrPassword);
+  }, [handleSubmitQrPassword, qrPassword]);
 
   const handleCloseAddDialog = () => {
     if (qrLogin?.login_id) {

@@ -1020,7 +1020,14 @@ class TelegramService:
             }
 
     async def submit_qr_password(self, login_id: str, password: str) -> Dict[str, Any]:
-        from pyrogram.errors import FloodWait, PasswordHashInvalid, Unauthorized
+        from pyrogram import raw, types
+        from pyrogram.errors import (
+            FloodWait,
+            PasswordHashInvalid,
+            SessionPasswordNeeded,
+            Unauthorized,
+        )
+        from pyrogram.methods.messages.inline_session import get_session
 
         data = _qr_login_sessions.get(login_id)
         if not data:
@@ -1046,47 +1053,135 @@ class TelegramService:
                 if not client.is_connected:
                     await client.connect()
 
+                token = data.get("token")
+                migrate_dc_id = data.get("migrate_dc_id")
+                result = None
                 try:
-                    await client.check_password(password)
-                except PasswordHashInvalid:
-                    await self._cleanup_qr_login(login_id)
-                    raise ValueError("两步验证密码错误")
+                    for _ in range(2):
+                        if migrate_dc_id:
+                            session = await get_session(client, migrate_dc_id)
+                            result = await session.invoke(
+                                raw.functions.auth.ImportLoginToken(token=token)
+                            )
+                        else:
+                            result = await client.invoke(
+                                raw.functions.auth.ImportLoginToken(token=token)
+                            )
 
-                try:
-                    me = await client.get_me()
-                except Exception:
-                    me = None
+                        if isinstance(result, raw.types.auth.LoginTokenMigrateTo):
+                            migrate_dc_id = result.dc_id
+                            token = result.token
+                            data["migrate_dc_id"] = migrate_dc_id
+                            data["token"] = token
+                            continue
+                        break
+                except SessionPasswordNeeded:
+                    data["status"] = "password_required"
+                    data["scan_seen"] = True
 
-                await self._persist_client_session(
-                    client, data.get("account_name"), data.get("proxy")
-                )
+                    try:
+                        await client.check_password(password)
+                    except PasswordHashInvalid:
+                        await self._cleanup_qr_login(login_id)
+                        raise ValueError("两步验证密码错误")
 
-                try:
-                    await client.disconnect()
-                except Exception:
-                    pass
+                    try:
+                        me = await client.get_me()
+                    except Exception:
+                        me = None
 
-                account_name = data.get("account_name")
-                await self._cleanup_qr_login(login_id, preserve_session=True)
-
-                account = None
-                try:
-                    accounts = self.list_accounts(force_refresh=True)
-                    account = next(
-                        (acc for acc in accounts if acc.get("name") == account_name),
-                        None,
+                    await self._persist_client_session(
+                        client, data.get("account_name"), data.get("proxy")
                     )
-                except Exception:
-                    account = None
 
-                return {
-                    "status": "success",
-                    "message": "登录成功",
-                    "account": account,
-                    "user_id": getattr(me, "id", None),
-                    "first_name": getattr(me, "first_name", None),
-                    "username": getattr(me, "username", None),
-                }
+                    try:
+                        await client.disconnect()
+                    except Exception:
+                        pass
+
+                    account_name = data.get("account_name")
+                    await self._cleanup_qr_login(login_id, preserve_session=True)
+
+                    account = None
+                    try:
+                        accounts = self.list_accounts(force_refresh=True)
+                        account = next(
+                            (acc for acc in accounts if acc.get("name") == account_name),
+                            None,
+                        )
+                    except Exception:
+                        account = None
+
+                    return {
+                        "status": "success",
+                        "message": "登录成功",
+                        "account": account,
+                        "user_id": getattr(me, "id", None),
+                        "first_name": getattr(me, "first_name", None),
+                        "username": getattr(me, "username", None),
+                    }
+
+                if isinstance(result, raw.types.auth.LoginToken):
+                    raise ValueError("请先在手机端确认登录")
+
+                if isinstance(result, raw.types.auth.LoginTokenSuccess):
+                    user = types.User._parse(client, result.authorization.user)
+                    await client.storage.user_id(user.id)
+                    await client.storage.is_bot(False)
+
+                    try:
+                        try:
+                            me = await client.get_me()
+                        except Exception:
+                            me = user
+
+                        await self._persist_client_session(
+                            client, data.get("account_name"), data.get("proxy")
+                        )
+                    except SessionPasswordNeeded:
+                        data["status"] = "password_required"
+                        data["scan_seen"] = True
+                        try:
+                            await client.check_password(password)
+                        except PasswordHashInvalid:
+                            await self._cleanup_qr_login(login_id)
+                            raise ValueError("两步验证密码错误")
+                        try:
+                            me = await client.get_me()
+                        except Exception:
+                            me = user
+                        await self._persist_client_session(
+                            client, data.get("account_name"), data.get("proxy")
+                        )
+
+                    try:
+                        await client.disconnect()
+                    except Exception:
+                        pass
+
+                    account_name = data.get("account_name")
+                    await self._cleanup_qr_login(login_id, preserve_session=True)
+
+                    account = None
+                    try:
+                        accounts = self.list_accounts(force_refresh=True)
+                        account = next(
+                            (acc for acc in accounts if acc.get("name") == account_name),
+                            None,
+                        )
+                    except Exception:
+                        account = None
+
+                    return {
+                        "status": "success",
+                        "message": "登录成功",
+                        "account": account,
+                        "user_id": getattr(me, "id", None),
+                        "first_name": getattr(me, "first_name", None),
+                        "username": getattr(me, "username", None),
+                    }
+
+                raise ValueError("请先在手机端确认登录")
 
         except FloodWait as e:
             await self._cleanup_qr_login(login_id)
