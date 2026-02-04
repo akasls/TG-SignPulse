@@ -221,7 +221,7 @@ export default function SignTasksPage() {
                                                     ? `${task.range_start} - ${task.range_end}`
                                                     : task.sign_at}
                                             </span>
-                                            <div className="space-y-1">
+                                            <div className="space-y-1 pt-2">
                                                 <span className={`inline-flex text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest border ${task.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-main/30 border-white/10'}`}>
                                                     {task.enabled ? 'Active' : 'Paused'}
                                                 </span>

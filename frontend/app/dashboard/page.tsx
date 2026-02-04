@@ -82,9 +82,11 @@ export default function Dashboard() {
 
   const qrPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrCountdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const qrPollDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qrActiveLoginIdRef = useRef<string | null>(null);
   const qrPollSeqRef = useRef(0);
   const qrPhaseRef = useRef<QrPhase>(qrPhase);
+  const qrReadyAtRef = useRef<number | null>(null);
   const qrToastShownRef = useRef<Record<string, { expired?: boolean; error?: boolean }>>({});
 
   useEffect(() => {
@@ -271,6 +273,10 @@ export default function Dashboard() {
       clearInterval(qrPollTimerRef.current);
       qrPollTimerRef.current = null;
     }
+    if (qrPollDelayRef.current) {
+      clearTimeout(qrPollDelayRef.current);
+      qrPollDelayRef.current = null;
+    }
     if (qrCountdownTimerRef.current) {
       clearInterval(qrCountdownTimerRef.current);
       qrCountdownTimerRef.current = null;
@@ -308,6 +314,7 @@ export default function Dashboard() {
   const resetQrState = useCallback(() => {
     clearQrTimers();
     qrActiveLoginIdRef.current = null;
+    qrReadyAtRef.current = null;
     setQrLogin(null);
     setQrStatus("waiting_scan");
     setQrPhase("idle");
@@ -342,6 +349,7 @@ export default function Dashboard() {
       qrToastShownRef.current[res.login_id] = {};
       setQrStatus("waiting_scan");
       setQrPhaseSafe("ready", "qr_ready", { expires_at: res.expires_at });
+      qrReadyAtRef.current = Date.now();
       setQrMessage("");
     } catch (err: any) {
       setQrPhaseSafe("error", "start_failed");
@@ -458,6 +466,18 @@ export default function Dashboard() {
         if (qrPollSeqRef.current !== seq) return;
 
         const status = res.status as "waiting_scan" | "scanned_wait_confirm" | "success" | "expired" | "failed";
+        const readyAt = qrReadyAtRef.current || 0;
+        const readyElapsed = readyAt ? Date.now() - readyAt : 0;
+        if (readyAt && readyElapsed < 10000 && (status === "expired" || status === "failed")) {
+          debugQr({
+            login_id: loginId,
+            pollResult: status,
+            ignored: true,
+            reason: "min_ready_window",
+            readyElapsed,
+          });
+          return;
+        }
         if (status === "failed" && qrPhaseRef.current === "ready") {
           debugQr({ login_id: loginId, pollResult: status, ignored: true, reason: "failed_before_scan" });
           return;
@@ -511,21 +531,35 @@ export default function Dashboard() {
         if (stopped) return;
         if (qrActiveLoginIdRef.current !== loginId) return;
         if (qrPollSeqRef.current !== seq) return;
+        const readyAt = qrReadyAtRef.current || 0;
+        const readyElapsed = readyAt ? Date.now() - readyAt : 0;
+        debugQr({ login_id: loginId, pollError: err?.message || String(err), readyElapsed });
+        if (readyAt && readyElapsed < 10000) {
+          return;
+        }
         if (!hasToastShown(loginId, "error")) {
           addToast(err.message || (language === "zh" ? "获取扫码状态失败" : "Failed to get QR status"), "error");
           markToastShown(loginId, "error");
         }
-        stopPolling();
-        setQrPhaseSafe("error", "poll_error");
       }
     };
 
-    poll();
     stopPolling();
-    qrPollTimerRef.current = setInterval(poll, 1500);
+    if (qrPollDelayRef.current) {
+      clearTimeout(qrPollDelayRef.current);
+      qrPollDelayRef.current = null;
+    }
+    qrPollDelayRef.current = setTimeout(() => {
+      poll();
+      qrPollTimerRef.current = setInterval(poll, 1500);
+    }, qrPhase === "ready" ? 3500 : 0);
     return () => {
       stopped = true;
       stopPolling();
+      if (qrPollDelayRef.current) {
+        clearTimeout(qrPollDelayRef.current);
+        qrPollDelayRef.current = null;
+      }
     };
   }, [token, qrLogin?.login_id, loginMode, showAddDialog, qrPhase, addToast, language, loadData, resetQrState, t, hasToastShown, markToastShown, setQrPhaseSafe, debugQr]);
 
