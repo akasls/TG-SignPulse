@@ -88,13 +88,10 @@ export default function Dashboard() {
   const qrPollDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qrActiveLoginIdRef = useRef<string | null>(null);
   const qrPollSeqRef = useRef(0);
-  const qrPhaseRef = useRef<QrPhase>(qrPhase);
-  const qrReadyAtRef = useRef<number | null>(null);
   const qrToastShownRef = useRef<Record<string, { expired?: boolean; error?: boolean }>>({});
-
-  useEffect(() => {
-    qrPhaseRef.current = qrPhase;
-  }, [qrPhase]);
+  const qrPollingActiveRef = useRef(false);
+  const qrRestartingRef = useRef(false);
+  const qrAutoRefreshRef = useRef(0);
 
   useEffect(() => {
     qrPasswordRef.current = qrPassword;
@@ -285,7 +282,7 @@ export default function Dashboard() {
     }
   }, []);
 
-  const clearQrTimers = useCallback(() => {
+  const clearQrPollingTimers = useCallback(() => {
     if (qrPollTimerRef.current) {
       clearInterval(qrPollTimerRef.current);
       qrPollTimerRef.current = null;
@@ -294,11 +291,20 @@ export default function Dashboard() {
       clearTimeout(qrPollDelayRef.current);
       qrPollDelayRef.current = null;
     }
+    qrPollingActiveRef.current = false;
+  }, []);
+
+  const clearQrCountdownTimer = useCallback(() => {
     if (qrCountdownTimerRef.current) {
       clearInterval(qrCountdownTimerRef.current);
       qrCountdownTimerRef.current = null;
     }
   }, []);
+
+  const clearQrTimers = useCallback(() => {
+    clearQrPollingTimers();
+    clearQrCountdownTimer();
+  }, [clearQrPollingTimers, clearQrCountdownTimer]);
 
   const setQrPhaseSafe = useCallback((next: QrPhase, reason: string, extra?: Record<string, any>) => {
     setQrPhase((prev) => {
@@ -331,7 +337,8 @@ export default function Dashboard() {
   const resetQrState = useCallback(() => {
     clearQrTimers();
     qrActiveLoginIdRef.current = null;
-    qrReadyAtRef.current = null;
+    qrRestartingRef.current = false;
+    qrAutoRefreshRef.current = 0;
     setQrLogin(null);
     setQrStatus("waiting_scan");
     setQrPhase("idle");
@@ -342,39 +349,215 @@ export default function Dashboard() {
     setQrPasswordLoading(false);
   }, [clearQrTimers]);
 
-  const handleStartQrLogin = async () => {
-    if (!token) return;
+  const performQrLoginStart = useCallback(async (options?: { autoRefresh?: boolean; silent?: boolean; reason?: string }) => {
+    if (!token) return null;
     const trimmedAccountName = normalizeAccountName(loginData.account_name);
     if (!trimmedAccountName) {
-      addToast(t("account_name_required"), "error");
-      return;
+      if (!options?.silent) {
+        addToast(t("account_name_required"), "error");
+      }
+      return null;
     }
     if (isDuplicateAccountName(trimmedAccountName)) {
-      addToast(t("account_name_duplicate"), "error");
-      return;
+      if (!options?.silent) {
+        addToast(t("account_name_duplicate"), "error");
+      }
+      return null;
     }
     try {
+      if (options?.autoRefresh) {
+        qrRestartingRef.current = true;
+      }
       clearQrTimers();
       setQrLoading(true);
-      setQrPhaseSafe("loading", "start");
-      qrPollSeqRef.current += 1;
+      setQrPhaseSafe("loading", options?.reason ?? "start");
       const res = await startQrLogin(token, {
         account_name: trimmedAccountName,
         proxy: loginData.proxy || undefined,
       });
-      setLoginData({ ...loginData, account_name: trimmedAccountName });
+      setLoginData((prev) => ({ ...prev, account_name: trimmedAccountName }));
       setQrLogin(res);
       qrActiveLoginIdRef.current = res.login_id;
       qrToastShownRef.current[res.login_id] = {};
       setQrStatus("waiting_scan");
       setQrPhaseSafe("ready", "qr_ready", { expires_at: res.expires_at });
-      qrReadyAtRef.current = Date.now();
       setQrMessage("");
+      return res;
     } catch (err: any) {
       setQrPhaseSafe("error", "start_failed");
-      addToast(formatErrorMessage("qr_create_failed", err), "error");
+      if (!options?.silent) {
+        addToast(formatErrorMessage("qr_create_failed", err), "error");
+      }
+      return null;
     } finally {
       setQrLoading(false);
+      qrRestartingRef.current = false;
+    }
+  }, [
+    token,
+    loginData.account_name,
+    loginData.proxy,
+    addToast,
+    clearQrTimers,
+    formatErrorMessage,
+    isDuplicateAccountName,
+    normalizeAccountName,
+    setQrPhaseSafe,
+    t,
+  ]);
+
+  const startQrPolling = useCallback((loginId: string, reason: string = "effect") => {
+    if (!token || !loginId) return;
+    if (loginMode !== "qr" || !showAddDialog) return;
+    if (qrPollingActiveRef.current && qrActiveLoginIdRef.current === loginId) {
+      debugQr({ login_id: loginId, poll: "skip", reason });
+      return;
+    }
+
+    clearQrPollingTimers();
+    qrActiveLoginIdRef.current = loginId;
+    qrPollingActiveRef.current = true;
+    qrPollSeqRef.current += 1;
+    const seq = qrPollSeqRef.current;
+    let stopped = false;
+
+    const stopPolling = () => {
+      if (stopped) return;
+      stopped = true;
+      clearQrPollingTimers();
+    };
+
+    const shouldAutoRefresh = () => {
+      const now = Date.now();
+      if (now - qrAutoRefreshRef.current < 1200) {
+        return false;
+      }
+      qrAutoRefreshRef.current = now;
+      return true;
+    };
+
+    const poll = async () => {
+      try {
+        if (qrRestartingRef.current) return;
+        const res = await getQrLoginStatus(token, loginId);
+        if (stopped) return;
+        if (qrActiveLoginIdRef.current !== loginId) return;
+        if (qrPollSeqRef.current !== seq) return;
+
+        const status = res.status as "waiting_scan" | "scanned_wait_confirm" | "password_required" | "success" | "expired" | "failed";
+        debugQr({ login_id: loginId, pollResult: status, message: res.message || "" });
+        setQrStatus(status);
+        if (status !== "password_required") {
+          setQrMessage("");
+        }
+        if (res.expires_at) {
+          setQrLogin((prev) => (prev ? { ...prev, expires_at: res.expires_at } : prev));
+        }
+
+        if (status === "success") {
+          setQrPhaseSafe("success", "poll_success", { status });
+          addToast(t("login_success"), "success");
+          stopPolling();
+          resetQrState();
+          setShowAddDialog(false);
+          loadData(token);
+          return;
+        }
+
+        if (status === "password_required") {
+          setQrPhaseSafe("password", "poll_password_required", { status });
+          stopPolling();
+          const passwordValue = qrPasswordRef.current;
+          const isSubmitting = qrPasswordLoadingRef.current;
+          if (passwordValue && !isSubmitting) {
+            handleSubmitQrPassword(passwordValue);
+            return;
+          }
+          setQrMessage(t("qr_password_required"));
+          return;
+        }
+
+        if (status === "scanned_wait_confirm") {
+          setQrPhaseSafe("scanning", "poll_scanned", { status });
+          return;
+        }
+
+        if (status === "waiting_scan") {
+          setQrPhaseSafe("ready", "poll_waiting", { status });
+          return;
+        }
+
+        if (status === "expired") {
+          stopPolling();
+          setQrPhaseSafe("loading", "auto_refresh", { status });
+          if (!shouldAutoRefresh()) {
+            return;
+          }
+          const refreshed = await performQrLoginStart({
+            autoRefresh: true,
+            silent: true,
+            reason: "auto_refresh",
+          });
+          if (refreshed?.login_id) {
+            startQrPolling(refreshed.login_id, "auto_refresh");
+            return;
+          }
+          setQrPhaseSafe("expired", "auto_refresh_failed", { status });
+          if (!hasToastShown(loginId, "expired")) {
+            addToast(t("qr_expired_not_found"), "error");
+            markToastShown(loginId, "expired");
+          }
+          return;
+        }
+
+        if (status === "failed") {
+          setQrPhaseSafe("error", "poll_terminal", { status });
+          stopPolling();
+          if (!hasToastShown(loginId, "error")) {
+            addToast(t("qr_login_failed"), "error");
+            markToastShown(loginId, "error");
+          }
+        }
+      } catch (err: any) {
+        if (stopped) return;
+        if (qrActiveLoginIdRef.current !== loginId) return;
+        if (qrPollSeqRef.current !== seq) return;
+        debugQr({ login_id: loginId, pollError: err?.message || String(err) });
+        if (!hasToastShown(loginId, "error")) {
+          addToast(formatErrorMessage("qr_status_failed", err), "error");
+          markToastShown(loginId, "error");
+        }
+      }
+    };
+
+    qrPollDelayRef.current = setTimeout(() => {
+      poll();
+      qrPollTimerRef.current = setInterval(poll, 1500);
+    }, 0);
+
+    return stopPolling;
+  }, [
+    token,
+    loginMode,
+    showAddDialog,
+    addToast,
+    clearQrPollingTimers,
+    debugQr,
+    formatErrorMessage,
+    handleSubmitQrPassword,
+    hasToastShown,
+    loadData,
+    markToastShown,
+    performQrLoginStart,
+    resetQrState,
+    setQrPhaseSafe,
+    t,
+  ]);
+
+  const handleStartQrLogin = async () => {
+    const res = await performQrLoginStart();
+    if (res?.login_id) {
+      startQrPolling(res.login_id, "start_success");
     }
   };
 
@@ -513,138 +696,12 @@ export default function Dashboard() {
   useEffect(() => {
     if (!token || !qrLogin?.login_id || loginMode !== "qr" || !showAddDialog) return;
     if (qrPhase === "success" || qrPhase === "expired" || qrPhase === "error" || qrPhase === "password") return;
-    const loginId = qrLogin.login_id;
-    qrActiveLoginIdRef.current = loginId;
-    qrPollSeqRef.current += 1;
-    const seq = qrPollSeqRef.current;
-    let stopped = false;
-
-    const stopPolling = () => {
-      if (qrPollTimerRef.current) {
-        clearInterval(qrPollTimerRef.current);
-        qrPollTimerRef.current = null;
-      }
-    };
-
-    const poll = async () => {
-      try {
-        const res = await getQrLoginStatus(token, loginId);
-        if (stopped) return;
-        if (qrActiveLoginIdRef.current !== loginId) return;
-        if (qrPollSeqRef.current !== seq) return;
-
-        const status = res.status as "waiting_scan" | "scanned_wait_confirm" | "password_required" | "success" | "expired" | "failed";
-        const readyAt = qrReadyAtRef.current || 0;
-        const readyElapsed = readyAt ? Date.now() - readyAt : 0;
-        if (readyAt && readyElapsed < 10000 && (status === "expired" || status === "failed")) {
-          debugQr({
-            login_id: loginId,
-            pollResult: status,
-            ignored: true,
-            reason: "min_ready_window",
-            readyElapsed,
-          });
-          return;
-        }
-        if (status === "failed" && qrPhaseRef.current === "ready") {
-          debugQr({ login_id: loginId, pollResult: status, ignored: true, reason: "failed_before_scan" });
-          return;
-        }
-        debugQr({ login_id: loginId, pollResult: status, message: res.message || "" });
-        setQrStatus(status);
-        if (status !== "password_required") {
-          setQrMessage("");
-        }
-        if (res.expires_at) {
-          setQrLogin((prev) => (prev ? { ...prev, expires_at: res.expires_at } : prev));
-        }
-
-        if (status === "success") {
-          setQrPhaseSafe("success", "poll_success", { status });
-          addToast(t("login_success"), "success");
-          stopPolling();
-          resetQrState();
-          setShowAddDialog(false);
-          loadData(token);
-          return;
-        }
-
-        if (status === "password_required") {
-          setQrPhaseSafe("password", "poll_password_required", { status });
-          stopPolling();
-          const passwordValue = qrPasswordRef.current;
-          const isSubmitting = qrPasswordLoadingRef.current;
-          if (passwordValue && !isSubmitting) {
-            handleSubmitQrPassword(passwordValue);
-            return;
-          }
-          setQrMessage(t("qr_password_required"));
-          return;
-        }
-
-        if (status === "scanned_wait_confirm") {
-          setQrPhaseSafe("scanning", "poll_scanned", { status });
-          return;
-        }
-
-        if (status === "waiting_scan") {
-          setQrPhaseSafe("ready", "poll_waiting", { status });
-          return;
-        }
-
-        if (status === "expired" && qrPhaseRef.current === "scanning") {
-          debugQr({ login_id: loginId, status, ignored: true, reason: "scanning_ignore_expired" });
-          return;
-        }
-
-        if (status === "expired" || status === "failed") {
-          const nextPhase: QrPhase = status === "expired" ? "expired" : "error";
-          setQrPhaseSafe(nextPhase, "poll_terminal", { status });
-          stopPolling();
-          if (!hasToastShown(loginId, "expired") && status === "expired") {
-            addToast(t("qr_expired_not_found"), "error");
-            markToastShown(loginId, "expired");
-          }
-          if (!hasToastShown(loginId, "error") && status === "failed") {
-            addToast(t("qr_login_failed"), "error");
-            markToastShown(loginId, "error");
-          }
-        }
-      } catch (err: any) {
-        if (stopped) return;
-        if (qrActiveLoginIdRef.current !== loginId) return;
-        if (qrPollSeqRef.current !== seq) return;
-        const readyAt = qrReadyAtRef.current || 0;
-        const readyElapsed = readyAt ? Date.now() - readyAt : 0;
-        debugQr({ login_id: loginId, pollError: err?.message || String(err), readyElapsed });
-        if (readyAt && readyElapsed < 10000) {
-          return;
-        }
-        if (!hasToastShown(loginId, "error")) {
-          addToast(formatErrorMessage("qr_status_failed", err), "error");
-          markToastShown(loginId, "error");
-        }
-      }
-    };
-
-    stopPolling();
-    if (qrPollDelayRef.current) {
-      clearTimeout(qrPollDelayRef.current);
-      qrPollDelayRef.current = null;
-    }
-    qrPollDelayRef.current = setTimeout(() => {
-      poll();
-      qrPollTimerRef.current = setInterval(poll, 1500);
-    }, qrPhase === "ready" ? 3500 : 0);
+    if (qrRestartingRef.current) return;
+    const stop = startQrPolling(qrLogin.login_id, "effect");
     return () => {
-      stopped = true;
-      stopPolling();
-      if (qrPollDelayRef.current) {
-        clearTimeout(qrPollDelayRef.current);
-        qrPollDelayRef.current = null;
-      }
+      if (stop) stop();
     };
-  }, [token, qrLogin?.login_id, loginMode, showAddDialog, qrPhase, addToast, loadData, resetQrState, t, hasToastShown, markToastShown, setQrPhaseSafe, debugQr, formatErrorMessage, handleSubmitQrPassword]);
+  }, [token, qrLogin?.login_id, loginMode, showAddDialog, qrPhase, startQrPolling]);
 
   if (!token || checking) {
     return null;

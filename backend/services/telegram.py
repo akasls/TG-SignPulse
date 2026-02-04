@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import logging
 import os
 import secrets
 import time
@@ -32,6 +33,7 @@ from backend.utils.tg_session import (
 )
 
 settings = get_settings()
+logger = logging.getLogger("backend.qr_login")
 
 # 全局存储临时的登录 session
 _login_sessions = {}
@@ -634,6 +636,18 @@ class TelegramService:
             set_account_profile(account_name, proxy=proxy)
         self._accounts_cache = None
 
+    def _log_qr_state(
+        self, login_id: str, state: str, data: Optional[Dict[str, Any]] = None
+    ) -> None:
+        if not login_id:
+            return
+        if data is not None:
+            last_state = data.get("last_state_logged")
+            if last_state == state:
+                return
+            data["last_state_logged"] = state
+        logger.info("qr_login state=%s login_id=%s", state, login_id)
+
     async def _cleanup_qr_login(self, login_id: str, preserve_session: bool = False) -> None:
         data = _qr_login_sessions.pop(login_id, None)
         if not data:
@@ -681,6 +695,7 @@ class TelegramService:
         if not data:
             return
         data["status"] = "expired"
+        self._log_qr_state(login_id, "expired", data)
         await self._cleanup_qr_login(login_id)
 
     async def start_qr_login(
@@ -818,6 +833,7 @@ class TelegramService:
                 "handler": None,
             }
             _qr_login_sessions[login_id] = session_data
+            self._log_qr_state(login_id, "waiting_scan", session_data)
 
             # 监听扫码更新
             try:
@@ -839,6 +855,7 @@ class TelegramService:
                             ).isoformat() + "Z"
                         data["scan_seen"] = True
                         data["status"] = "scanned_wait_confirm"
+                        self._log_qr_state(login_id, "scanned_wait_confirm", data)
 
                 handler = client.add_handler(handlers.RawUpdateHandler(_raw_handler))
                 session_data["handler"] = handler
@@ -882,6 +899,7 @@ class TelegramService:
             }
 
         if time.time() >= data.get("expires_ts", 0):
+            self._log_qr_state(login_id, "expired", data)
             await self._cleanup_qr_login(login_id)
             return {
                 "status": "expired",
@@ -889,6 +907,7 @@ class TelegramService:
             }
 
         if data.get("status") == "password_required":
+            self._log_qr_state(login_id, "password_required", data)
             return {
                 "status": "password_required",
                 "expires_at": data.get("expires_at"),
@@ -928,6 +947,7 @@ class TelegramService:
             except SessionPasswordNeeded:
                 data["status"] = "password_required"
                 data["scan_seen"] = True
+                self._log_qr_state(login_id, "password_required", data)
                 return {
                     "status": "password_required",
                     "expires_at": data.get("expires_at"),
@@ -957,6 +977,7 @@ class TelegramService:
                     if password_state and getattr(password_state, "has_password", False):
                         data["status"] = "password_required"
                         data["scan_seen"] = True
+                        self._log_qr_state(login_id, "password_required", data)
                         return {
                             "status": "password_required",
                             "expires_at": data.get("expires_at"),
@@ -969,6 +990,7 @@ class TelegramService:
                 except SessionPasswordNeeded:
                     data["status"] = "password_required"
                     data["scan_seen"] = True
+                    self._log_qr_state(login_id, "password_required", data)
                     return {
                         "status": "password_required",
                         "expires_at": data.get("expires_at"),
@@ -980,6 +1002,7 @@ class TelegramService:
                 except Exception:
                     pass
 
+                self._log_qr_state(login_id, "success", data)
                 account_name = data.get("account_name")
                 await self._cleanup_qr_login(login_id, preserve_session=True)
 
@@ -1018,12 +1041,14 @@ class TelegramService:
                 if data.get("scan_seen")
                 else data.get("status", "waiting_scan")
             )
+            self._log_qr_state(login_id, status, data)
             return {
                 "status": status,
                 "expires_at": data.get("expires_at"),
             }
 
         except FloodWait as e:
+            self._log_qr_state(login_id, "failed", data)
             await self._cleanup_qr_login(login_id)
             return {
                 "status": "failed",
@@ -1034,18 +1059,21 @@ class TelegramService:
             if data:
                 data["status"] = "password_required"
                 data["scan_seen"] = True
+                self._log_qr_state(login_id, "password_required", data)
             return {
                 "status": "password_required",
                 "expires_at": data.get("expires_at") if data else None,
                 "message": "需要 2FA 密码",
             }
         except Unauthorized:
+            self._log_qr_state(login_id, "failed", data)
             await self._cleanup_qr_login(login_id)
             return {
                 "status": "failed",
                 "message": "登录失败，请重试",
             }
         except Exception:
+            self._log_qr_state(login_id, "failed", data)
             await self._cleanup_qr_login(login_id)
             return {
                 "status": "failed",
@@ -1103,6 +1131,7 @@ class TelegramService:
                 pass
 
             account_name = data.get("account_name")
+            self._log_qr_state(login_id, "success", data)
             await self._cleanup_qr_login(login_id, preserve_session=True)
 
             account = None
@@ -1243,8 +1272,10 @@ class TelegramService:
             raise ValueError("登录失败，请重试")
 
     async def cancel_qr_login(self, login_id: str) -> bool:
-        if login_id not in _qr_login_sessions:
+        data = _qr_login_sessions.get(login_id)
+        if not data:
             return False
+        self._log_qr_state(login_id, "cancelled", data)
         await self._cleanup_qr_login(login_id)
         return True
 
