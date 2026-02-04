@@ -664,6 +664,72 @@ class SignTaskService:
         # 如果没有缓存或强制刷新，执行刷新逻辑
         return await self.refresh_account_chats(account_name)
 
+    def search_account_chats(
+        self,
+        account_name: str,
+        query: str,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """
+        通过缓存搜索账号的 Chat 列表（不触发全量 get_dialogs）
+        """
+        cache_file = self.signs_dir / account_name / "chats_cache.json"
+
+        if limit < 1:
+            limit = 1
+        if limit > 200:
+            limit = 200
+        if offset < 0:
+            offset = 0
+
+        if not cache_file.exists():
+            return {"items": [], "total": 0, "limit": limit, "offset": offset}
+
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            return {"items": [], "total": 0, "limit": limit, "offset": offset}
+
+        if not isinstance(data, list):
+            return {"items": [], "total": 0, "limit": limit, "offset": offset}
+
+        q = (query or "").strip()
+        if not q:
+            total = len(data)
+            return {
+                "items": data[offset : offset + limit],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+
+        is_numeric = q.lstrip("-").isdigit()
+        if is_numeric or q.startswith("-100"):
+            def match(chat: Dict[str, Any]) -> bool:
+                chat_id = chat.get("id")
+                if chat_id is None:
+                    return False
+                return q in str(chat_id)
+        else:
+            q_lower = q.lower()
+
+            def match(chat: Dict[str, Any]) -> bool:
+                title = (chat.get("title") or "").lower()
+                username = (chat.get("username") or "").lower()
+                return q_lower in title or q_lower in username
+
+        filtered = [c for c in data if match(c)]
+        total = len(filtered)
+        return {
+            "items": filtered[offset : offset + limit],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+
     async def refresh_account_chats(self, account_name: str) -> List[Dict[str, Any]]:
         """
         连接 Telegram 并刷新 Chat 列表
@@ -724,7 +790,8 @@ class SignTaskService:
             client_kwargs["no_updates"] = get_no_updates_flag()
         client = get_client(**client_kwargs)
 
-        chats = []
+        chats: List[Dict[str, Any]] = []
+        logger = logging.getLogger("backend")
         try:
             # 初始化账号锁（跨服务共享）
             if account_name not in self._account_locks:
@@ -743,24 +810,47 @@ class SignTaskService:
                             # 捕获所有异常，如果是 401 等错误则说明 session 失效
                             raise ValueError(f"Session 无效或已过期: {e}")
 
-                        async for dialog in client.get_dialogs():
-                            chat = dialog.chat
+                        try:
+                            async for dialog in client.get_dialogs():
+                                try:
+                                    chat = getattr(dialog, "chat", None)
+                                    if chat is None:
+                                        logger.warning(
+                                            "get_dialogs 返回空 chat，已跳过"
+                                        )
+                                        continue
+                                    chat_id = getattr(chat, "id", None)
+                                    if chat_id is None:
+                                        logger.warning(
+                                            "get_dialogs 返回 chat.id 为空，已跳过"
+                                        )
+                                        continue
 
-                            chat_info = {
-                                "id": chat.id,
-                                "title": chat.title
-                                or chat.first_name
-                                or chat.username
-                                or str(chat.id),
-                                "username": chat.username,
-                                "type": chat.type.name.lower(),
-                            }
+                                    chat_info = {
+                                        "id": chat_id,
+                                        "title": chat.title
+                                        or chat.first_name
+                                        or chat.username
+                                        or str(chat_id),
+                                        "username": chat.username,
+                                        "type": chat.type.name.lower(),
+                                    }
 
-                            # 特殊处理机器人和私聊
-                            if chat.type == ChatType.BOT:
-                                chat_info["title"] = f"🤖 {chat_info['title']}"
+                                    # 特殊处理机器人和私聊
+                                    if chat.type == ChatType.BOT:
+                                        chat_info["title"] = f"🤖 {chat_info['title']}"
 
-                            chats.append(chat_info)
+                                    chats.append(chat_info)
+                                except Exception as e:
+                                    logger.warning(
+                                        f"处理 dialog 失败，已跳过: {type(e).__name__}: {e}"
+                                    )
+                                    continue
+                        except Exception as e:
+                            # Pyrogram 边界异常：保留已获取结果
+                            logger.warning(
+                                f"get_dialogs 中断，返回已获取结果: {type(e).__name__}: {e}"
+                            )
 
             # 保存到缓存
             account_dir = self.signs_dir / account_name

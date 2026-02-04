@@ -116,6 +116,33 @@ export interface LoginVerifyResponse {
   message: string;
 }
 
+export interface QrLoginStartRequest {
+  account_name: string;
+  proxy?: string;
+}
+
+export interface QrLoginStartResponse {
+  login_id: string;
+  qr_uri: string;
+  qr_image?: string | null;
+  expires_at: string;
+}
+
+export interface QrLoginStatusResponse {
+  status: string;
+  expires_at?: string;
+  message?: string;
+  account?: AccountInfo | null;
+  user_id?: number;
+  first_name?: string;
+  username?: string;
+}
+
+export interface QrLoginCancelResponse {
+  success: boolean;
+  message: string;
+}
+
 export interface AccountInfo {
   name: string;
   session_file: string;
@@ -153,9 +180,24 @@ export const updateAccount = (
   accountName: string,
   data: { remark?: string | null; proxy?: string | null }
 ) =>
-  request<{ success: boolean; message: string }>(`/accounts/${accountName}`, {
+  request<{ success: boolean; message: string; account?: AccountInfo | null }>(`/accounts/${accountName}`, {
     method: "PATCH",
     body: JSON.stringify(data),
+  }, token);
+
+export const startQrLogin = (token: string, data: QrLoginStartRequest) =>
+  request<QrLoginStartResponse>("/accounts/qr/start", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }, token);
+
+export const getQrLoginStatus = (token: string, loginId: string) =>
+  request<QrLoginStatusResponse>(`/accounts/qr/status?login_id=${encodeURIComponent(loginId)}`, {}, token);
+
+export const cancelQrLogin = (token: string, loginId: string) =>
+  request<QrLoginCancelResponse>("/accounts/qr/cancel", {
+    method: "POST",
+    body: JSON.stringify({ login_id: loginId }),
   }, token);
 
 // ============ 任务管理 ============
@@ -489,6 +531,13 @@ export interface ChatInfo {
   first_name?: string;
 }
 
+export interface ChatSearchResponse {
+  items: ChatInfo[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export async function listSignTasks(token: string, accountName?: string, forceRefresh?: boolean): Promise<SignTask[]> {
   const params = new URLSearchParams();
   if (accountName) params.append('account_name', accountName);
@@ -528,6 +577,20 @@ export const runSignTask = (token: string, name: string, accountName: string) =>
 
 export const getAccountChats = (token: string, accountName: string, forceRefresh?: boolean) =>
   request<ChatInfo[]>(`/sign-tasks/chats/${accountName}${forceRefresh ? '?force_refresh=true' : ''}`, {}, token);
+
+export const searchAccountChats = (
+  token: string,
+  accountName: string,
+  query: string,
+  limit: number = 50,
+  offset: number = 0
+) => {
+  const params = new URLSearchParams();
+  params.append("q", query);
+  params.append("limit", String(limit));
+  params.append("offset", String(offset));
+  return request<ChatSearchResponse>(`/sign-tasks/chats/${accountName}/search?${params.toString()}`, {}, token);
+};
 
 export const getSignTaskLogs = (token: string, name: string, accountName?: string) => {
     const params = new URLSearchParams();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, memo, useMemo } from "react";
+import { useEffect, useState, memo, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getToken } from "../../../lib/auth";
@@ -9,6 +9,7 @@ import {
     deleteSignTask,
     runSignTask,
     getAccountChats,
+    searchAccountChats,
     createSignTask,
     updateSignTask,
     SignTask,
@@ -142,6 +143,9 @@ export default function AccountTasksContent() {
     const [token, setLocalToken] = useState<string | null>(null);
     const [tasks, setTasks] = useState<SignTask[]>([]);
     const [chats, setChats] = useState<ChatInfo[]>([]);
+    const [chatSearch, setChatSearch] = useState("");
+    const [chatSearchResults, setChatSearchResults] = useState<ChatInfo[]>([]);
+    const [chatSearchLoading, setChatSearchLoading] = useState(false);
     const [loading, setLoading] = useState(false);
     const [refreshingChats, setRefreshingChats] = useState(false);
 
@@ -194,9 +198,9 @@ export default function AccountTasksContent() {
         setLocalToken(tokenStr);
         setChecking(false);
         loadData(tokenStr);
-    }, [accountName]);
+    }, [accountName, loadData]);
 
-    const loadData = async (tokenStr: string) => {
+    const loadData = useCallback(async (tokenStr: string) => {
         try {
             setLoading(true);
             const [tasksData, chatsData] = await Promise.all([
@@ -211,7 +215,48 @@ export default function AccountTasksContent() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [accountName, addToast, language]);
+
+    useEffect(() => {
+        if (!token || !accountName) return;
+        const query = chatSearch.trim();
+        if (!query) {
+            setChatSearchResults([]);
+            setChatSearchLoading(false);
+            return;
+        }
+        let cancelled = false;
+        setChatSearchLoading(true);
+        const timer = setTimeout(async () => {
+            try {
+                const res = await searchAccountChats(token, accountName, query, 50, 0);
+                if (!cancelled) {
+                    setChatSearchResults(res.items || []);
+                }
+            } catch (err: any) {
+                if (!cancelled) {
+                    addToast(err.message || (language === "zh" ? "搜索失败" : "Search failed"), "error");
+                    setChatSearchResults([]);
+                }
+            } finally {
+                if (!cancelled) {
+                    setChatSearchLoading(false);
+                }
+            }
+        }, 300);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [chatSearch, token, accountName, addToast, language]);
+
+    useEffect(() => {
+        if (!showCreateDialog && !showEditDialog) {
+            setChatSearch("");
+            setChatSearchResults([]);
+            setChatSearchLoading(false);
+        }
+    }, [showCreateDialog, showEditDialog, accountName]);
 
     const handleRefreshChats = async () => {
         if (!token || !accountName) return;
@@ -238,6 +283,25 @@ export default function AccountTasksContent() {
             addToast(err.message || (language === "zh" ? "刷新失败" : "Refresh failed"), "error");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const applyChatSelection = (chatId: number, chatName: string) => {
+        if (showCreateDialog) {
+            setNewTask({
+                ...newTask,
+                name: newTask.name || chatName,
+                chat_id: chatId,
+                chat_id_manual: chatId !== 0 ? chatId.toString() : "",
+                chat_name: chatName,
+            });
+        } else {
+            setEditTask({
+                ...editTask,
+                chat_id: chatId,
+                chat_id_manual: chatId !== 0 ? chatId.toString() : "",
+                chat_name: chatName,
+            });
         }
     };
 
@@ -659,38 +723,65 @@ export default function AccountTasksContent() {
                                                 {t("refresh_list")}
                                             </button>
                                         </div>
-                                        <select
-                                            className="!mb-0"
-                                            value={showCreateDialog ? newTask.chat_id : editTask.chat_id}
-                                            onChange={(e) => {
-                                                const id = parseInt(e.target.value);
-                                                const chat = chats.find(c => c.id === id);
-                                                const chatName = chat?.title || chat?.username || "";
-                                                if (showCreateDialog) {
-                                                    setNewTask({
-                                                        ...newTask,
-                                                        name: newTask.name || chatName,
-                                                        chat_id: id,
-                                                        chat_id_manual: id !== 0 ? id.toString() : "",
-                                                        chat_name: chatName,
-                                                    });
-                                                } else {
-                                                    setEditTask({
-                                                        ...editTask,
-                                                        chat_id: id,
-                                                        chat_id_manual: id !== 0 ? id.toString() : "",
-                                                        chat_name: chatName,
-                                                    });
-                                                }
-                                            }}
-                                        >
-                                            <option value={0}>{t("select_from_list")}</option>
-                                            {chats.map(chat => (
-                                                <option key={chat.id} value={chat.id}>
-                                                    {chat.title || chat.username || chat.id}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] text-main/40 uppercase tracking-wider">{t("search_chat")}</label>
+                                            <input
+                                                className="!mb-0"
+                                                placeholder={t("search_chat_placeholder")}
+                                                value={chatSearch}
+                                                onChange={(e) => setChatSearch(e.target.value)}
+                                            />
+                                        </div>
+                                        {chatSearch.trim() ? (
+                                            <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-white/5 bg-black/5">
+                                                {chatSearchLoading ? (
+                                                    <div className="px-3 py-2 text-xs text-main/40">{t("searching")}</div>
+                                                ) : chatSearchResults.length > 0 ? (
+                                                    <div className="flex flex-col">
+                                                        {chatSearchResults.map((chat) => {
+                                                            const title = chat.title || chat.username || String(chat.id);
+                                                            return (
+                                                                <button
+                                                                    key={chat.id}
+                                                                    type="button"
+                                                                    className="text-left px-3 py-2 hover:bg-white/5 border-b border-white/5 last:border-b-0"
+                                                                    onClick={() => {
+                                                                        applyChatSelection(chat.id, title);
+                                                                        setChatSearch("");
+                                                                        setChatSearchResults([]);
+                                                                    }}
+                                                                >
+                                                                    <div className="text-sm font-semibold truncate">{title}</div>
+                                                                    <div className="text-[10px] text-main/40 font-mono truncate">
+                                                                        {chat.id}{chat.username ? ` · @${chat.username}` : ""}
+                                                                    </div>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ) : (
+                                                    <div className="px-3 py-2 text-xs text-main/40">{t("search_no_results")}</div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <select
+                                                className="!mb-0 mt-2"
+                                                value={showCreateDialog ? newTask.chat_id : editTask.chat_id}
+                                                onChange={(e) => {
+                                                    const id = parseInt(e.target.value);
+                                                    const chat = chats.find(c => c.id === id);
+                                                    const chatName = chat?.title || chat?.username || "";
+                                                    applyChatSelection(id, chatName);
+                                                }}
+                                            >
+                                                <option value={0}>{t("select_from_list")}</option>
+                                                {chats.map(chat => (
+                                                    <option key={chat.id} value={chat.id}>
+                                                        {chat.title || chat.username || chat.id}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        )}
                                     </div>
                                     <div className="flex-1">
                                         <label className="mb-1 block">{t("manual_chat_id")}</label>

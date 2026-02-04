@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getToken } from "../../../../lib/auth";
@@ -8,6 +8,7 @@ import {
     createSignTask,
     listAccounts,
     getAccountChats,
+    searchAccountChats,
     AccountInfo,
     ChatInfo,
     SignTaskChat,
@@ -52,6 +53,9 @@ export default function CreateSignTaskPage() {
     const [accounts, setAccounts] = useState<AccountInfo[]>([]);
     const [selectedAccount, setSelectedAccount] = useState("");
     const [availableChats, setAvailableChats] = useState<ChatInfo[]>([]);
+    const [chatSearch, setChatSearch] = useState("");
+    const [chatSearchResults, setChatSearchResults] = useState<ChatInfo[]>([]);
+    const [chatSearchLoading, setChatSearchLoading] = useState(false);
 
     // 当前编辑的 Chat
     const [editingChat, setEditingChat] = useState<{
@@ -62,17 +66,16 @@ export default function CreateSignTaskPage() {
         action_interval: number;
     } | null>(null);
 
-    useEffect(() => {
-        const tokenStr = getToken();
-        if (!tokenStr) {
-            router.replace("/");
-            return;
+    const loadChats = useCallback(async (tokenStr: string, accountName: string) => {
+        try {
+            const chatsData = await getAccountChats(tokenStr, accountName);
+            setAvailableChats(chatsData);
+        } catch (err: any) {
+            console.error("加载 Chat 失败:", err);
         }
-        setLocalToken(tokenStr);
-        loadAccounts(tokenStr);
-    }, [router]);
+    }, []);
 
-    const loadAccounts = async (tokenStr: string) => {
+    const loadAccounts = useCallback(async (tokenStr: string) => {
         try {
             const data = await listAccounts(tokenStr);
             setAccounts(data.accounts);
@@ -83,16 +86,17 @@ export default function CreateSignTaskPage() {
         } catch (err: any) {
             addToast(err.message || t("load_failed"), "error");
         }
-    };
+    }, [addToast, loadChats, t]);
 
-    const loadChats = async (tokenStr: string, accountName: string) => {
-        try {
-            const chatsData = await getAccountChats(tokenStr, accountName);
-            setAvailableChats(chatsData);
-        } catch (err: any) {
-            console.error("加载 Chat 失败:", err);
+    useEffect(() => {
+        const tokenStr = getToken();
+        if (!tokenStr) {
+            router.replace("/");
+            return;
         }
-    };
+        setLocalToken(tokenStr);
+        loadAccounts(tokenStr);
+    }, [router, loadAccounts]);
 
     const handleAccountChange = (accountName: string) => {
         setSelectedAccount(accountName);
@@ -100,6 +104,47 @@ export default function CreateSignTaskPage() {
             loadChats(token, accountName);
         }
     };
+
+    useEffect(() => {
+        if (!token || !selectedAccount) return;
+        const query = chatSearch.trim();
+        if (!query) {
+            setChatSearchResults([]);
+            setChatSearchLoading(false);
+            return;
+        }
+        let cancelled = false;
+        setChatSearchLoading(true);
+        const timer = setTimeout(async () => {
+            try {
+                const res = await searchAccountChats(token, selectedAccount, query, 50, 0);
+                if (!cancelled) {
+                    setChatSearchResults(res.items || []);
+                }
+            } catch (err: any) {
+                if (!cancelled) {
+                    addToast(err.message || t("load_failed"), "error");
+                    setChatSearchResults([]);
+                }
+            } finally {
+                if (!cancelled) {
+                    setChatSearchLoading(false);
+                }
+            }
+        }, 300);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [chatSearch, token, selectedAccount, addToast, t]);
+
+    useEffect(() => {
+        if (!editingChat) {
+            setChatSearch("");
+            setChatSearchResults([]);
+            setChatSearchLoading(false);
+        }
+    }, [editingChat, selectedAccount]);
 
     const handleAddChat = () => {
         setEditingChat({
@@ -339,17 +384,60 @@ export default function CreateSignTaskPage() {
                             <div className="p-6 space-y-6">
                                 <div className="space-y-2">
                                     <label className="text-xs uppercase tracking-widest font-bold text-main/40">{t("select_target_chat")}</label>
-                                    <select
-                                        value={editingChat.chat_id}
-                                        onChange={(e) => {
-                                            const cid = parseInt(e.target.value);
-                                            const chat = availableChats.find(c => c.id === cid);
-                                            setEditingChat({ ...editingChat, chat_id: cid, name: chat?.title || chat?.username || "" });
-                                        }}
-                                    >
-                                        <option value={0}>{t("select_chat_placeholder")}</option>
-                                        {availableChats.map(c => <option key={c.id} value={c.id}>{c.title || c.username}</option>)}
-                                    </select>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] text-main/40 uppercase tracking-wider">{t("search_chat")}</label>
+                                        <input
+                                            className="!mb-0"
+                                            placeholder={t("search_chat_placeholder")}
+                                            value={chatSearch}
+                                            onChange={(e) => setChatSearch(e.target.value)}
+                                        />
+                                    </div>
+                                    {chatSearch.trim() ? (
+                                        <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-white/5 bg-black/5">
+                                            {chatSearchLoading ? (
+                                                <div className="px-3 py-2 text-xs text-main/40">{t("searching")}</div>
+                                            ) : chatSearchResults.length > 0 ? (
+                                                <div className="flex flex-col">
+                                                    {chatSearchResults.map((chat) => {
+                                                        const title = chat.title || chat.username || String(chat.id);
+                                                        return (
+                                                            <button
+                                                                key={chat.id}
+                                                                type="button"
+                                                                className="text-left px-3 py-2 hover:bg-white/5 border-b border-white/5 last:border-b-0"
+                                                                onClick={() => {
+                                                                    setEditingChat({ ...editingChat, chat_id: chat.id, name: title });
+                                                                    setChatSearch("");
+                                                                    setChatSearchResults([]);
+                                                                }}
+                                                            >
+                                                                <div className="text-sm font-semibold truncate">{title}</div>
+                                                                <div className="text-[10px] text-main/40 font-mono truncate">
+                                                                    {chat.id}{chat.username ? ` · @${chat.username}` : ""}
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <div className="px-3 py-2 text-xs text-main/40">{t("search_no_results")}</div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <select
+                                            className="mt-2"
+                                            value={editingChat.chat_id}
+                                            onChange={(e) => {
+                                                const cid = parseInt(e.target.value);
+                                                const chat = availableChats.find(c => c.id === cid);
+                                                setEditingChat({ ...editingChat, chat_id: cid, name: chat?.title || chat?.username || "" });
+                                            }}
+                                        >
+                                            <option value={0}>{t("select_chat_placeholder")}</option>
+                                            {availableChats.map(c => <option key={c.id} value={c.id}>{c.title || c.username}</option>)}
+                                        </select>
+                                    )}
                                 </div>
 
                                 <div className="space-y-4">

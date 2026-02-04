@@ -6,7 +6,11 @@ Telegram 服务层
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
+import secrets
+import time
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from backend.core.config import get_settings
@@ -31,6 +35,7 @@ settings = get_settings()
 
 # 全局存储临时的登录 session
 _login_sessions = {}
+_qr_login_sessions = {}
 
 
 class TelegramService:
@@ -574,6 +579,368 @@ class TelegramService:
                 raise ValueError("此账号启用了两步验证，请输入 2FA 密码")
             else:
                 raise ValueError(f"登录失败: {error_msg}")
+
+    async def _persist_client_session(
+        self, client, account_name: str, proxy: Optional[str] = None
+    ) -> None:
+        session_mode = get_session_mode()
+        if session_mode == "string":
+            session_string = await client.export_session_string()
+            if not session_string:
+                raise ValueError("导出 session_string 失败")
+            set_account_session_string(account_name, session_string)
+            save_session_string_file(self.session_dir, account_name, session_string)
+        if proxy:
+            from backend.utils.tg_session import set_account_profile
+
+            set_account_profile(account_name, proxy=proxy)
+        self._accounts_cache = None
+
+    async def _cleanup_qr_login(self, login_id: str) -> None:
+        data = _qr_login_sessions.pop(login_id, None)
+        if not data:
+            return
+        client = data.get("client")
+        handler = data.get("handler")
+        if client and handler:
+            try:
+                client.remove_handler(*handler)
+            except Exception:
+                pass
+        if client:
+            try:
+                await client.dispatcher.stop(clear=False)
+            except Exception:
+                pass
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+        lock = data.get("lock")
+        if lock and lock.locked():
+            lock.release()
+
+    async def _expire_qr_login(self, login_id: str, expires_ts: int) -> None:
+        wait_seconds = max(0, int(expires_ts - time.time()))
+        if wait_seconds:
+            await asyncio.sleep(wait_seconds)
+        data = _qr_login_sessions.get(login_id)
+        if not data:
+            return
+        data["status"] = "expired"
+        await self._cleanup_qr_login(login_id)
+
+    async def start_qr_login(
+        self, account_name: str, proxy: Optional[str] = None
+    ) -> Dict[str, Any]:
+        import gc
+
+        from pyrogram import Client, filters, handlers, raw
+        from pyrogram.errors import FloodWait
+
+        from tg_signer.core import close_client_by_name
+
+        account_lock = get_account_lock(account_name)
+        session_mode = get_session_mode()
+        no_updates = get_no_updates_flag()
+        global_semaphore = get_global_semaphore()
+
+        # 清理同账号残留的扫码会话
+        for key, value in list(_qr_login_sessions.items()):
+            if value.get("account_name") == account_name:
+                await self._cleanup_qr_login(key)
+
+        await account_lock.acquire()
+
+        def _release_account_lock() -> None:
+            if account_lock.locked():
+                account_lock.release()
+
+        # 清理后台客户端
+        try:
+            await close_client_by_name(account_name, workdir=self.session_dir)
+        except Exception:
+            pass
+
+        gc.collect()
+
+        # API credentials
+        from backend.services.config import get_config_service
+
+        config_service = get_config_service()
+        tg_config = config_service.get_telegram_config()
+        api_id = os.getenv("TG_API_ID") or tg_config.get("api_id")
+        api_hash = os.getenv("TG_API_HASH") or tg_config.get("api_hash")
+
+        try:
+            api_id = int(api_id) if api_id is not None else None
+        except (TypeError, ValueError):
+            api_id = None
+
+        if isinstance(api_hash, str):
+            api_hash = api_hash.strip()
+
+        if not api_id or not api_hash:
+            _release_account_lock()
+            raise ValueError("Telegram API ID / API Hash 未配置或无效")
+
+        proxy_dict = build_proxy_dict(proxy) if proxy else None
+
+        # 清理旧 session 文件（与手机号登录保持一致）
+        if session_mode == "file":
+            session_file = self.session_dir / f"{account_name}.session"
+            if session_file.exists():
+                try:
+                    session_file.unlink()
+                    for ext in [".session-journal", ".session-wal", ".session-shm"]:
+                        aux_file = self.session_dir / f"{account_name}{ext}"
+                        if aux_file.exists():
+                            aux_file.unlink()
+                except OSError:
+                    pass
+
+        session_path = str(self.session_dir / account_name)
+        client_kwargs = {
+            "name": session_path,
+            "api_id": api_id,
+            "api_hash": api_hash,
+            "proxy": proxy_dict,
+            "in_memory": session_mode == "string",
+        }
+        if session_mode == "string":
+            client_kwargs["no_updates"] = no_updates
+        client = Client(**client_kwargs)
+
+        try:
+            async with global_semaphore:
+                await client.connect()
+
+                if hasattr(client, "storage") and getattr(client.storage, "conn", None):
+                    try:
+                        client.storage.conn.execute("PRAGMA journal_mode=WAL")
+                        client.storage.conn.execute("PRAGMA busy_timeout=30000")
+                    except Exception:
+                        pass
+
+                result = await client.invoke(
+                    raw.functions.auth.ExportLoginToken(
+                        api_id=api_id, api_hash=api_hash, except_ids=[]
+                    )
+                )
+
+            token_bytes = getattr(result, "token", None)
+            if not token_bytes:
+                raise ValueError("获取二维码 token 失败")
+
+            token_expires = getattr(result, "expires", None)
+            expires_ts = (
+                int(token_expires)
+                if token_expires
+                else int(time.time()) + 300
+            )
+            expires_at = datetime.utcfromtimestamp(expires_ts).isoformat() + "Z"
+            qr_uri = "tg://login?token=" + base64.urlsafe_b64encode(
+                token_bytes
+            ).decode("utf-8")
+
+            login_id = secrets.token_urlsafe(16)
+
+            session_data = {
+                "account_name": account_name,
+                "proxy": proxy,
+                "client": client,
+                "token": token_bytes,
+                "expires_ts": expires_ts,
+                "expires_at": expires_at,
+                "status": "waiting_scan",
+                "scan_seen": False,
+                "lock": account_lock,
+                "migrate_dc_id": getattr(result, "dc_id", None),
+                "handler": None,
+            }
+            _qr_login_sessions[login_id] = session_data
+
+            # 监听扫码更新
+            try:
+                def _filter(_, __, update):
+                    return isinstance(update, raw.types.UpdateLoginToken)
+
+                async def _raw_handler(_, __, ___, ____):
+                    data = _qr_login_sessions.get(login_id)
+                    if data and data.get("status") in ("waiting_scan", "scanned_wait_confirm"):
+                        data["scan_seen"] = True
+                        data["status"] = "scanned_wait_confirm"
+
+                handler = client.add_handler(
+                    handlers.RawUpdateHandler(
+                        _raw_handler, filters=filters.create(_filter)
+                    )
+                )
+                session_data["handler"] = handler
+                await client.dispatcher.start()
+            except Exception:
+                pass
+
+            asyncio.create_task(self._expire_qr_login(login_id, expires_ts))
+
+            return {
+                "login_id": login_id,
+                "qr_uri": qr_uri,
+                "expires_at": expires_at,
+            }
+
+        except FloodWait as e:
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+            _release_account_lock()
+            raise ValueError(f"请求过于频繁，请等待 {e.value} 秒后重试")
+        except Exception as e:
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+            _release_account_lock()
+            raise ValueError(f"获取二维码失败: {str(e)}")
+
+    async def get_qr_login_status(self, login_id: str) -> Dict[str, Any]:
+        from pyrogram import raw, types
+        from pyrogram.errors import FloodWait, Unauthorized
+        from pyrogram.methods.messages.inline_session import get_session
+
+        data = _qr_login_sessions.get(login_id)
+        if not data:
+            return {
+                "status": "expired",
+                "message": "二维码已过期或不存在",
+            }
+
+        if time.time() >= data.get("expires_ts", 0):
+            await self._cleanup_qr_login(login_id)
+            return {
+                "status": "expired",
+                "message": "二维码已过期",
+            }
+
+        client = data.get("client")
+        token = data.get("token")
+        migrate_dc_id = data.get("migrate_dc_id")
+
+        try:
+            if not client.is_connected:
+                await client.connect()
+
+            result = None
+            # 尝试导入 token（处理 DC 迁移）
+            for _ in range(2):
+                if migrate_dc_id:
+                    session = await get_session(client, migrate_dc_id)
+                    result = await session.invoke(
+                        raw.functions.auth.ImportLoginToken(token=token)
+                    )
+                else:
+                    result = await client.invoke(
+                        raw.functions.auth.ImportLoginToken(token=token)
+                    )
+
+                if isinstance(result, raw.types.auth.LoginTokenMigrateTo):
+                    migrate_dc_id = result.dc_id
+                    token = result.token
+                    data["migrate_dc_id"] = migrate_dc_id
+                    data["token"] = token
+                    data["status"] = "scanned_wait_confirm"
+                    continue
+                break
+
+            if isinstance(result, raw.types.auth.LoginTokenSuccess):
+                # 标记授权用户
+                user = types.User._parse(client, result.authorization.user)
+                await client.storage.user_id(user.id)
+                await client.storage.is_bot(False)
+
+                # 获取用户信息并持久化会话
+                try:
+                    me = await client.get_me()
+                except Exception:
+                    me = user
+
+                await self._persist_client_session(
+                    client, data.get("account_name"), data.get("proxy")
+                )
+
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+
+                account_name = data.get("account_name")
+                await self._cleanup_qr_login(login_id)
+
+                account = None
+                try:
+                    accounts = self.list_accounts(force_refresh=True)
+                    account = next(
+                        (acc for acc in accounts if acc.get("name") == account_name),
+                        None,
+                    )
+                except Exception:
+                    account = None
+
+                return {
+                    "status": "success",
+                    "message": "登录成功",
+                    "account": account,
+                    "user_id": me.id,
+                    "first_name": me.first_name,
+                    "username": me.username,
+                }
+
+            if isinstance(result, raw.types.auth.LoginToken):
+                token_expires = getattr(result, "expires", None)
+                if token_expires:
+                    data["expires_ts"] = int(token_expires)
+                    data["expires_at"] = datetime.utcfromtimestamp(
+                        data["expires_ts"]
+                    ).isoformat() + "Z"
+                if data.get("token") != result.token:
+                    data["status"] = "scanned_wait_confirm"
+                data["token"] = result.token
+
+            status = (
+                "scanned_wait_confirm"
+                if data.get("scan_seen")
+                else data.get("status", "waiting_scan")
+            )
+            return {
+                "status": status,
+                "expires_at": data.get("expires_at"),
+            }
+
+        except FloodWait as e:
+            await self._cleanup_qr_login(login_id)
+            return {
+                "status": "failed",
+                "message": f"请求过于频繁，请等待 {e.value} 秒后重试",
+            }
+        except Unauthorized:
+            await self._cleanup_qr_login(login_id)
+            return {
+                "status": "failed",
+                "message": "登录失败，请重试",
+            }
+        except Exception:
+            await self._cleanup_qr_login(login_id)
+            return {
+                "status": "failed",
+                "message": "登录失败，请重试",
+            }
+
+    async def cancel_qr_login(self, login_id: str) -> bool:
+        if login_id not in _qr_login_sessions:
+            return False
+        await self._cleanup_qr_login(login_id)
+        return True
 
     def login_sync(
         self,

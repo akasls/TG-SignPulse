@@ -153,6 +153,15 @@ class ChatOut(BaseModel):
     first_name: Optional[str] = None
 
 
+class ChatSearchResponse(BaseModel):
+    """Chat 搜索结果"""
+
+    items: List[ChatOut]
+    total: int
+    limit: int
+    offset: int
+
+
 class RunTaskResult(BaseModel):
     """运行任务结果"""
 
@@ -338,6 +347,23 @@ async def get_account_chats(
 
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取对话列表失败: {str(e)}")
+
+
+@router.get("/chats/{account_name}/search", response_model=ChatSearchResponse)
+def search_account_chats(
+    account_name: str,
+    q: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    current_user=Depends(get_current_user),
+):
+    """搜索账号的 Chat 列表（使用缓存）"""
+    try:
+        return get_sign_task_service().search_account_chats(
+            account_name, q, limit=limit, offset=offset
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"搜索对话列表失败: {str(e)}")
 
 
 @router.websocket("/ws/{task_name}")

@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getToken } from "../../lib/auth";
 import {
   listAccounts,
   startAccountLogin,
+  startQrLogin,
+  getQrLoginStatus,
+  cancelQrLogin,
   updateAccount,
   verifyAccountLogin,
   deleteAccount,
@@ -60,6 +64,19 @@ export default function Dashboard() {
     password: "",
     phone_code_hash: "",
   });
+  const [loginMode, setLoginMode] = useState<"phone" | "qr">("phone");
+  const [qrLogin, setQrLogin] = useState<{
+    login_id: string;
+    qr_uri: string;
+    qr_image?: string | null;
+    expires_at: string;
+  } | null>(null);
+  const [qrStatus, setQrStatus] = useState<
+    "waiting_scan" | "scanned_wait_confirm" | "success" | "expired" | "failed"
+  >("waiting_scan");
+  const [qrMessage, setQrMessage] = useState<string>("");
+  const [qrCountdown, setQrCountdown] = useState<number>(0);
+  const [qrLoading, setQrLoading] = useState(false);
 
   // 编辑账号对话框
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -82,18 +99,7 @@ export default function Dashboard() {
 
   const [checking, setChecking] = useState(true);
 
-  useEffect(() => {
-    const tokenStr = getToken();
-    if (!tokenStr) {
-      window.location.replace("/");
-      return;
-    }
-    setLocalToken(tokenStr);
-    setChecking(false);
-    loadData(tokenStr);
-  }, []);
-
-  const loadData = async (tokenStr: string) => {
+  const loadData = useCallback(async (tokenStr: string) => {
     try {
       setLoading(true);
       const [accountsData, tasksData] = await Promise.all([
@@ -107,7 +113,18 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [addToast, t]);
+
+  useEffect(() => {
+    const tokenStr = getToken();
+    if (!tokenStr) {
+      window.location.replace("/");
+      return;
+    }
+    setLocalToken(tokenStr);
+    setChecking(false);
+    loadData(tokenStr);
+  }, [loadData]);
 
   const getAccountTaskCount = (accountName: string) => {
     return tasks.filter(task => task.account_name === accountName).length;
@@ -218,6 +235,65 @@ export default function Dashboard() {
     }
   };
 
+  const resetQrState = useCallback(() => {
+    setQrLogin(null);
+    setQrStatus("waiting_scan");
+    setQrMessage("");
+    setQrCountdown(0);
+    setQrLoading(false);
+  }, []);
+
+  const handleStartQrLogin = async () => {
+    if (!token) return;
+    const trimmedAccountName = normalizeAccountName(loginData.account_name);
+    if (!trimmedAccountName) {
+      addToast(language === "zh" ? "请输入账号名称" : "Please enter account name", "error");
+      return;
+    }
+    if (isDuplicateAccountName(trimmedAccountName)) {
+      addToast(language === "zh" ? "账号名已存在，请更换" : "Account name already exists. Please change it.", "error");
+      return;
+    }
+    try {
+      setQrLoading(true);
+      const res = await startQrLogin(token, {
+        account_name: trimmedAccountName,
+        proxy: loginData.proxy || undefined,
+      });
+      setLoginData({ ...loginData, account_name: trimmedAccountName });
+      setQrLogin(res);
+      setQrStatus("waiting_scan");
+      setQrMessage("");
+    } catch (err: any) {
+      addToast(err.message || (language === "zh" ? "生成二维码失败" : "Failed to create QR"), "error");
+    } finally {
+      setQrLoading(false);
+    }
+  };
+
+  const handleCancelQrLogin = async () => {
+    if (!token || !qrLogin?.login_id) {
+      resetQrState();
+      return;
+    }
+    try {
+      setQrLoading(true);
+      await cancelQrLogin(token, qrLogin.login_id);
+    } catch (err: any) {
+      addToast(err.message || (language === "zh" ? "取消失败" : "Cancel failed"), "error");
+    } finally {
+      setQrLoading(false);
+      resetQrState();
+    }
+  };
+
+  const handleCloseAddDialog = () => {
+    if (qrLogin?.login_id) {
+      handleCancelQrLogin();
+    }
+    setShowAddDialog(false);
+  };
+
   const handleShowLogs = async (name: string) => {
     if (!token) return;
     setLogsAccountName(name);
@@ -245,6 +321,73 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!qrLogin?.expires_at) {
+      setQrCountdown(0);
+      return;
+    }
+    const update = () => {
+      const expires = new Date(qrLogin.expires_at).getTime();
+      const diff = Math.max(0, Math.floor((expires - Date.now()) / 1000));
+      setQrCountdown(diff);
+    };
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [qrLogin?.expires_at]);
+
+  useEffect(() => {
+    if (!token || !qrLogin?.login_id || loginMode !== "qr" || !showAddDialog) return;
+    let stopped = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    const poll = async () => {
+      try {
+        const res = await getQrLoginStatus(token, qrLogin.login_id);
+        if (stopped) return;
+        setQrStatus(res.status as any);
+        setQrMessage(res.message || "");
+        if (res.expires_at) {
+          setQrLogin((prev) => (prev ? { ...prev, expires_at: res.expires_at } : prev));
+        }
+
+        if (res.status === "success") {
+          addToast(t("login_success"), "success");
+          stopPolling();
+          resetQrState();
+          setShowAddDialog(false);
+          loadData(token);
+          return;
+        }
+
+        if (res.status === "expired" || res.status === "failed") {
+          if (res.message) {
+            addToast(res.message, "error");
+          }
+          stopPolling();
+        }
+      } catch (err: any) {
+        if (stopped) return;
+        addToast(err.message || (language === "zh" ? "获取扫码状态失败" : "Failed to get QR status"), "error");
+        stopPolling();
+      }
+    };
+
+    poll();
+    interval = setInterval(poll, 1500);
+    return () => {
+      stopped = true;
+      stopPolling();
+    };
+  }, [token, qrLogin?.login_id, loginMode, showAddDialog, addToast, language, loadData, resetQrState, t]);
 
   if (!token || checking) {
     return null;
@@ -284,7 +427,14 @@ export default function Dashboard() {
                   <div className="card-top">
                     <div className="account-name">
                       <div className="account-avatar">{initial}</div>
-                      <span className="font-bold">{acc.name}</span>
+                      <div className="min-w-0">
+                        <div className="font-bold leading-tight truncate">{acc.name}</div>
+                        {acc.remark ? (
+                          <div className="text-xs text-main/40 leading-tight truncate">
+                            {acc.remark}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                     <div className="task-badge">
                       {getAccountTaskCount(acc.name)} {t("sidebar_tasks")}
@@ -345,72 +495,160 @@ export default function Dashboard() {
           <div className="glass-panel modal-content !max-w-[420px] !p-6" onClick={e => e.stopPropagation()}>
             <div className="modal-header !mb-5">
               <div className="modal-title !text-lg">{t("add_account")}</div>
-              <div className="modal-close" onClick={() => setShowAddDialog(false)}><X weight="bold" /></div>
+              <div className="modal-close" onClick={handleCloseAddDialog}><X weight="bold" /></div>
             </div>
 
             <div className="animate-float-up space-y-4">
-              <div>
-                <label className="text-[11px] mb-1">{t("session_name")}</label>
-                <input
-                  type="text"
-                  className="!py-2.5 !px-4 !mb-4"
-                  placeholder="e.g. Work_Account_01"
-                  value={loginData.account_name}
-                  onChange={(e) => {
-                    const cleaned = sanitizeAccountName(e.target.value);
-                    setLoginData({ ...loginData, account_name: cleaned });
+              <div className="flex gap-2">
+                <button
+                  className={`flex-1 h-9 text-xs font-bold rounded-lg ${loginMode === "phone" ? "btn-gradient" : "btn-secondary"}`}
+                  onClick={() => {
+                    if (loginMode !== "phone" && qrLogin?.login_id) {
+                      handleCancelQrLogin();
+                    }
+                    setLoginMode("phone");
                   }}
-                />
-
-                <label className="text-[11px] mb-1">{t("phone_number")}</label>
-                <input
-                  type="text"
-                  className="!py-2.5 !px-4 !mb-4"
-                  placeholder="+86 138 0000 0000"
-                  value={loginData.phone_number}
-                  onChange={(e) => setLoginData({ ...loginData, phone_number: e.target.value })}
-                />
-
-                <label className="text-[11px] mb-1">{t("login_code")}</label>
-                <div className="input-group !mb-4">
-                  <input
-                    type="text"
-                    className="!py-2.5 !px-4"
-                    placeholder={t("login_code_placeholder")}
-                    value={loginData.phone_code}
-                    onChange={(e) => setLoginData({ ...loginData, phone_code: e.target.value })}
-                  />
-                  <button className="btn-code !h-[42px] !w-[42px] !text-lg" onClick={handleStartLogin} disabled={loading} title={t("send_code")}>
-                    {loading ? <Spinner className="animate-spin" size={16} /> : <PaperPlaneRight weight="bold" />}
-                  </button>
-                </div>
-
-                <label className="text-[11px] mb-1">{t("two_step_pass")}</label>
-                <input
-                  type="password"
-                  className="!py-2.5 !px-4 !mb-4"
-                  placeholder={t("two_step_placeholder")}
-                  value={loginData.password}
-                  onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                />
-
-                <label className="text-[11px] mb-1">{t("proxy")}</label>
-                <input
-                  type="text"
-                  className="!py-2.5 !px-4"
-                  placeholder={t("proxy_placeholder")}
-                  style={{ marginBottom: 0 }}
-                  value={loginData.proxy}
-                  onChange={(e) => setLoginData({ ...loginData, proxy: e.target.value })}
-                />
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button className="btn-secondary flex-1 h-10 !py-0 !text-xs" onClick={() => setShowAddDialog(false)}>{t("cancel")}</button>
-                <button className="btn-gradient flex-1 h-10 !py-0 !text-xs" onClick={handleVerifyLogin} disabled={loading}>
-                  {loading ? <Spinner className="animate-spin" /> : t("confirm_connect")}
+                >
+                  {t("login_method_phone")}
+                </button>
+                <button
+                  className={`flex-1 h-9 text-xs font-bold rounded-lg ${loginMode === "qr" ? "btn-gradient" : "btn-secondary"}`}
+                  onClick={() => setLoginMode("qr")}
+                >
+                  {t("login_method_qr")}
                 </button>
               </div>
+
+              {loginMode === "phone" ? (
+                <>
+                  <div>
+                    <label className="text-[11px] mb-1">{t("session_name")}</label>
+                    <input
+                      type="text"
+                      className="!py-2.5 !px-4 !mb-4"
+                      placeholder="e.g. Work_Account_01"
+                      value={loginData.account_name}
+                      onChange={(e) => {
+                        const cleaned = sanitizeAccountName(e.target.value);
+                        setLoginData({ ...loginData, account_name: cleaned });
+                      }}
+                    />
+
+                    <label className="text-[11px] mb-1">{t("phone_number")}</label>
+                    <input
+                      type="text"
+                      className="!py-2.5 !px-4 !mb-4"
+                      placeholder="+86 138 0000 0000"
+                      value={loginData.phone_number}
+                      onChange={(e) => setLoginData({ ...loginData, phone_number: e.target.value })}
+                    />
+
+                    <label className="text-[11px] mb-1">{t("login_code")}</label>
+                    <div className="input-group !mb-4">
+                      <input
+                        type="text"
+                        className="!py-2.5 !px-4"
+                        placeholder={t("login_code_placeholder")}
+                        value={loginData.phone_code}
+                        onChange={(e) => setLoginData({ ...loginData, phone_code: e.target.value })}
+                      />
+                      <button className="btn-code !h-[42px] !w-[42px] !text-lg" onClick={handleStartLogin} disabled={loading} title={t("send_code")}>
+                        {loading ? <Spinner className="animate-spin" size={16} /> : <PaperPlaneRight weight="bold" />}
+                      </button>
+                    </div>
+
+                    <label className="text-[11px] mb-1">{t("two_step_pass")}</label>
+                    <input
+                      type="password"
+                      className="!py-2.5 !px-4 !mb-4"
+                      placeholder={t("two_step_placeholder")}
+                      value={loginData.password}
+                      onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                    />
+
+                    <label className="text-[11px] mb-1">{t("proxy")}</label>
+                    <input
+                      type="text"
+                      className="!py-2.5 !px-4"
+                      placeholder={t("proxy_placeholder")}
+                      style={{ marginBottom: 0 }}
+                      value={loginData.proxy}
+                      onChange={(e) => setLoginData({ ...loginData, proxy: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                    <button className="btn-secondary flex-1 h-10 !py-0 !text-xs" onClick={handleCloseAddDialog}>{t("cancel")}</button>
+                    <button className="btn-gradient flex-1 h-10 !py-0 !text-xs" onClick={handleVerifyLogin} disabled={loading}>
+                      {loading ? <Spinner className="animate-spin" /> : t("confirm_connect")}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-[11px] mb-1">{t("session_name")}</label>
+                    <input
+                      type="text"
+                      className="!py-2.5 !px-4 !mb-4"
+                      placeholder="e.g. Work_Account_01"
+                      value={loginData.account_name}
+                      onChange={(e) => {
+                        const cleaned = sanitizeAccountName(e.target.value);
+                        setLoginData({ ...loginData, account_name: cleaned });
+                      }}
+                    />
+
+                    <label className="text-[11px] mb-1">{t("proxy")}</label>
+                    <input
+                      type="text"
+                      className="!py-2.5 !px-4 !mb-4"
+                      placeholder={t("proxy_placeholder")}
+                      value={loginData.proxy}
+                      onChange={(e) => setLoginData({ ...loginData, proxy: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="glass-panel !bg-black/5 p-4 rounded-xl space-y-3">
+                    <div className="text-xs text-main/60">{t("qr_tip")}</div>
+                    <div className="flex items-center justify-center">
+                      {qrLogin?.qr_image ? (
+                        <Image src={qrLogin.qr_image} alt="QR" width={160} height={160} className="rounded-lg bg-white p-2" />
+                      ) : (
+                        <div className="w-40 h-40 rounded-lg bg-white/5 flex items-center justify-center text-xs text-main/40">
+                          {t("qr_start")}
+                        </div>
+                      )}
+                    </div>
+                    {qrLogin ? (
+                      <div className="text-[11px] text-main/40 font-mono text-center">
+                        {t("qr_expires_in").replace("{seconds}", qrCountdown.toString())}
+                      </div>
+                    ) : null}
+                    <div className="text-xs text-center font-bold">
+                      {qrStatus === "waiting_scan" && t("qr_waiting")}
+                      {qrStatus === "scanned_wait_confirm" && t("qr_scanned")}
+                      {qrStatus === "success" && t("qr_success")}
+                      {qrStatus === "expired" && t("qr_expired")}
+                      {qrStatus === "failed" && t("qr_failed")}
+                    </div>
+                    {qrMessage ? (
+                      <div className="text-[11px] text-rose-400 text-center">{qrMessage}</div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex gap-3 mt-2">
+                    <button className="btn-secondary flex-1 h-10 !py-0 !text-xs" onClick={handleCloseAddDialog}>{t("cancel")}</button>
+                    <button
+                      className="btn-gradient flex-1 h-10 !py-0 !text-xs"
+                      onClick={handleStartQrLogin}
+                      disabled={qrLoading}
+                    >
+                      {qrLoading ? <Spinner className="animate-spin" /> : (qrLogin ? t("qr_refresh") : t("qr_start"))}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

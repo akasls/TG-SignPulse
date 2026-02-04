@@ -58,6 +58,47 @@ class LoginVerifyResponse(BaseModel):
     message: str
 
 
+class QrLoginStartRequest(BaseModel):
+    """扫码登录请求"""
+
+    account_name: str
+    proxy: Optional[str] = None
+
+
+class QrLoginStartResponse(BaseModel):
+    """扫码登录开始响应"""
+
+    login_id: str
+    qr_uri: str
+    qr_image: Optional[str] = None
+    expires_at: str
+
+
+class QrLoginStatusResponse(BaseModel):
+    """扫码登录状态响应"""
+
+    status: str
+    expires_at: Optional[str] = None
+    message: Optional[str] = None
+    account: Optional[AccountInfo] = None
+    user_id: Optional[int] = None
+    first_name: Optional[str] = None
+    username: Optional[str] = None
+
+
+class QrLoginCancelRequest(BaseModel):
+    """扫码登录取消请求"""
+
+    login_id: str
+
+
+class QrLoginCancelResponse(BaseModel):
+    """扫码登录取消响应"""
+
+    success: bool
+    message: str
+
+
 class AccountInfo(BaseModel):
     """账号信息"""
 
@@ -88,6 +129,14 @@ class AccountUpdateRequest(BaseModel):
 
     remark: Optional[str] = None
     proxy: Optional[str] = None
+
+
+class AccountUpdateResponse(BaseModel):
+    """更新账号响应"""
+
+    success: bool
+    message: str
+    account: Optional[AccountInfo] = None
 
 
 # ============ API Routes ============
@@ -160,6 +209,94 @@ async def verify_account_login(
         )
 
 
+@router.post("/qr/start", response_model=QrLoginStartResponse)
+async def start_qr_login(
+    request: QrLoginStartRequest, current_user: User = Depends(get_current_user)
+):
+    """开始扫码登录流程"""
+    try:
+        result = await get_telegram_service().start_qr_login(
+            account_name=request.account_name, proxy=request.proxy
+        )
+
+        qr_image = None
+        try:
+            import base64
+            from io import BytesIO
+
+            import qrcode
+
+            qr = qrcode.QRCode(version=1, box_size=8, border=2)
+            qr.add_data(result["qr_uri"])
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            qr_image = "data:image/png;base64," + base64.b64encode(
+                buf.getvalue()
+            ).decode("utf-8")
+        except Exception:
+            qr_image = None
+
+        return QrLoginStartResponse(
+            login_id=result["login_id"],
+            qr_uri=result["qr_uri"],
+            qr_image=qr_image,
+            expires_at=result["expires_at"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"开始扫码登录失败: {str(e)}",
+        )
+
+
+@router.get("/qr/status", response_model=QrLoginStatusResponse)
+async def get_qr_login_status(
+    login_id: str, current_user: User = Depends(get_current_user)
+):
+    """获取扫码登录状态"""
+    try:
+        result = await get_telegram_service().get_qr_login_status(login_id)
+        account = result.get("account")
+        if account:
+            account = AccountInfo(**account)
+        return QrLoginStatusResponse(
+            status=result.get("status"),
+            expires_at=result.get("expires_at"),
+            message=result.get("message"),
+            account=account,
+            user_id=result.get("user_id"),
+            first_name=result.get("first_name"),
+            username=result.get("username"),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取扫码状态失败: {str(e)}",
+        )
+
+
+@router.post("/qr/cancel", response_model=QrLoginCancelResponse)
+async def cancel_qr_login(
+    request: QrLoginCancelRequest, current_user: User = Depends(get_current_user)
+):
+    """取消扫码登录"""
+    try:
+        success = await get_telegram_service().cancel_qr_login(request.login_id)
+        return QrLoginCancelResponse(
+            success=success,
+            message="已取消" if success else "登录已失效",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"取消扫码登录失败: {str(e)}",
+        )
+
+
 @router.get("", response_model=AccountListResponse)
 def list_accounts(current_user: User = Depends(get_current_user)):
     """
@@ -221,7 +358,7 @@ def check_account_exists(
     return {"exists": exists, "account_name": account_name}
 
 
-@router.patch("/{account_name}")
+@router.patch("/{account_name}", response_model=AccountUpdateResponse)
 def update_account(
     account_name: str,
     request: AccountUpdateRequest,
@@ -243,7 +380,26 @@ def update_account(
             remark=request.remark,
             proxy=request.proxy,
         )
-        return {"success": True, "message": "账号信息已更新"}
+
+        # 刷新缓存并返回更新后的账号信息
+        service = get_telegram_service()
+        updated = None
+        try:
+            accounts = service.list_accounts(force_refresh=True)
+            updated = next(
+                (acc for acc in accounts if acc.get("name") == account_name), None
+            )
+        except Exception:
+            updated = None
+
+        if not updated:
+            raise ValueError("账号信息更新后未找到对应账号")
+
+        return AccountUpdateResponse(
+            success=True,
+            message="账号信息已更新",
+            account=AccountInfo(**updated),
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

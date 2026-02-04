@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getToken } from "../../../lib/auth";
@@ -43,18 +43,7 @@ export default function SignTasksPage() {
     const [runLogs, setRunLogs] = useState<string[]>([]);
     const [isDone, setIsDone] = useState(false);
 
-    useEffect(() => {
-        const tokenStr = getToken();
-        if (!tokenStr) {
-            window.location.replace("/");
-            return;
-        }
-        setLocalToken(tokenStr);
-        setChecking(false);
-        loadData(tokenStr);
-    }, []);
-
-    const loadData = async (tokenStr: string) => {
+    const loadData = useCallback(async (tokenStr: string) => {
         try {
             setLoading(true);
             const [tasksData, accountsData] = await Promise.all([
@@ -68,7 +57,18 @@ export default function SignTasksPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [addToast, t]);
+
+    useEffect(() => {
+        const tokenStr = getToken();
+        if (!tokenStr) {
+            window.location.replace("/");
+            return;
+        }
+        setLocalToken(tokenStr);
+        setChecking(false);
+        loadData(tokenStr);
+    }, [loadData]);
 
     const handleDelete = async (task: SignTask) => {
         if (!token) return;

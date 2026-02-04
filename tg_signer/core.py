@@ -520,20 +520,40 @@ class BaseUserWorker(Generic[ConfigT]):
             me = await app.get_me()
             self.set_me(me)
             latest_chats = []
-            async for dialog in app.get_dialogs(num_of_dialogs):
-                chat = dialog.chat
-                latest_chats.append(
-                    {
-                        "id": chat.id,
-                        "title": chat.title,
-                        "type": chat.type,
-                        "username": chat.username,
-                        "first_name": chat.first_name,
-                        "last_name": chat.last_name,
-                    }
+            try:
+                async for dialog in app.get_dialogs(num_of_dialogs):
+                    try:
+                        chat = getattr(dialog, "chat", None)
+                        if chat is None:
+                            self.log("get_dialogs 返回空 chat，已跳过", level="WARNING")
+                            continue
+                        chat_id = getattr(chat, "id", None)
+                        if chat_id is None:
+                            self.log("get_dialogs 返回 chat.id 为空，已跳过", level="WARNING")
+                            continue
+                        latest_chats.append(
+                            {
+                                "id": chat_id,
+                                "title": chat.title,
+                                "type": chat.type,
+                                "username": chat.username,
+                                "first_name": chat.first_name,
+                                "last_name": chat.last_name,
+                            }
+                        )
+                        if print_chat:
+                            print_to_user(readable_chat(chat))
+                    except Exception as e:
+                        self.log(
+                            f"处理 dialog 失败，已跳过: {type(e).__name__}: {e}",
+                            level="WARNING",
+                        )
+                        continue
+            except Exception as e:
+                self.log(
+                    f"get_dialogs 中断，返回已获取结果: {type(e).__name__}: {e}",
+                    level="WARNING",
                 )
-                if print_chat:
-                    print_to_user(readable_chat(chat))
 
             with open(
                 self.get_user_dir(me).joinpath("latest_chats.json"),
@@ -868,6 +888,17 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
         self,
         chat: SignChatV3,
     ):
+        try:
+            # 预热会话，确保 peer/access_hash 可用
+            await self.app.get_chat(chat.chat_id)
+        except Exception as e:
+            self.log(
+                f"预热会话失败: chat_id={chat.chat_id}, error={type(e).__name__}: {e}",
+                level="ERROR",
+            )
+            raise RuntimeError(
+                f"Failed to preheat chat_id {chat.chat_id}: {e}"
+            ) from e
         self.log(f"开始执行: \n{chat}")
         for action in chat.actions:
             self.log(f"等待处理动作: {action}")

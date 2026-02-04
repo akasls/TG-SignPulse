@@ -146,6 +146,14 @@ frontend/     # Next.js admin UI
 
 ## Recent Updates
 
+### 2026-02-04
+
+- Added QR login: new entry, status polling, refresh/cancel on expiry; session output matches existing login.
+- Dialogs fetching made safe: per-item failures no longer cause 500; edge errors return partial results with warnings.
+- Sign execution hardened: uses saved chat_id only and preheats with get_chat; archived/not-recent chats still work; no false success.
+- Account remarks are persisted and shown on account cards (no layout change when empty).
+- Chat selection now supports search (fuzzy match, cached, paginated).
+
 ### 2026-02-03
 
 - Permission compatibility: probe `/data` on startup; fall back to `/tmp/tg-signpulse` with a warning if not writable (no behavior change when `/data` is writable).
