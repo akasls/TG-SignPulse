@@ -811,10 +811,9 @@ class TelegramService:
 
             # 监听扫码更新
             try:
-                def _filter(_, __, update):
-                    return isinstance(update, raw.types.UpdateLoginToken)
-
                 async def _raw_handler(_, update, __, ___):
+                    if not isinstance(update, raw.types.UpdateLoginToken):
+                        return
                     data = _qr_login_sessions.get(login_id)
                     if data and data.get("status") in ("waiting_scan", "scanned_wait_confirm"):
                         new_token = getattr(update, "token", None)
@@ -831,11 +830,7 @@ class TelegramService:
                         data["scan_seen"] = True
                         data["status"] = "scanned_wait_confirm"
 
-                handler = client.add_handler(
-                    handlers.RawUpdateHandler(
-                        _raw_handler, filters=filters.create(_filter)
-                    )
-                )
+                handler = client.add_handler(handlers.RawUpdateHandler(_raw_handler))
                 session_data["handler"] = handler
                 await client.dispatcher.start()
             except Exception:
