@@ -371,7 +371,8 @@ class TelegramService:
             "in_memory": session_mode == "string",
         }
         if session_mode == "string":
-            client_kwargs["no_updates"] = no_updates
+            # QR 登录需要接收 UpdateLoginToken，不应禁用 updates
+            client_kwargs["no_updates"] = False
         client = Client(**client_kwargs)
 
         try:
@@ -813,9 +814,20 @@ class TelegramService:
                 def _filter(_, __, update):
                     return isinstance(update, raw.types.UpdateLoginToken)
 
-                async def _raw_handler(_, __, ___, ____):
+                async def _raw_handler(_, update, __, ___):
                     data = _qr_login_sessions.get(login_id)
                     if data and data.get("status") in ("waiting_scan", "scanned_wait_confirm"):
+                        new_token = getattr(update, "token", None)
+                        if new_token:
+                            data["token"] = new_token
+                        token_expires = getattr(update, "expires", None)
+                        if token_expires:
+                            data["expires_ts"] = self._normalize_login_token_expires(
+                                token_expires
+                            )
+                            data["expires_at"] = datetime.utcfromtimestamp(
+                                data["expires_ts"]
+                            ).isoformat() + "Z"
                         data["scan_seen"] = True
                         data["status"] = "scanned_wait_confirm"
 
