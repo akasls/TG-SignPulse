@@ -185,21 +185,6 @@ export default function AccountTasksContent() {
 
     const [checking, setChecking] = useState(true);
 
-    useEffect(() => {
-        const tokenStr = getToken();
-        if (!tokenStr) {
-            window.location.replace("/");
-            return;
-        }
-        if (!accountName) {
-            window.location.replace("/dashboard");
-            return;
-        }
-        setLocalToken(tokenStr);
-        setChecking(false);
-        loadData(tokenStr);
-    }, [accountName, loadData]);
-
     const loadData = useCallback(async (tokenStr: string) => {
         try {
             setLoading(true);
@@ -216,6 +201,21 @@ export default function AccountTasksContent() {
             setLoading(false);
         }
     }, [accountName, addToast, language]);
+
+    useEffect(() => {
+        const tokenStr = getToken();
+        if (!tokenStr) {
+            window.location.replace("/");
+            return;
+        }
+        if (!accountName) {
+            window.location.replace("/dashboard");
+            return;
+        }
+        setLocalToken(tokenStr);
+        setChecking(false);
+        loadData(tokenStr);
+    }, [accountName, loadData]);
 
     useEffect(() => {
         if (!token || !accountName) return;
