@@ -432,9 +432,11 @@ export default function Dashboard() {
     }
   }, [token, qrLogin?.login_id, addToast, resetQrState, loadData, t, formatErrorMessage]);
 
-  const handleConfirmQrLogin = useCallback(() => {
+  useEffect(() => {
+    if (qrPhase !== "password") return;
+    if (!qrPassword || qrPasswordLoading) return;
     handleSubmitQrPassword(qrPassword);
-  }, [handleSubmitQrPassword, qrPassword]);
+  }, [qrPhase, qrPassword, qrPasswordLoading, handleSubmitQrPassword]);
 
   const handleCloseAddDialog = () => {
     if (qrLogin?.login_id) {
@@ -913,13 +915,6 @@ export default function Dashboard() {
 
                   <div className="flex gap-3 mt-2">
                     <button className="btn-secondary flex-1 h-10 !py-0 !text-xs" onClick={handleCloseAddDialog}>{t("cancel")}</button>
-                    <button
-                      className="btn-gradient flex-1 h-10 !py-0 !text-xs"
-                      onClick={handleConfirmQrLogin}
-                      disabled={qrPasswordLoading}
-                    >
-                      {qrPasswordLoading ? <Spinner className="animate-spin" /> : t("confirm_connect")}
-                    </button>
                   </div>
                 </>
               )}
