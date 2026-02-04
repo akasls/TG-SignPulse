@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -99,6 +99,17 @@ export default function Dashboard() {
 
   const [checking, setChecking] = useState(true);
 
+  const addToastRef = useRef(addToast);
+  const tRef = useRef(t);
+
+  useEffect(() => {
+    addToastRef.current = addToast;
+  }, [addToast]);
+
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+
   const loadData = useCallback(async (tokenStr: string) => {
     try {
       setLoading(true);
@@ -109,11 +120,11 @@ export default function Dashboard() {
       setAccounts(accountsData.accounts);
       setTasks(tasksData);
     } catch (err: any) {
-      addToast(err.message || t("login_failed"), "error");
+      addToastRef.current(err.message || tRef.current("login_failed"), "error");
     } finally {
       setLoading(false);
     }
-  }, [addToast, t]);
+  }, []);
 
   useEffect(() => {
     const tokenStr = getToken();
