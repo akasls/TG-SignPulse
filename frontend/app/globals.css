@@ -170,9 +170,6 @@ select option {
   color: var(--text-main);
 }
 
-.hidden {
-  display: none !important;
-}
 
 /* 通用图标按钮 */
 .action-btn {
