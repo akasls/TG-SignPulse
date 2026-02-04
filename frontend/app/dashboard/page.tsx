@@ -109,16 +109,16 @@ export default function Dashboard() {
     proxy: "",
   });
 
-  const normalizeAccountName = (name: string) => name.trim();
+  const normalizeAccountName = useCallback((name: string) => name.trim(), []);
 
   const sanitizeAccountName = (name: string) =>
     name.replace(/[^A-Za-z0-9\u4e00-\u9fff]/g, "");
 
-  const isDuplicateAccountName = (name: string) => {
+  const isDuplicateAccountName = useCallback((name: string) => {
     const normalized = normalizeAccountName(name).toLowerCase();
     if (!normalized) return false;
     return accounts.some(acc => acc.name.toLowerCase() === normalized);
-  };
+  }, [accounts, normalizeAccountName]);
 
   const [checking, setChecking] = useState(true);
 
@@ -406,6 +406,44 @@ export default function Dashboard() {
     t,
   ]);
 
+  const handleSubmitQrPassword = useCallback(async (passwordOverride?: string) => {
+    if (!token || !qrLogin?.login_id) return;
+    const passwordValue = passwordOverride ?? qrPasswordRef.current;
+    if (!passwordValue) {
+      const msg = t("qr_password_missing");
+      addToast(msg, "error");
+      setQrMessage(msg);
+      return;
+    }
+    try {
+      setQrPasswordLoading(true);
+      await submitQrPassword(token, {
+        login_id: qrLogin.login_id,
+        password: passwordValue,
+      });
+      addToast(t("login_success"), "success");
+      resetQrState();
+      setShowAddDialog(false);
+      loadData(token);
+    } catch (err: any) {
+      const errMsg = err?.message ? String(err.message) : "";
+      const fallback = formatErrorMessage("qr_login_failed", err);
+      let message = errMsg || fallback;
+      const lowerMsg = errMsg.toLowerCase();
+      if (errMsg.includes("瀵嗙爜閿欒") || errMsg.includes("涓ゆ楠岃瘉") || lowerMsg.includes("2fa")) {
+        message = t("qr_password_invalid");
+      }
+      addToast(message, "error");
+      if (message === t("qr_password_invalid")) {
+        resetQrState();
+        return;
+      }
+      setQrMessage(message);
+    } finally {
+      setQrPasswordLoading(false);
+    }
+  }, [token, qrLogin?.login_id, addToast, resetQrState, loadData, t, formatErrorMessage]);
+
   const startQrPolling = useCallback((loginId: string, reason: string = "effect") => {
     if (!token || !loginId) return;
     if (loginMode !== "qr" || !showAddDialog) return;
@@ -577,44 +615,7 @@ export default function Dashboard() {
     }
   };
 
-  const handleSubmitQrPassword = useCallback(async (passwordOverride?: string) => {
-    if (!token || !qrLogin?.login_id) return;
-    const passwordValue = passwordOverride ?? qrPasswordRef.current;
-    if (!passwordValue) {
-      const msg = t("qr_password_missing");
-      addToast(msg, "error");
-      setQrMessage(msg);
-      return;
-    }
-    try {
-      setQrPasswordLoading(true);
-      await submitQrPassword(token, {
-        login_id: qrLogin.login_id,
-        password: passwordValue,
-      });
-      addToast(t("login_success"), "success");
-      resetQrState();
-      setShowAddDialog(false);
-      loadData(token);
-    } catch (err: any) {
-      const errMsg = err?.message ? String(err.message) : "";
-      const fallback = formatErrorMessage("qr_login_failed", err);
-      let message = errMsg || fallback;
-      const lowerMsg = errMsg.toLowerCase();
-      if (errMsg.includes("密码错误") || errMsg.includes("两步验证") || lowerMsg.includes("2fa")) {
-        message = t("qr_password_invalid");
-      }
-      addToast(message, "error");
-      if (message === t("qr_password_invalid")) {
-        resetQrState();
-        return;
-      }
-      setQrMessage(message);
-    } finally {
-      setQrPasswordLoading(false);
-    }
-  }, [token, qrLogin?.login_id, addToast, resetQrState, loadData, t, formatErrorMessage]);
-
+  
   useEffect(() => {
     if (qrPhase !== "password") return;
     if (!qrPassword || qrPasswordLoading) return;
