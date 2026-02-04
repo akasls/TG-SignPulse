@@ -154,6 +154,20 @@ export interface QrLoginCancelResponse {
   message: string;
 }
 
+export interface QrLoginPasswordRequest {
+  login_id: string;
+  password: string;
+}
+
+export interface QrLoginPasswordResponse {
+  success: boolean;
+  message: string;
+  account?: AccountInfo | null;
+  user_id?: number;
+  first_name?: string;
+  username?: string;
+}
+
 export interface AccountInfo {
   name: string;
   session_file: string;
@@ -209,6 +223,12 @@ export const cancelQrLogin = (token: string, loginId: string) =>
   request<QrLoginCancelResponse>("/accounts/qr/cancel", {
     method: "POST",
     body: JSON.stringify({ login_id: loginId }),
+  }, token);
+
+export const submitQrPassword = (token: string, data: QrLoginPasswordRequest) =>
+  request<QrLoginPasswordResponse>("/accounts/qr/password", {
+    method: "POST",
+    body: JSON.stringify(data),
   }, token);
 
 // ============ 任务管理 ============

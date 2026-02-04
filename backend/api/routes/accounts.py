@@ -110,6 +110,24 @@ class QrLoginCancelResponse(BaseModel):
     message: str
 
 
+class QrLoginPasswordRequest(BaseModel):
+    """扫码登录 2FA 密码请求"""
+
+    login_id: str
+    password: str
+
+
+class QrLoginPasswordResponse(BaseModel):
+    """扫码登录 2FA 密码响应"""
+
+    success: bool
+    message: str
+    account: Optional[AccountInfo] = None
+    user_id: Optional[int] = None
+    first_name: Optional[str] = None
+    username: Optional[str] = None
+
+
 class AccountListResponse(BaseModel):
     """账号列表响应"""
 
@@ -276,6 +294,35 @@ async def get_qr_login_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取扫码状态失败: {str(e)}",
+        )
+
+
+@router.post("/qr/password", response_model=QrLoginPasswordResponse)
+async def submit_qr_login_password(
+    request: QrLoginPasswordRequest, current_user: User = Depends(get_current_user)
+):
+    """提交扫码登录 2FA 密码"""
+    try:
+        result = await get_telegram_service().submit_qr_password(
+            request.login_id, request.password
+        )
+        account = result.get("account")
+        if account:
+            account = AccountInfo(**account)
+        return QrLoginPasswordResponse(
+            success=True,
+            message=result.get("message", "登录成功"),
+            account=account,
+            user_id=result.get("user_id"),
+            first_name=result.get("first_name"),
+            username=result.get("username"),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"提交 2FA 密码失败: {str(e)}",
         )
 
 

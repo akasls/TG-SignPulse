@@ -854,7 +854,7 @@ class TelegramService:
 
     async def get_qr_login_status(self, login_id: str) -> Dict[str, Any]:
         from pyrogram import raw, types
-        from pyrogram.errors import FloodWait, Unauthorized
+        from pyrogram.errors import FloodWait, SessionPasswordNeeded, Unauthorized
         from pyrogram.methods.messages.inline_session import get_session
 
         data = _qr_login_sessions.get(login_id)
@@ -871,6 +871,13 @@ class TelegramService:
                 "message": "二维码已过期",
             }
 
+        if data.get("status") == "password_required":
+            return {
+                "status": "password_required",
+                "expires_at": data.get("expires_at"),
+                "message": "需要 2FA 密码",
+            }
+
         client = data.get("client")
         token = data.get("token")
         migrate_dc_id = data.get("migrate_dc_id")
@@ -881,25 +888,34 @@ class TelegramService:
 
             result = None
             # 尝试导入 token（处理 DC 迁移）
-            for _ in range(2):
-                if migrate_dc_id:
-                    session = await get_session(client, migrate_dc_id)
-                    result = await session.invoke(
-                        raw.functions.auth.ImportLoginToken(token=token)
-                    )
-                else:
-                    result = await client.invoke(
-                        raw.functions.auth.ImportLoginToken(token=token)
-                    )
+            try:
+                for _ in range(2):
+                    if migrate_dc_id:
+                        session = await get_session(client, migrate_dc_id)
+                        result = await session.invoke(
+                            raw.functions.auth.ImportLoginToken(token=token)
+                        )
+                    else:
+                        result = await client.invoke(
+                            raw.functions.auth.ImportLoginToken(token=token)
+                        )
 
-                if isinstance(result, raw.types.auth.LoginTokenMigrateTo):
-                    migrate_dc_id = result.dc_id
-                    token = result.token
-                    data["migrate_dc_id"] = migrate_dc_id
-                    data["token"] = token
-                    data["status"] = "scanned_wait_confirm"
-                    continue
-                break
+                    if isinstance(result, raw.types.auth.LoginTokenMigrateTo):
+                        migrate_dc_id = result.dc_id
+                        token = result.token
+                        data["migrate_dc_id"] = migrate_dc_id
+                        data["token"] = token
+                        data["status"] = "scanned_wait_confirm"
+                        continue
+                    break
+            except SessionPasswordNeeded:
+                data["status"] = "password_required"
+                data["scan_seen"] = True
+                return {
+                    "status": "password_required",
+                    "expires_at": data.get("expires_at"),
+                    "message": "需要 2FA 密码",
+                }
 
             if isinstance(result, raw.types.auth.LoginTokenSuccess):
                 # 标记授权用户
@@ -971,6 +987,16 @@ class TelegramService:
                 "status": "failed",
                 "message": f"请求过于频繁，请等待 {e.value} 秒后重试",
             }
+        except SessionPasswordNeeded:
+            data = _qr_login_sessions.get(login_id)
+            if data:
+                data["status"] = "password_required"
+                data["scan_seen"] = True
+            return {
+                "status": "password_required",
+                "expires_at": data.get("expires_at") if data else None,
+                "message": "需要 2FA 密码",
+            }
         except Unauthorized:
             await self._cleanup_qr_login(login_id)
             return {
@@ -983,6 +1009,87 @@ class TelegramService:
                 "status": "failed",
                 "message": "登录失败，请重试",
             }
+
+    async def submit_qr_password(self, login_id: str, password: str) -> Dict[str, Any]:
+        from pyrogram.errors import FloodWait, PasswordHashInvalid, Unauthorized
+
+        data = _qr_login_sessions.get(login_id)
+        if not data:
+            raise ValueError("二维码已过期或不存在")
+
+        if time.time() >= data.get("expires_ts", 0):
+            await self._cleanup_qr_login(login_id)
+            raise ValueError("二维码已过期")
+
+        client = data.get("client")
+        if not client:
+            await self._cleanup_qr_login(login_id)
+            raise ValueError("登录会话已失效")
+
+        account_lock = data.get("lock")
+        if account_lock and not account_lock.locked():
+            await account_lock.acquire()
+
+        global_semaphore = get_global_semaphore()
+
+        try:
+            async with global_semaphore:
+                if not client.is_connected:
+                    await client.connect()
+
+                try:
+                    await client.check_password(password)
+                except PasswordHashInvalid:
+                    await self._cleanup_qr_login(login_id)
+                    raise ValueError("两步验证密码错误")
+
+                try:
+                    me = await client.get_me()
+                except Exception:
+                    me = None
+
+                await self._persist_client_session(
+                    client, data.get("account_name"), data.get("proxy")
+                )
+
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+
+                account_name = data.get("account_name")
+                await self._cleanup_qr_login(login_id, preserve_session=True)
+
+                account = None
+                try:
+                    accounts = self.list_accounts(force_refresh=True)
+                    account = next(
+                        (acc for acc in accounts if acc.get("name") == account_name),
+                        None,
+                    )
+                except Exception:
+                    account = None
+
+                return {
+                    "status": "success",
+                    "message": "登录成功",
+                    "account": account,
+                    "user_id": getattr(me, "id", None),
+                    "first_name": getattr(me, "first_name", None),
+                    "username": getattr(me, "username", None),
+                }
+
+        except FloodWait as e:
+            await self._cleanup_qr_login(login_id)
+            raise ValueError(f"请求过于频繁，请等待 {e.value} 秒后重试")
+        except Unauthorized:
+            await self._cleanup_qr_login(login_id)
+            raise ValueError("登录失败，请重试")
+        except ValueError:
+            raise
+        except Exception:
+            await self._cleanup_qr_login(login_id)
+            raise ValueError("登录失败，请重试")
 
     async def cancel_qr_login(self, login_id: str) -> bool:
         if login_id not in _qr_login_sessions:

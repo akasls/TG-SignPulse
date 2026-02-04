@@ -11,6 +11,7 @@ import {
   startQrLogin,
   getQrLoginStatus,
   cancelQrLogin,
+  submitQrPassword,
   updateAccount,
   verifyAccountLogin,
   deleteAccount,
@@ -69,14 +70,18 @@ export default function Dashboard() {
     qr_image?: string | null;
     expires_at: string;
   } | null>(null);
-  type QrPhase = "idle" | "loading" | "ready" | "scanning" | "success" | "expired" | "error";
+  type QrPhase = "idle" | "loading" | "ready" | "scanning" | "password" | "success" | "expired" | "error";
   const [qrStatus, setQrStatus] = useState<
-    "waiting_scan" | "scanned_wait_confirm" | "success" | "expired" | "failed"
+    "waiting_scan" | "scanned_wait_confirm" | "password_required" | "success" | "expired" | "failed"
   >("waiting_scan");
   const [qrPhase, setQrPhase] = useState<QrPhase>("idle");
   const [qrMessage, setQrMessage] = useState<string>("");
   const [qrCountdown, setQrCountdown] = useState<number>(0);
   const [qrLoading, setQrLoading] = useState(false);
+  const [qrPassword, setQrPassword] = useState("");
+  const [qrPasswordLoading, setQrPasswordLoading] = useState(false);
+  const qrPasswordRef = useRef("");
+  const qrPasswordLoadingRef = useRef(false);
 
   const qrPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrCountdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -90,6 +95,14 @@ export default function Dashboard() {
   useEffect(() => {
     qrPhaseRef.current = qrPhase;
   }, [qrPhase]);
+
+  useEffect(() => {
+    qrPasswordRef.current = qrPassword;
+  }, [qrPassword]);
+
+  useEffect(() => {
+    qrPasswordLoadingRef.current = qrPasswordLoading;
+  }, [qrPasswordLoading]);
 
   // 编辑账号对话框
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -325,6 +338,8 @@ export default function Dashboard() {
     setQrMessage("");
     setQrCountdown(0);
     setQrLoading(false);
+    setQrPassword("");
+    setQrPasswordLoading(false);
   }, [clearQrTimers]);
 
   const handleStartQrLogin = async () => {
@@ -355,6 +370,7 @@ export default function Dashboard() {
       setQrPhaseSafe("ready", "qr_ready", { expires_at: res.expires_at });
       qrReadyAtRef.current = Date.now();
       setQrMessage("");
+      setQrPassword("");
     } catch (err: any) {
       setQrPhaseSafe("error", "start_failed");
       addToast(formatErrorMessage("qr_create_failed", err), "error");
@@ -378,6 +394,44 @@ export default function Dashboard() {
       resetQrState();
     }
   };
+
+  const handleSubmitQrPassword = useCallback(async (passwordOverride?: string) => {
+    if (!token || !qrLogin?.login_id) return;
+    const passwordValue = passwordOverride ?? qrPasswordRef.current;
+    if (!passwordValue) {
+      const msg = t("qr_password_missing");
+      addToast(msg, "error");
+      setQrMessage(msg);
+      return;
+    }
+    try {
+      setQrPasswordLoading(true);
+      await submitQrPassword(token, {
+        login_id: qrLogin.login_id,
+        password: passwordValue,
+      });
+      addToast(t("login_success"), "success");
+      resetQrState();
+      setShowAddDialog(false);
+      loadData(token);
+    } catch (err: any) {
+      const errMsg = err?.message ? String(err.message) : "";
+      const fallback = formatErrorMessage("qr_login_failed", err);
+      let message = errMsg || fallback;
+      const lowerMsg = errMsg.toLowerCase();
+      if (errMsg.includes("密码错误") || errMsg.includes("两步验证") || lowerMsg.includes("2fa")) {
+        message = t("qr_password_invalid");
+      }
+      addToast(message, "error");
+      if (message === t("qr_password_invalid")) {
+        resetQrState();
+        return;
+      }
+      setQrMessage(message);
+    } finally {
+      setQrPasswordLoading(false);
+    }
+  }, [token, qrLogin?.login_id, addToast, resetQrState, loadData, t, formatErrorMessage]);
 
   const handleCloseAddDialog = () => {
     if (qrLogin?.login_id) {
@@ -474,7 +528,7 @@ export default function Dashboard() {
         if (qrActiveLoginIdRef.current !== loginId) return;
         if (qrPollSeqRef.current !== seq) return;
 
-        const status = res.status as "waiting_scan" | "scanned_wait_confirm" | "success" | "expired" | "failed";
+        const status = res.status as "waiting_scan" | "scanned_wait_confirm" | "password_required" | "success" | "expired" | "failed";
         const readyAt = qrReadyAtRef.current || 0;
         const readyElapsed = readyAt ? Date.now() - readyAt : 0;
         if (readyAt && readyElapsed < 10000 && (status === "expired" || status === "failed")) {
@@ -493,7 +547,9 @@ export default function Dashboard() {
         }
         debugQr({ login_id: loginId, pollResult: status, message: res.message || "" });
         setQrStatus(status);
-        setQrMessage("");
+        if (status !== "password_required") {
+          setQrMessage("");
+        }
         if (res.expires_at) {
           setQrLogin((prev) => (prev ? { ...prev, expires_at: res.expires_at } : prev));
         }
@@ -505,6 +561,19 @@ export default function Dashboard() {
           resetQrState();
           setShowAddDialog(false);
           loadData(token);
+          return;
+        }
+
+        if (status === "password_required") {
+          setQrPhaseSafe("password", "poll_password_required", { status });
+          stopPolling();
+          const passwordValue = qrPasswordRef.current;
+          const isSubmitting = qrPasswordLoadingRef.current;
+          if (passwordValue && !isSubmitting) {
+            handleSubmitQrPassword(passwordValue);
+            return;
+          }
+          setQrMessage(t("qr_password_required"));
           return;
         }
 
@@ -570,7 +639,7 @@ export default function Dashboard() {
         qrPollDelayRef.current = null;
       }
     };
-  }, [token, qrLogin?.login_id, loginMode, showAddDialog, qrPhase, addToast, loadData, resetQrState, t, hasToastShown, markToastShown, setQrPhaseSafe, debugQr, formatErrorMessage]);
+  }, [token, qrLogin?.login_id, loginMode, showAddDialog, qrPhase, addToast, loadData, resetQrState, t, hasToastShown, markToastShown, setQrPhaseSafe, debugQr, formatErrorMessage, handleSubmitQrPassword]);
 
   if (!token || checking) {
     return null;
@@ -811,6 +880,7 @@ export default function Dashboard() {
                     <div className="text-xs text-center font-bold">
                       {(qrPhase === "loading" || qrPhase === "ready") && t("qr_waiting")}
                       {qrPhase === "scanning" && t("qr_scanned")}
+                      {qrPhase === "password" && t("qr_password_required")}
                       {qrPhase === "success" && t("qr_success")}
                       {qrPhase === "expired" && t("qr_expired")}
                       {qrPhase === "error" && t("qr_failed")}
@@ -818,6 +888,24 @@ export default function Dashboard() {
                     {qrMessage ? (
                       <div className="text-[11px] text-rose-400 text-center">{qrMessage}</div>
                     ) : null}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] mb-1">{t("two_step_pass")}</label>
+                    <input
+                      type="password"
+                      className="!py-2.5 !px-4 !mb-2"
+                      placeholder={t("two_step_placeholder")}
+                      value={qrPassword}
+                      onChange={(e) => setQrPassword(e.target.value)}
+                    />
+                      <button
+                        className="btn-gradient w-full h-9 !py-0 !text-xs"
+                        onClick={() => handleSubmitQrPassword(qrPassword)}
+                        disabled={qrPhase !== "password" || qrPasswordLoading || !qrPassword}
+                      >
+                      {qrPasswordLoading ? <Spinner className="animate-spin" /> : t("confirm_connect")}
+                    </button>
                   </div>
 
                   <div className="flex gap-3 mt-2">
