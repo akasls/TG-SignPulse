@@ -739,6 +739,45 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
             waiting_message=None,
         )
 
+    def _load_chat_cache(self) -> List[dict]:
+        try:
+            cache_file = self.tasks_dir / self._account / "chats_cache.json"
+            if not cache_file.exists():
+                return []
+            with open(cache_file, "r", encoding="utf-8") as fp:
+                data = json.load(fp)
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
+    def _find_cached_chat(self, chat_id: int, name: Optional[str]) -> Optional[dict]:
+        entries = self._load_chat_cache()
+        if not entries:
+            return None
+        candidate_ids = {chat_id}
+        if isinstance(chat_id, int):
+            candidate_ids.add(-chat_id)
+            try:
+                candidate_ids.add(int(f"-100{abs(chat_id)}"))
+            except Exception:
+                pass
+        for entry in entries:
+            try:
+                if entry.get("id") in candidate_ids:
+                    return entry
+            except Exception:
+                continue
+        if name:
+            name_key = name.strip().lower().lstrip("@")
+            for entry in entries:
+                username = (entry.get("username") or "").strip().lower()
+                title = (entry.get("title") or "").strip().lower()
+                if username and username == name_key:
+                    return entry
+                if title and title == name.strip().lower():
+                    return entry
+        return None
+
     @property
     def sign_record_file(self):
         sign_record_dir = self.task_dir / str(self.user.id)
@@ -919,6 +958,35 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                     except Exception as e2:
                         last_error = e2
                         continue
+
+                if last_error is not None:
+                    cached = self._find_cached_chat(chat.chat_id, chat.name)
+                    if cached:
+                        username = cached.get("username")
+                        cached_id = cached.get("id")
+                        if username:
+                            try:
+                                resolved = await self.app.get_chat(username)
+                                self.log(
+                                    f"预热会话使用缓存用户名成功: {chat.chat_id} -> @{username}",
+                                    level="WARNING",
+                                )
+                                chat.chat_id = resolved.id
+                                last_error = None
+                            except Exception as e2:
+                                last_error = e2
+                        if last_error is not None and cached_id:
+                            try:
+                                await self.app.get_chat(cached_id)
+                                self.log(
+                                    f"预热会话使用缓存 chat_id 成功: {chat.chat_id} -> {cached_id}",
+                                    level="WARNING",
+                                )
+                                chat.chat_id = cached_id
+                                last_error = None
+                            except Exception as e2:
+                                last_error = e2
+
                 if last_error is not None:
                     self.log(
                         f"预热会话失败: chat_id={chat.chat_id}, error={type(last_error).__name__}: {last_error}",

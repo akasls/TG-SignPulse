@@ -152,8 +152,12 @@ class TelegramService:
             return now + 300
         # 兼容 expires 为相对秒数的情况
         if expires_int < 1_000_000_000:
-            return now + max(0, expires_int)
-        return expires_int
+            expires_ts = now + max(0, expires_int)
+        else:
+            expires_ts = expires_int
+        if expires_ts <= now + 5:
+            return now + 300
+        return expires_ts
 
     def account_exists(self, account_name: str) -> bool:
         """检查账号是否存在"""

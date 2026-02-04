@@ -206,47 +206,49 @@ export default function SignTasksPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                         {tasks.map((task) => (
                             <div key={task.name} className="flex flex-col gap-3">
-                                <div className="glass-panel p-4 sm:hidden flex items-start justify-between gap-3">
-                                    <div className="min-w-0 flex-1 space-y-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-bold text-sm truncate" title={task.name}>{task.name}</span>
-                                            <span className="text-[9px] font-mono text-main/30 bg-white/5 px-1.5 py-0.5 rounded border border-white/5 shrink-0">
-                                                {task.chats[0]?.chat_id || "-"}
-                                            </span>
-                                        </div>
+                                <div className="glass-panel p-4 sm:hidden">
+                                    <div className="grid grid-cols-[1fr_auto] gap-3">
+                                        <div className="min-w-0 space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-bold text-sm truncate" title={task.name}>{task.name}</span>
+                                                <span className="text-[9px] font-mono text-main/30 bg-white/5 px-1.5 py-0.5 rounded border border-white/5 shrink-0">
+                                                    {task.chats[0]?.chat_id || "-"}
+                                                </span>
+                                            </div>
                                         <span className="text-[11px] font-mono text-main/50">
                                             {task.execution_mode === "range" && task.range_start && task.range_end
                                                 ? `${task.range_start} - ${task.range_end}`
                                                 : task.sign_at}
                                         </span>
-                                        <span className={`inline-flex text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest border ${task.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-main/30 border-white/10'}`}>
-                                            {task.enabled ? 'Active' : 'Paused'}
-                                        </span>
+                                            <span className={`inline-flex text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest border ${task.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-main/30 border-white/10'}`}>
+                                                {task.enabled ? 'Active' : 'Paused'}
+                                            </span>
                                     </div>
-                                    <div className="flex flex-col items-end gap-2 shrink-0">
-                                        <button
-                                            onClick={() => handleRun(task.name)}
-                                            disabled={loading}
-                                            className="action-btn !w-8 !h-8 !text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-20 disabled:cursor-not-allowed"
-                                            title={t("run")}
-                                        >
-                                            <Play weight="fill" size={14} />
-                                        </button>
-                                        <Link
-                                            href={`/dashboard/account-tasks/AccountTasksContent?name=${task.account_name}`}
-                                            className={`action-btn !w-8 !h-8 ${loading ? 'pointer-events-none opacity-20' : ''}`}
-                                            title={t("edit")}
-                                        >
-                                            <PencilSimple weight="bold" size={14} />
-                                        </Link>
-                                        <button
-                                            onClick={() => handleDelete(task)}
-                                            disabled={loading}
-                                            className="action-btn !w-8 !h-8 !text-rose-400 hover:bg-rose-500/10 disabled:opacity-20 disabled:cursor-not-allowed"
-                                            title={t("delete")}
-                                        >
-                                            <Trash weight="bold" size={14} />
-                                        </button>
+                                        <div className="w-10 flex flex-col items-end gap-2 pt-[2px]">
+                                            <button
+                                                onClick={() => handleRun(task.name)}
+                                                disabled={loading}
+                                                className="action-btn !w-8 !h-8 !text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-20 disabled:cursor-not-allowed"
+                                                title={t("run")}
+                                            >
+                                                <Play weight="fill" size={14} />
+                                            </button>
+                                            <Link
+                                                href={`/dashboard/account-tasks/AccountTasksContent?name=${task.account_name}`}
+                                                className={`action-btn !w-8 !h-8 ${loading ? 'pointer-events-none opacity-20' : ''}`}
+                                                title={t("edit")}
+                                            >
+                                                <PencilSimple weight="bold" size={14} />
+                                            </Link>
+                                            <button
+                                                onClick={() => handleDelete(task)}
+                                                disabled={loading}
+                                                className="action-btn !w-8 !h-8 !text-rose-400 hover:bg-rose-500/10 disabled:opacity-20 disabled:cursor-not-allowed"
+                                                title={t("delete")}
+                                            >
+                                                <Trash weight="bold" size={14} />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="glass-panel p-6 hidden sm:flex flex-col group hover:border-[#8a3ffc]/40 transition-all">
