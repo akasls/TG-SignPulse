@@ -56,7 +56,7 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onDelete, t, language }: 
                 <div className="w-10 h-10 rounded-xl bg-[#8a3ffc]/10 flex items-center justify-center text-[#b57dff] shrink-0">
                     <ChatCircleText weight="bold" size={20} />
                 </div>
-                <div className="min-w-0 flex-1 space-y-2">
+                <div className="min-w-0 flex-1 flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                         <h3 className="font-bold truncate text-sm" title={task.name}>{task.name}</h3>
                         <span className="text-[9px] font-mono text-main/30 bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
@@ -80,7 +80,7 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onDelete, t, language }: 
                         )}
                     </div>
                     {task.last_run ? (
-                        <div className="md:hidden text-[10px] font-mono text-main/40 flex items-center gap-2">
+                        <div className="md:hidden mt-auto pt-2 border-t border-white/5 text-[10px] font-mono text-main/40 flex items-center gap-2">
                             <span className={task.last_run.success ? 'text-emerald-400' : 'text-rose-400'}>
                                 {task.last_run.success ? t("success") : t("failure")}
                             </span>
@@ -91,12 +91,12 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onDelete, t, language }: 
                             </span>
                         </div>
                     ) : (
-                        <div className="md:hidden text-[10px] text-main/20 font-bold uppercase tracking-widest italic">{t("no_data")}</div>
+                        <div className="md:hidden mt-auto pt-2 border-t border-white/5 text-[10px] text-main/20 font-bold uppercase tracking-widest italic">{t("no_data")}</div>
                     )}
                 </div>
             </div>
 
-            <div className="flex flex-col items-center gap-3 w-14 self-start md:w-auto md:flex-col md:items-end md:gap-2 md:self-auto md:min-w-[180px]">
+            <div className="flex flex-col items-center gap-3 w-14 self-start md:w-auto md:flex-row md:items-center md:gap-4 md:self-auto md:min-w-[180px]">
                 {task.last_run ? (
                     <div className="hidden md:flex flex-col items-end">
                         <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${task.last_run.success ? 'text-emerald-400' : 'text-rose-400'}`}>
