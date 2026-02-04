@@ -370,7 +370,6 @@ export default function Dashboard() {
       setQrPhaseSafe("ready", "qr_ready", { expires_at: res.expires_at });
       qrReadyAtRef.current = Date.now();
       setQrMessage("");
-      setQrPassword("");
     } catch (err: any) {
       setQrPhaseSafe("error", "start_failed");
       addToast(formatErrorMessage("qr_create_failed", err), "error");
@@ -432,6 +431,16 @@ export default function Dashboard() {
       setQrPasswordLoading(false);
     }
   }, [token, qrLogin?.login_id, addToast, resetQrState, loadData, t, formatErrorMessage]);
+
+  const handleConfirmQrLogin = useCallback(() => {
+    if (qrPhase === "password") {
+      handleSubmitQrPassword(qrPassword);
+      return;
+    }
+    if (qrPassword) {
+      addToast(t("qr_password_saved"), "success");
+    }
+  }, [qrPhase, qrPassword, handleSubmitQrPassword, t, addToast]);
 
   const handleCloseAddDialog = () => {
     if (qrLogin?.login_id) {
@@ -851,6 +860,15 @@ export default function Dashboard() {
                       }}
                     />
 
+                    <label className="text-[11px] mb-1">{t("two_step_pass")}</label>
+                    <input
+                      type="password"
+                      className="!py-2.5 !px-4 !mb-4"
+                      placeholder={t("two_step_placeholder")}
+                      value={qrPassword}
+                      onChange={(e) => setQrPassword(e.target.value)}
+                    />
+
                     <label className="text-[11px] mb-1">{t("proxy")}</label>
                     <input
                       type="text"
@@ -862,7 +880,16 @@ export default function Dashboard() {
                   </div>
 
                   <div className="glass-panel !bg-black/5 p-4 rounded-xl space-y-3">
-                    <div className="text-xs text-main/60">{t("qr_tip")}</div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs text-main/60">{t("qr_tip")}</div>
+                      <button
+                        className="btn-secondary h-8 !px-3 !py-0 !text-[11px]"
+                        onClick={handleStartQrLogin}
+                        disabled={qrLoading}
+                      >
+                        {qrLoading ? <Spinner className="animate-spin" /> : (qrLogin ? t("qr_refresh") : t("qr_start"))}
+                      </button>
+                    </div>
                     <div className="flex items-center justify-center">
                       {qrLogin?.qr_image ? (
                         <Image src={qrLogin.qr_image} alt={t("qr_alt")} width={160} height={160} className="rounded-lg bg-white p-2" />
@@ -890,32 +917,14 @@ export default function Dashboard() {
                     ) : null}
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[11px] mb-1">{t("two_step_pass")}</label>
-                    <input
-                      type="password"
-                      className="!py-2.5 !px-4 !mb-2"
-                      placeholder={t("two_step_placeholder")}
-                      value={qrPassword}
-                      onChange={(e) => setQrPassword(e.target.value)}
-                    />
-                      <button
-                        className="btn-gradient w-full h-9 !py-0 !text-xs"
-                        onClick={() => handleSubmitQrPassword(qrPassword)}
-                        disabled={qrPhase !== "password" || qrPasswordLoading || !qrPassword}
-                      >
-                      {qrPasswordLoading ? <Spinner className="animate-spin" /> : t("confirm_connect")}
-                    </button>
-                  </div>
-
                   <div className="flex gap-3 mt-2">
                     <button className="btn-secondary flex-1 h-10 !py-0 !text-xs" onClick={handleCloseAddDialog}>{t("cancel")}</button>
                     <button
                       className="btn-gradient flex-1 h-10 !py-0 !text-xs"
-                      onClick={handleStartQrLogin}
-                      disabled={qrLoading}
+                      onClick={handleConfirmQrLogin}
+                      disabled={qrPasswordLoading}
                     >
-                      {qrLoading ? <Spinner className="animate-spin" /> : (qrLogin ? t("qr_refresh") : t("qr_start"))}
+                      {qrPasswordLoading ? <Spinner className="animate-spin" /> : t("confirm_connect")}
                     </button>
                   </div>
                 </>
