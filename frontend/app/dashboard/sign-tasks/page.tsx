@@ -223,7 +223,7 @@ export default function SignTasksPage() {
                                             {task.enabled ? 'Active' : 'Paused'}
                                         </span>
                                     </div>
-                                    <div className="flex flex-col items-end gap-2">
+                                    <div className="flex flex-col items-end gap-2 shrink-0">
                                         <button
                                             onClick={() => handleRun(task.name)}
                                             disabled={loading}

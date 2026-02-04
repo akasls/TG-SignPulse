@@ -725,31 +725,15 @@ export default function AccountTasksContent() {
                             </div>
 
                             <div className="glass-panel !bg-black/5 p-4 space-y-4 border-white/5">
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                    <div className="space-y-3">
-                                        <div className="flex items-center justify-between">
-                                            <label className="!mb-0">{t("select_chat")}</label>
-                                            <button
-                                                onClick={handleRefreshChats}
-                                                disabled={refreshingChats}
-                                                className="text-[10px] text-[#8a3ffc] hover:text-[#8a3ffc]/80 transition-colors uppercase font-bold tracking-tighter flex items-center gap-1"
-                                                title={t("refresh_chat_title")}
-                                            >
-                                                {refreshingChats ? (
-                                                    <div className="w-3 h-3 border-2 border-[#8a3ffc] border-t-transparent rounded-full animate-spin"></div>
-                                                ) : <ArrowClockwise weight="bold" size={12} />}
-                                                {t("refresh_list")}
-                                            </button>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] text-main/40 uppercase tracking-wider">{t("search_chat")}</label>
-                                            <input
-                                                className="!mb-0"
-                                                placeholder={t("search_chat_placeholder")}
-                                                value={chatSearch}
-                                                onChange={(e) => setChatSearch(e.target.value)}
-                                            />
-                                        </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] text-main/40 uppercase tracking-wider">{t("search_chat")}</label>
+                                        <input
+                                            className="!mb-0"
+                                            placeholder={t("search_chat_placeholder")}
+                                            value={chatSearch}
+                                            onChange={(e) => setChatSearch(e.target.value)}
+                                        />
                                         {chatSearch.trim() ? (
                                             <div className="max-h-48 overflow-y-auto rounded-lg border border-white/5 bg-black/5">
                                                 {chatSearchLoading ? (
@@ -781,31 +765,43 @@ export default function AccountTasksContent() {
                                                     <div className="px-3 py-2 text-xs text-main/40">{t("search_no_results")}</div>
                                                 )}
                                             </div>
-                                        ) : (
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] text-main/40 uppercase tracking-wider">{t("select_from_list")}</label>
-                                                <select
-                                                    className="!mb-0"
-                                                    value={showCreateDialog ? newTask.chat_id : editTask.chat_id}
-                                                    onChange={(e) => {
-                                                        const id = parseInt(e.target.value);
-                                                        const chat = chats.find(c => c.id === id);
-                                                        const chatName = chat?.title || chat?.username || "";
-                                                        applyChatSelection(id, chatName);
-                                                    }}
-                                                >
-                                                    <option value={0}>{t("select_from_list")}</option>
-                                                    {chats.map(chat => (
-                                                        <option key={chat.id} value={chat.id}>
-                                                            {chat.title || chat.username || chat.id}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        )}
+                                        ) : null}
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="mb-1 block">{t("manual_chat_id")}</label>
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-[10px] text-main/40 uppercase tracking-wider">{t("select_from_list")}</label>
+                                            <button
+                                                onClick={handleRefreshChats}
+                                                disabled={refreshingChats}
+                                                className="text-[10px] text-[#8a3ffc] hover:text-[#8a3ffc]/80 transition-colors uppercase font-bold tracking-tighter flex items-center gap-1"
+                                                title={t("refresh_chat_title")}
+                                            >
+                                                {refreshingChats ? (
+                                                    <div className="w-3 h-3 border-2 border-[#8a3ffc] border-t-transparent rounded-full animate-spin"></div>
+                                                ) : <ArrowClockwise weight="bold" size={12} />}
+                                                {t("refresh_list")}
+                                            </button>
+                                        </div>
+                                        <select
+                                            className="!mb-0"
+                                            value={showCreateDialog ? newTask.chat_id : editTask.chat_id}
+                                            onChange={(e) => {
+                                                const id = parseInt(e.target.value);
+                                                const chat = chats.find(c => c.id === id);
+                                                const chatName = chat?.title || chat?.username || "";
+                                                applyChatSelection(id, chatName);
+                                            }}
+                                        >
+                                            <option value={0}>{t("select_from_list")}</option>
+                                            {chats.map(chat => (
+                                                <option key={chat.id} value={chat.id}>
+                                                    {chat.title || chat.username || chat.id}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] text-main/40 uppercase tracking-wider">{t("manual_chat_id")}</label>
                                         <input
                                             placeholder={t("manual_id_placeholder")}
                                             className="!mb-0"
@@ -819,23 +815,23 @@ export default function AccountTasksContent() {
                                             }}
                                         />
                                     </div>
-                                </div>
-                                <div className="mt-2">
-                                    <label>{t("delete_after")}</label>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        placeholder={t("delete_after_placeholder")}
-                                        className="!mb-0"
-                                        value={showCreateDialog ? (newTask.delete_after ?? "") : (editTask.delete_after ?? "")}
-                                        onChange={(e) => {
-                                            const cleaned = e.target.value.replace(/[^0-9]/g, "");
-                                            const val = cleaned === "" ? undefined : Number(cleaned);
-                                            showCreateDialog
-                                                ? setNewTask({ ...newTask, delete_after: val })
-                                                : setEditTask({ ...editTask, delete_after: val });
-                                        }}
-                                    />
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] text-main/40 uppercase tracking-wider">{t("delete_after")}</label>
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            placeholder={t("delete_after_placeholder")}
+                                            className="!mb-0"
+                                            value={showCreateDialog ? (newTask.delete_after ?? "") : (editTask.delete_after ?? "")}
+                                            onChange={(e) => {
+                                                const cleaned = e.target.value.replace(/[^0-9]/g, "");
+                                                const val = cleaned === "" ? undefined : Number(cleaned);
+                                                showCreateDialog
+                                                    ? setNewTask({ ...newTask, delete_after: val })
+                                                    : setEditTask({ ...editTask, delete_after: val });
+                                            }}
+                                        />
+                                    </div>
                                 </div>
                             </div>
 

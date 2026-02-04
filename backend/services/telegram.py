@@ -141,6 +141,20 @@ class TelegramService:
         except Exception:
             return []
 
+    @staticmethod
+    def _normalize_login_token_expires(expires: Optional[int]) -> int:
+        now = int(time.time())
+        if not expires:
+            return now + 300
+        try:
+            expires_int = int(expires)
+        except (TypeError, ValueError):
+            return now + 300
+        # 兼容 expires 为相对秒数的情况
+        if expires_int < 1_000_000_000:
+            return now + max(0, expires_int)
+        return expires_int
+
     def account_exists(self, account_name: str) -> bool:
         """检查账号是否存在"""
         # 优先查缓存
@@ -767,11 +781,7 @@ class TelegramService:
                 raise ValueError("获取二维码 token 失败")
 
             token_expires = getattr(result, "expires", None)
-            expires_ts = (
-                int(token_expires)
-                if token_expires
-                else int(time.time()) + 300
-            )
+            expires_ts = self._normalize_login_token_expires(token_expires)
             expires_at = datetime.utcfromtimestamp(expires_ts).isoformat() + "Z"
             qr_uri = "tg://login?token=" + base64.urlsafe_b64encode(
                 token_bytes
@@ -933,7 +943,7 @@ class TelegramService:
             if isinstance(result, raw.types.auth.LoginToken):
                 token_expires = getattr(result, "expires", None)
                 if token_expires:
-                    data["expires_ts"] = int(token_expires)
+                    data["expires_ts"] = self._normalize_login_token_expires(token_expires)
                     data["expires_at"] = datetime.utcfromtimestamp(
                         data["expires_ts"]
                     ).isoformat() + "Z"

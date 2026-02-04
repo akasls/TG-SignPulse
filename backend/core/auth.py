@@ -31,12 +31,18 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 def verify_totp(secret: str, code: str) -> bool:
     try:
+        if not isinstance(code, str):
+            return False
+        code = code.strip().replace(" ", "")
+        if not code:
+            return False
         totp = pyotp.TOTP(secret)
-        raw_window = os.getenv("APP_TOTP_VALID_WINDOW", "0").strip()
+        raw_window = os.getenv("APP_TOTP_VALID_WINDOW")
+        raw_window = raw_window.strip() if isinstance(raw_window, str) else ""
         try:
-            valid_window = int(raw_window)
+            valid_window = int(raw_window) if raw_window else 1
         except ValueError:
-            valid_window = 0
+            valid_window = 1
         if valid_window < 0:
             valid_window = 0
         return totp.verify(code, valid_window=valid_window)
