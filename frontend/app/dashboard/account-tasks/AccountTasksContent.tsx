@@ -725,9 +725,9 @@ export default function AccountTasksContent() {
                             </div>
 
                             <div className="glass-panel !bg-black/5 p-4 space-y-4 border-white/5">
-                                <div className="flex flex-col md:flex-row gap-4">
-                                    <div className="flex-1">
-                                        <div className="flex items-center justify-between mb-1">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
                                             <label className="!mb-0">{t("select_chat")}</label>
                                             <button
                                                 onClick={handleRefreshChats}
@@ -751,7 +751,7 @@ export default function AccountTasksContent() {
                                             />
                                         </div>
                                         {chatSearch.trim() ? (
-                                            <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-white/5 bg-black/5">
+                                            <div className="max-h-48 overflow-y-auto rounded-lg border border-white/5 bg-black/5">
                                                 {chatSearchLoading ? (
                                                     <div className="px-3 py-2 text-xs text-main/40">{t("searching")}</div>
                                                 ) : chatSearchResults.length > 0 ? (
@@ -782,26 +782,29 @@ export default function AccountTasksContent() {
                                                 )}
                                             </div>
                                         ) : (
-                                            <select
-                                                className="!mb-0 mt-2"
-                                                value={showCreateDialog ? newTask.chat_id : editTask.chat_id}
-                                                onChange={(e) => {
-                                                    const id = parseInt(e.target.value);
-                                                    const chat = chats.find(c => c.id === id);
-                                                    const chatName = chat?.title || chat?.username || "";
-                                                    applyChatSelection(id, chatName);
-                                                }}
-                                            >
-                                                <option value={0}>{t("select_from_list")}</option>
-                                                {chats.map(chat => (
-                                                    <option key={chat.id} value={chat.id}>
-                                                        {chat.title || chat.username || chat.id}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] text-main/40 uppercase tracking-wider">{t("select_from_list")}</label>
+                                                <select
+                                                    className="!mb-0"
+                                                    value={showCreateDialog ? newTask.chat_id : editTask.chat_id}
+                                                    onChange={(e) => {
+                                                        const id = parseInt(e.target.value);
+                                                        const chat = chats.find(c => c.id === id);
+                                                        const chatName = chat?.title || chat?.username || "";
+                                                        applyChatSelection(id, chatName);
+                                                    }}
+                                                >
+                                                    <option value={0}>{t("select_from_list")}</option>
+                                                    {chats.map(chat => (
+                                                        <option key={chat.id} value={chat.id}>
+                                                            {chat.title || chat.username || chat.id}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
                                         )}
                                     </div>
-                                    <div className="flex-1">
+                                    <div className="space-y-2">
                                         <label className="mb-1 block">{t("manual_chat_id")}</label>
                                         <input
                                             placeholder={t("manual_id_placeholder")}

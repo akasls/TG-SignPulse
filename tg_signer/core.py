@@ -892,13 +892,39 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
             # 预热会话，确保 peer/access_hash 可用
             await self.app.get_chat(chat.chat_id)
         except Exception as e:
-            self.log(
-                f"预热会话失败: chat_id={chat.chat_id}, error={type(e).__name__}: {e}",
-                level="ERROR",
-            )
-            raise RuntimeError(
-                f"Failed to preheat chat_id {chat.chat_id}: {e}"
-            ) from e
+            # 兼容历史配置：部分频道可能以正数 channel_id 保存（缺少 -100 前缀）
+            fallback_chat_id = None
+            try:
+                from pyrogram.errors import PeerIdInvalid
+                is_peer_invalid = isinstance(e, PeerIdInvalid)
+            except Exception:
+                is_peer_invalid = "PEER_ID_INVALID" in str(e)
+
+            if is_peer_invalid and isinstance(chat.chat_id, int) and chat.chat_id > 0:
+                try:
+                    fallback_chat_id = int(f"-100{chat.chat_id}")
+                    await self.app.get_chat(fallback_chat_id)
+                    self.log(
+                        f"预热会话使用回退 chat_id 成功: {chat.chat_id} -> {fallback_chat_id}",
+                        level="WARNING",
+                    )
+                    chat.chat_id = fallback_chat_id
+                except Exception as e2:
+                    self.log(
+                        f"预热会话失败: chat_id={chat.chat_id}, error={type(e2).__name__}: {e2}",
+                        level="ERROR",
+                    )
+                    raise RuntimeError(
+                        f"Failed to preheat chat_id {chat.chat_id}: {e2}"
+                    ) from e2
+            else:
+                self.log(
+                    f"预热会话失败: chat_id={chat.chat_id}, error={type(e).__name__}: {e}",
+                    level="ERROR",
+                )
+                raise RuntimeError(
+                    f"Failed to preheat chat_id {chat.chat_id}: {e}"
+                ) from e
         self.log(f"开始执行: \n{chat}")
         for action in chat.actions:
             self.log(f"等待处理动作: {action}")

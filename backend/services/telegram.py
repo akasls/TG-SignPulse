@@ -62,6 +62,17 @@ class TelegramService:
 
         accounts = []
 
+        pending_accounts = set()
+        for data in _login_sessions.values():
+            name = data.get("account_name")
+            if name:
+                pending_accounts.add(name)
+        for data in _qr_login_sessions.values():
+            name = data.get("account_name")
+            status = data.get("status")
+            if name and status != "success":
+                pending_accounts.add(name)
+
         # 扫描 session 目录
         try:
             if is_string_session_mode():
@@ -69,6 +80,8 @@ class TelegramService:
                 for session_file in self.session_dir.glob("*.session_string"):
                     account_name = session_file.stem
                     seen.add(account_name)
+                    if account_name in pending_accounts:
+                        continue
                     profile = get_account_profile(account_name)
                     accounts.append(
                         {
@@ -85,6 +98,8 @@ class TelegramService:
 
                 for account_name in list_account_names():
                     if account_name in seen:
+                        continue
+                    if account_name in pending_accounts:
                         continue
                     session_file = self.session_dir / f"{account_name}.session_string"
                     profile = get_account_profile(account_name)
@@ -104,6 +119,9 @@ class TelegramService:
                 for session_file in self.session_dir.glob("*.session"):
                     account_name = session_file.stem  # 文件名（不含扩展名）
                     profile = get_account_profile(account_name)
+
+                    if account_name in pending_accounts:
+                        continue
 
                     accounts.append(
                         {
@@ -359,6 +377,7 @@ class TelegramService:
                 "phone_code_hash": sent_code.phone_code_hash,
                 "phone_number": phone_number,
                 "lock": account_lock,
+                "account_name": account_name,
             }
 
             # 保持连接，避免 session 变化导致验证码失效 (PhoneCodeExpired)
@@ -596,7 +615,7 @@ class TelegramService:
             set_account_profile(account_name, proxy=proxy)
         self._accounts_cache = None
 
-    async def _cleanup_qr_login(self, login_id: str) -> None:
+    async def _cleanup_qr_login(self, login_id: str, preserve_session: bool = False) -> None:
         data = _qr_login_sessions.pop(login_id, None)
         if not data:
             return
@@ -616,6 +635,21 @@ class TelegramService:
                 await client.disconnect()
             except Exception:
                 pass
+        if not preserve_session:
+            session_mode = get_session_mode()
+            if session_mode == "file":
+                account_name = data.get("account_name")
+                if account_name:
+                    session_file = self.session_dir / f"{account_name}.session"
+                    if session_file.exists():
+                        try:
+                            session_file.unlink()
+                            for ext in [".session-journal", ".session-wal", ".session-shm"]:
+                                aux_file = self.session_dir / f"{account_name}{ext}"
+                                if aux_file.exists():
+                                    aux_file.unlink()
+                        except Exception:
+                            pass
         lock = data.get("lock")
         if lock and lock.locked():
             lock.release()
@@ -875,7 +909,7 @@ class TelegramService:
                     pass
 
                 account_name = data.get("account_name")
-                await self._cleanup_qr_login(login_id)
+                await self._cleanup_qr_login(login_id, preserve_session=True)
 
                 account = None
                 try:

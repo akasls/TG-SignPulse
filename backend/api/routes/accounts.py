@@ -74,6 +74,17 @@ class QrLoginStartResponse(BaseModel):
     expires_at: str
 
 
+class AccountInfo(BaseModel):
+    """账号信息"""
+
+    name: str
+    session_file: str
+    exists: bool
+    size: int
+    remark: Optional[str] = None
+    proxy: Optional[str] = None
+
+
 class QrLoginStatusResponse(BaseModel):
     """扫码登录状态响应"""
 
@@ -97,17 +108,6 @@ class QrLoginCancelResponse(BaseModel):
 
     success: bool
     message: str
-
-
-class AccountInfo(BaseModel):
-    """账号信息"""
-
-    name: str
-    session_file: str
-    exists: bool
-    size: int
-    remark: Optional[str] = None
-    proxy: Optional[str] = None
 
 
 class AccountListResponse(BaseModel):

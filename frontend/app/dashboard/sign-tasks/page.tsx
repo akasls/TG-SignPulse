@@ -206,14 +206,24 @@ export default function SignTasksPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                         {tasks.map((task) => (
                             <div key={task.name} className="flex flex-col gap-3">
-                                <div className="glass-panel p-4 sm:hidden flex flex-col gap-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="min-w-0 flex items-center gap-2">
+                                <div className="glass-panel p-4 sm:hidden flex items-start justify-between gap-3">
+                                    <div className="min-w-0 flex-1 space-y-2">
+                                        <div className="flex items-center gap-2">
                                             <span className="font-bold text-sm truncate" title={task.name}>{task.name}</span>
                                             <span className="text-[9px] font-mono text-main/30 bg-white/5 px-1.5 py-0.5 rounded border border-white/5 shrink-0">
                                                 {task.chats[0]?.chat_id || "-"}
                                             </span>
                                         </div>
+                                        <span className="text-[11px] font-mono text-main/50">
+                                            {task.execution_mode === "range" && task.range_start && task.range_end
+                                                ? `${task.range_start} - ${task.range_end}`
+                                                : task.sign_at}
+                                        </span>
+                                        <span className={`inline-flex text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest border ${task.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-main/30 border-white/10'}`}>
+                                            {task.enabled ? 'Active' : 'Paused'}
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-2">
                                         <button
                                             onClick={() => handleRun(task.name)}
                                             disabled={loading}
@@ -222,13 +232,6 @@ export default function SignTasksPage() {
                                         >
                                             <Play weight="fill" size={14} />
                                         </button>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[11px] font-mono text-main/50">
-                                            {task.execution_mode === "range" && task.range_start && task.range_end
-                                                ? `${task.range_start} - ${task.range_end}`
-                                                : task.sign_at}
-                                        </span>
                                         <Link
                                             href={`/dashboard/account-tasks/AccountTasksContent?name=${task.account_name}`}
                                             className={`action-btn !w-8 !h-8 ${loading ? 'pointer-events-none opacity-20' : ''}`}
@@ -236,11 +239,6 @@ export default function SignTasksPage() {
                                         >
                                             <PencilSimple weight="bold" size={14} />
                                         </Link>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest border ${task.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-main/30 border-white/10'}`}>
-                                            {task.enabled ? 'Active' : 'Paused'}
-                                        </span>
                                         <button
                                             onClick={() => handleDelete(task)}
                                             disabled={loading}
