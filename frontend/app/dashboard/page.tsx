@@ -512,7 +512,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!token || !qrLogin?.login_id || loginMode !== "qr" || !showAddDialog) return;
-    if (!(qrPhase === "ready" || qrPhase === "scanning")) return;
+    if (qrPhase === "success" || qrPhase === "expired" || qrPhase === "error" || qrPhase === "password") return;
     const loginId = qrLogin.login_id;
     qrActiveLoginIdRef.current = loginId;
     qrPollSeqRef.current += 1;

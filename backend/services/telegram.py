@@ -761,7 +761,8 @@ class TelegramService:
             "in_memory": session_mode == "string",
         }
         if session_mode == "string":
-            client_kwargs["no_updates"] = no_updates
+            # QR 登录依赖 UpdateLoginToken，必须启用 updates
+            client_kwargs["no_updates"] = False
         client = Client(**client_kwargs)
 
         try:
