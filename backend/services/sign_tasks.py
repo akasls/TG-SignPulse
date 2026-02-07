@@ -826,6 +826,36 @@ class SignTaskService:
             "offset": offset,
         }
 
+    @staticmethod
+    def _is_invalid_session_error(err: Exception) -> bool:
+        msg = str(err)
+        if not msg:
+            return False
+        upper = msg.upper()
+        return (
+            "AUTH_KEY_UNREGISTERED" in upper
+            or "AUTH_KEY_INVALID" in upper
+            or "SESSION_REVOKED" in upper
+            or "SESSION_EXPIRED" in upper
+            or "SESSION INVALID" in upper
+        )
+
+    async def _cleanup_invalid_session(self, account_name: str) -> None:
+        try:
+            from backend.services.telegram import get_telegram_service
+
+            await get_telegram_service().delete_account(account_name)
+        except Exception as e:
+            print(f"DEBUG: 清理无效 Session 失败: {e}")
+
+        # 清理 chats 缓存，避免后续误用旧数据
+        try:
+            cache_file = self.signs_dir / account_name / "chats_cache.json"
+            if cache_file.exists():
+                cache_file.unlink()
+        except Exception:
+            pass
+
     async def refresh_account_chats(self, account_name: str) -> List[Dict[str, Any]]:
         """
         连接 Telegram 并刷新 Chat 列表
@@ -898,55 +928,57 @@ class SignTaskService:
             # 使用上下文管理器处理生命周期和锁
             async with account_lock:
                 async with get_global_semaphore():
-                    async with client:
-                        try:
+                    try:
+                        async with client:
                             # 尝试获取用户信息，如果失败说明 session 无效
                             await client.get_me()
-                        except Exception as e:
-                            # 捕获所有异常，如果是 401 等错误则说明 session 失效
-                            raise ValueError(f"Session 无效或已过期: {e}")
 
-                        try:
-                            async for dialog in client.get_dialogs():
-                                try:
-                                    chat = getattr(dialog, "chat", None)
-                                    if chat is None:
+                            try:
+                                async for dialog in client.get_dialogs():
+                                    try:
+                                        chat = getattr(dialog, "chat", None)
+                                        if chat is None:
+                                            logger.warning(
+                                                "get_dialogs 返回空 chat，已跳过"
+                                            )
+                                            continue
+                                        chat_id = getattr(chat, "id", None)
+                                        if chat_id is None:
+                                            logger.warning(
+                                                "get_dialogs 返回 chat.id 为空，已跳过"
+                                            )
+                                            continue
+
+                                        chat_info = {
+                                            "id": chat_id,
+                                            "title": chat.title
+                                            or chat.first_name
+                                            or chat.username
+                                            or str(chat_id),
+                                            "username": chat.username,
+                                            "type": chat.type.name.lower(),
+                                        }
+
+                                        # 特殊处理机器人和私聊
+                                        if chat.type == ChatType.BOT:
+                                            chat_info["title"] = f"🤖 {chat_info['title']}"
+
+                                        chats.append(chat_info)
+                                    except Exception as e:
                                         logger.warning(
-                                            "get_dialogs 返回空 chat，已跳过"
+                                            f"处理 dialog 失败，已跳过: {type(e).__name__}: {e}"
                                         )
                                         continue
-                                    chat_id = getattr(chat, "id", None)
-                                    if chat_id is None:
-                                        logger.warning(
-                                            "get_dialogs 返回 chat.id 为空，已跳过"
-                                        )
-                                        continue
-
-                                    chat_info = {
-                                        "id": chat_id,
-                                        "title": chat.title
-                                        or chat.first_name
-                                        or chat.username
-                                        or str(chat_id),
-                                        "username": chat.username,
-                                        "type": chat.type.name.lower(),
-                                    }
-
-                                    # 特殊处理机器人和私聊
-                                    if chat.type == ChatType.BOT:
-                                        chat_info["title"] = f"🤖 {chat_info['title']}"
-
-                                    chats.append(chat_info)
-                                except Exception as e:
-                                    logger.warning(
-                                        f"处理 dialog 失败，已跳过: {type(e).__name__}: {e}"
-                                    )
-                                    continue
-                        except Exception as e:
-                            # Pyrogram 边界异常：保留已获取结果
-                            logger.warning(
-                                f"get_dialogs 中断，返回已获取结果: {type(e).__name__}: {e}"
-                            )
+                            except Exception as e:
+                                # Pyrogram 边界异常：保留已获取结果
+                                logger.warning(
+                                    f"get_dialogs 中断，返回已获取结果: {type(e).__name__}: {e}"
+                                )
+                    except Exception as e:
+                        if self._is_invalid_session_error(e):
+                            await self._cleanup_invalid_session(account_name)
+                            raise ValueError(f"账号 {account_name} 登录已失效，请重新登录")
+                        raise
 
             # 保存到缓存
             account_dir = self.signs_dir / account_name
