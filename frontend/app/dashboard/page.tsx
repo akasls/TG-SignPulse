@@ -505,12 +505,6 @@ export default function Dashboard() {
         if (status === "password_required") {
           setQrPhaseSafe("password", "poll_password_required", { status });
           stopPolling();
-          const passwordValue = qrPasswordRef.current;
-          const isSubmitting = qrPasswordLoadingRef.current;
-          if (passwordValue && !isSubmitting) {
-            handleSubmitQrPassword(passwordValue);
-            return;
-          }
           setQrMessage(t("qr_password_required"));
           return;
         }
@@ -582,7 +576,6 @@ export default function Dashboard() {
     clearQrPollingTimers,
     debugQr,
     formatErrorMessage,
-    handleSubmitQrPassword,
     hasToastShown,
     loadData,
     markToastShown,
