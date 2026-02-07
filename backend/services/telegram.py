@@ -652,6 +652,18 @@ class TelegramService:
                 raise ValueError("导出 session_string 失败")
             set_account_session_string(account_name, session_string)
             save_session_string_file(self.session_dir, account_name, session_string)
+        else:
+            # 即使在 file 模式，也尝试保存 session_string 作为降级方案
+            try:
+                session_string = await client.export_session_string()
+            except Exception:
+                session_string = None
+            if session_string:
+                try:
+                    set_account_session_string(account_name, session_string)
+                    save_session_string_file(self.session_dir, account_name, session_string)
+                except Exception:
+                    pass
         if proxy:
             from backend.utils.tg_session import set_account_profile
 

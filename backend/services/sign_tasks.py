@@ -870,6 +870,9 @@ class SignTaskService:
         session_dir = settings.resolve_session_dir()
         session_mode = get_session_mode()
         session_string = None
+        fallback_session_string = None
+        used_fallback_session = False
+        session_file = session_dir / f"{account_name}.session"
 
         if session_mode == "string":
             session_string = (
@@ -879,8 +882,16 @@ class SignTaskService:
             if not session_string:
                 raise ValueError(f"账号 {account_name} 登录已失效，请重新登录")
         else:
-            if not (session_dir / f"{account_name}.session").exists():
-                raise ValueError(f"账号 {account_name} 登录已失效，请重新登录")
+            fallback_session_string = (
+                get_account_session_string(account_name)
+                or load_session_string_file(session_dir, account_name)
+            )
+            if not session_file.exists():
+                if fallback_session_string:
+                    session_string = fallback_session_string
+                    used_fallback_session = True
+                else:
+                    raise ValueError(f"账号 {account_name} 登录已失效，请重新登录")
 
         config_service = get_config_service()
         tg_config = config_service.get_telegram_config()
@@ -914,6 +925,9 @@ class SignTaskService:
         }
         if session_mode == "string":
             client_kwargs["no_updates"] = get_no_updates_flag()
+        elif session_string:
+            # fallback session_string 时避免开启 updates，降低后台任务干扰
+            client_kwargs["no_updates"] = True
         client = get_client(**client_kwargs)
 
         chats: List[Dict[str, Any]] = []
@@ -925,16 +939,17 @@ class SignTaskService:
 
             account_lock = self._account_locks[account_name]
             
-            # 使用上下文管理器处理生命周期和锁
-            async with account_lock:
-                async with get_global_semaphore():
-                    try:
-                        async with client:
+            async def _fetch_chats(active_client) -> List[Dict[str, Any]]:
+                local_chats: List[Dict[str, Any]] = []
+                # 使用上下文管理器处理生命周期和锁
+                async with account_lock:
+                    async with get_global_semaphore():
+                        async with active_client:
                             # 尝试获取用户信息，如果失败说明 session 无效
-                            await client.get_me()
+                            await active_client.get_me()
 
                             try:
-                                async for dialog in client.get_dialogs():
+                                async for dialog in active_client.get_dialogs():
                                     try:
                                         chat = getattr(dialog, "chat", None)
                                         if chat is None:
@@ -963,7 +978,7 @@ class SignTaskService:
                                         if chat.type == ChatType.BOT:
                                             chat_info["title"] = f"🤖 {chat_info['title']}"
 
-                                        chats.append(chat_info)
+                                        local_chats.append(chat_info)
                                     except Exception as e:
                                         logger.warning(
                                             f"处理 dialog 失败，已跳过: {type(e).__name__}: {e}"
@@ -974,11 +989,41 @@ class SignTaskService:
                                 logger.warning(
                                     f"get_dialogs 中断，返回已获取结果: {type(e).__name__}: {e}"
                                 )
-                    except Exception as e:
-                        if self._is_invalid_session_error(e):
-                            await self._cleanup_invalid_session(account_name)
-                            raise ValueError(f"账号 {account_name} 登录已失效，请重新登录")
-                        raise
+                return local_chats
+
+            try:
+                chats = await _fetch_chats(client)
+            except Exception as e:
+                if self._is_invalid_session_error(e):
+                    if fallback_session_string and not used_fallback_session:
+                        logger.warning(
+                            "Session invalid for %s, retry with session_string: %s",
+                            account_name,
+                            e,
+                        )
+                        try:
+                            from tg_signer.core import close_client_by_name
+
+                            await close_client_by_name(account_name, workdir=session_dir)
+                        except Exception:
+                            pass
+                        used_fallback_session = True
+                        retry_kwargs = dict(client_kwargs)
+                        retry_kwargs["session_string"] = fallback_session_string
+                        retry_kwargs["in_memory"] = True
+                        retry_kwargs["no_updates"] = True
+                        client = get_client(**retry_kwargs)
+                        chats = await _fetch_chats(client)
+                    else:
+                        logger.warning(
+                            "Session invalid for %s: %s",
+                            account_name,
+                            e,
+                        )
+                        await self._cleanup_invalid_session(account_name)
+                        raise ValueError(f"账号 {account_name} 登录已失效，请重新登录")
+                else:
+                    raise
 
             # 保存到缓存
             account_dir = self.signs_dir / account_name
