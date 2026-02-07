@@ -775,9 +775,8 @@ class TelegramService:
             "proxy": proxy_dict,
             "in_memory": session_mode == "string",
         }
-        if session_mode == "string":
-            # QR 登录依赖 UpdateLoginToken，必须启用 updates
-            client_kwargs["no_updates"] = False
+        # QR 登录依赖 UpdateLoginToken，必须启用 updates（无论 session 模式）
+        client_kwargs["no_updates"] = False
         client = Client(**client_kwargs)
 
         try:
@@ -830,6 +829,8 @@ class TelegramService:
                 "scan_seen": False,
                 "lock": account_lock,
                 "migrate_dc_id": getattr(result, "dc_id", None),
+                "api_id": api_id,
+                "api_hash": api_hash,
                 "handler": None,
             }
             _qr_login_sessions[login_id] = session_data
@@ -918,6 +919,77 @@ class TelegramService:
         token = data.get("token")
         migrate_dc_id = data.get("migrate_dc_id")
 
+        async def _finalize_login(login_result: Any) -> Dict[str, Any]:
+            # 标记授权用户
+            user = types.User._parse(client, login_result.authorization.user)
+            await client.storage.user_id(user.id)
+            await client.storage.is_bot(False)
+            data["authorized"] = True
+            data["authorized_user"] = user
+
+            # 获取用户信息并持久化会话
+            try:
+                try:
+                    me = await client.get_me()
+                except Exception:
+                    me = user
+
+                try:
+                    password_state = await client.get_password()
+                except Exception:
+                    password_state = None
+
+                if password_state and getattr(password_state, "has_password", False):
+                    data["status"] = "password_required"
+                    data["scan_seen"] = True
+                    self._log_qr_state(login_id, "password_required", data)
+                    return {
+                        "status": "password_required",
+                        "expires_at": data.get("expires_at"),
+                        "message": "需要 2FA 密码",
+                    }
+
+                await self._persist_client_session(
+                    client, data.get("account_name"), data.get("proxy")
+                )
+            except SessionPasswordNeeded:
+                data["status"] = "password_required"
+                data["scan_seen"] = True
+                self._log_qr_state(login_id, "password_required", data)
+                return {
+                    "status": "password_required",
+                    "expires_at": data.get("expires_at"),
+                    "message": "需要 2FA 密码",
+                }
+
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+
+            self._log_qr_state(login_id, "success", data)
+            account_name = data.get("account_name")
+            await self._cleanup_qr_login(login_id, preserve_session=True)
+
+            account = None
+            try:
+                accounts = self.list_accounts(force_refresh=True)
+                account = next(
+                    (acc for acc in accounts if acc.get("name") == account_name),
+                    None,
+                )
+            except Exception:
+                account = None
+
+            return {
+                "status": "success",
+                "message": "登录成功",
+                "account": account,
+                "user_id": me.id,
+                "first_name": me.first_name,
+                "username": me.username,
+            }
+
         try:
             if not client.is_connected:
                 await client.connect()
@@ -955,75 +1027,7 @@ class TelegramService:
                 }
 
             if isinstance(result, raw.types.auth.LoginTokenSuccess):
-                # 标记授权用户
-                user = types.User._parse(client, result.authorization.user)
-                await client.storage.user_id(user.id)
-                await client.storage.is_bot(False)
-                data["authorized"] = True
-                data["authorized_user"] = user
-
-                # 获取用户信息并持久化会话
-                try:
-                    try:
-                        me = await client.get_me()
-                    except Exception:
-                        me = user
-
-                    try:
-                        password_state = await client.get_password()
-                    except Exception:
-                        password_state = None
-
-                    if password_state and getattr(password_state, "has_password", False):
-                        data["status"] = "password_required"
-                        data["scan_seen"] = True
-                        self._log_qr_state(login_id, "password_required", data)
-                        return {
-                            "status": "password_required",
-                            "expires_at": data.get("expires_at"),
-                            "message": "需要 2FA 密码",
-                        }
-
-                    await self._persist_client_session(
-                        client, data.get("account_name"), data.get("proxy")
-                    )
-                except SessionPasswordNeeded:
-                    data["status"] = "password_required"
-                    data["scan_seen"] = True
-                    self._log_qr_state(login_id, "password_required", data)
-                    return {
-                        "status": "password_required",
-                        "expires_at": data.get("expires_at"),
-                        "message": "需要 2FA 密码",
-                    }
-
-                try:
-                    await client.disconnect()
-                except Exception:
-                    pass
-
-                self._log_qr_state(login_id, "success", data)
-                account_name = data.get("account_name")
-                await self._cleanup_qr_login(login_id, preserve_session=True)
-
-                account = None
-                try:
-                    accounts = self.list_accounts(force_refresh=True)
-                    account = next(
-                        (acc for acc in accounts if acc.get("name") == account_name),
-                        None,
-                    )
-                except Exception:
-                    account = None
-
-                return {
-                    "status": "success",
-                    "message": "登录成功",
-                    "account": account,
-                    "user_id": me.id,
-                    "first_name": me.first_name,
-                    "username": me.username,
-                }
+                return await _finalize_login(result)
 
             if isinstance(result, raw.types.auth.LoginToken):
                 token_expires = getattr(result, "expires", None)
@@ -1035,6 +1039,74 @@ class TelegramService:
                 if data.get("token") != result.token:
                     data["status"] = "scanned_wait_confirm"
                 data["token"] = result.token
+
+            # 扫码确认后尝试再次导出 token，提升成功识别概率
+            if data.get("status") == "scanned_wait_confirm" and not isinstance(
+                result, raw.types.auth.LoginTokenSuccess
+            ):
+                now = time.time()
+                last_export_ts = data.get("last_export_ts", 0)
+                if now - last_export_ts < 3:
+                    status = (
+                        "scanned_wait_confirm"
+                        if data.get("scan_seen")
+                        else data.get("status", "waiting_scan")
+                    )
+                    self._log_qr_state(login_id, status, data)
+                    return {
+                        "status": status,
+                        "expires_at": data.get("expires_at"),
+                    }
+                data["last_export_ts"] = now
+
+                api_id = data.get("api_id")
+                api_hash = data.get("api_hash")
+                if not api_id or not api_hash:
+                    try:
+                        from backend.services.config import get_config_service
+
+                        tg_config = get_config_service().get_telegram_config()
+                        api_id = os.getenv("TG_API_ID") or tg_config.get("api_id")
+                        api_hash = os.getenv("TG_API_HASH") or tg_config.get("api_hash")
+                        try:
+                            api_id = int(api_id) if api_id is not None else None
+                        except (TypeError, ValueError):
+                            api_id = None
+                        if isinstance(api_hash, str):
+                            api_hash = api_hash.strip()
+                        if api_id and api_hash:
+                            data["api_id"] = api_id
+                            data["api_hash"] = api_hash
+                    except Exception:
+                        api_id = None
+                        api_hash = None
+
+                if api_id and api_hash:
+                    try:
+                        export_result = await client.invoke(
+                            raw.functions.auth.ExportLoginToken(
+                                api_id=api_id, api_hash=api_hash, except_ids=[]
+                            )
+                        )
+                        if isinstance(export_result, raw.types.auth.LoginTokenSuccess):
+                            return await _finalize_login(export_result)
+                        if isinstance(export_result, raw.types.auth.LoginTokenMigrateTo):
+                            data["migrate_dc_id"] = export_result.dc_id
+                            data["token"] = export_result.token
+                            data["status"] = "scanned_wait_confirm"
+                        elif isinstance(export_result, raw.types.auth.LoginToken):
+                            token_expires = getattr(export_result, "expires", None)
+                            if token_expires:
+                                data["expires_ts"] = self._normalize_login_token_expires(
+                                    token_expires
+                                )
+                                data["expires_at"] = datetime.utcfromtimestamp(
+                                    data["expires_ts"]
+                                ).isoformat() + "Z"
+                            data["token"] = export_result.token
+                            data["status"] = "scanned_wait_confirm"
+                    except Exception:
+                        pass
 
             status = (
                 "scanned_wait_confirm"
