@@ -792,10 +792,12 @@ class TelegramService:
 
                 # 确保更新流已初始化，避免收不到 UpdateLoginToken
                 try:
+                    await client.invoke(raw.functions.updates.GetState())
+                except Exception:
+                    pass
+                try:
                     if hasattr(client, "initialize"):
                         await client.initialize()
-                    else:
-                        await client.invoke(raw.functions.updates.GetState())
                 except Exception:
                     pass
 
@@ -1003,55 +1005,8 @@ class TelegramService:
                 await client.connect()
 
             result = None
-            # 尝试导入 token（处理 DC 迁移）
-            try:
-                for _ in range(2):
-                    if migrate_dc_id:
-                        session = await get_session(client, migrate_dc_id)
-                        result = await session.invoke(
-                            raw.functions.auth.ImportLoginToken(token=token)
-                        )
-                    else:
-                        result = await client.invoke(
-                            raw.functions.auth.ImportLoginToken(token=token)
-                        )
-
-                    if isinstance(result, raw.types.auth.LoginTokenMigrateTo):
-                        migrate_dc_id = result.dc_id
-                        token = result.token
-                        data["migrate_dc_id"] = migrate_dc_id
-                        data["token"] = token
-                        data["status"] = "scanned_wait_confirm"
-                        continue
-                    break
-            except SessionPasswordNeeded:
-                data["status"] = "password_required"
-                data["scan_seen"] = True
-                self._log_qr_state(login_id, "password_required", data)
-                return {
-                    "status": "password_required",
-                    "expires_at": data.get("expires_at"),
-                    "message": "需要 2FA 密码",
-                }
-
-            if isinstance(result, raw.types.auth.LoginTokenSuccess):
-                return await _finalize_login(result)
-
-            if isinstance(result, raw.types.auth.LoginToken):
-                token_expires = getattr(result, "expires", None)
-                if token_expires:
-                    data["expires_ts"] = self._normalize_login_token_expires(token_expires)
-                    data["expires_at"] = datetime.utcfromtimestamp(
-                        data["expires_ts"]
-                    ).isoformat() + "Z"
-                if data.get("token") != result.token:
-                    data["status"] = "scanned_wait_confirm"
-                data["token"] = result.token
-
-            # 扫码确认后尝试再次导出 token，提升成功识别概率
-            if data.get("status") == "scanned_wait_confirm" and not isinstance(
-                result, raw.types.auth.LoginTokenSuccess
-            ):
+            # 扫码确认后应再次调用 ExportLoginToken（官方流程）
+            if data.get("status") == "scanned_wait_confirm":
                 now = time.time()
                 last_export_ts = data.get("last_export_ts", 0)
                 if now - last_export_ts < 3:
@@ -1096,14 +1051,33 @@ class TelegramService:
                                 api_id=api_id, api_hash=api_hash, except_ids=[]
                             )
                         )
-                        if isinstance(export_result, raw.types.auth.LoginTokenSuccess):
-                            return await _finalize_login(export_result)
-                        if isinstance(export_result, raw.types.auth.LoginTokenMigrateTo):
-                            data["migrate_dc_id"] = export_result.dc_id
-                            data["token"] = export_result.token
+                        result = export_result
+                        if isinstance(result, raw.types.auth.LoginTokenSuccess):
+                            return await _finalize_login(result)
+                        if isinstance(result, raw.types.auth.LoginTokenMigrateTo):
+                            data["migrate_dc_id"] = result.dc_id
+                            data["token"] = result.token
                             data["status"] = "scanned_wait_confirm"
-                        elif isinstance(export_result, raw.types.auth.LoginToken):
-                            token_expires = getattr(export_result, "expires", None)
+                            try:
+                                session = await get_session(client, result.dc_id)
+                                migrate_result = await session.invoke(
+                                    raw.functions.auth.ImportLoginToken(token=result.token)
+                                )
+                                if isinstance(migrate_result, raw.types.auth.LoginTokenSuccess):
+                                    return await _finalize_login(migrate_result)
+                            except SessionPasswordNeeded:
+                                data["status"] = "password_required"
+                                data["scan_seen"] = True
+                                self._log_qr_state(login_id, "password_required", data)
+                                return {
+                                    "status": "password_required",
+                                    "expires_at": data.get("expires_at"),
+                                    "message": "需要 2FA 密码",
+                                }
+                            except Exception:
+                                pass
+                        elif isinstance(result, raw.types.auth.LoginToken):
+                            token_expires = getattr(result, "expires", None)
                             if token_expires:
                                 data["expires_ts"] = self._normalize_login_token_expires(
                                     token_expires
@@ -1111,7 +1085,7 @@ class TelegramService:
                                 data["expires_at"] = datetime.utcfromtimestamp(
                                     data["expires_ts"]
                                 ).isoformat() + "Z"
-                            data["token"] = export_result.token
+                            data["token"] = result.token
                             data["status"] = "scanned_wait_confirm"
                     except Exception:
                         pass
