@@ -826,17 +826,6 @@ class TelegramService:
                     except Exception:
                         pass
 
-                # 确保更新流已初始化，避免收不到 UpdateLoginToken
-                try:
-                    await client.invoke(raw.functions.updates.GetState())
-                except Exception:
-                    pass
-                try:
-                    if hasattr(client, "initialize"):
-                        await client.initialize()
-                except Exception:
-                    pass
-
                 result = await client.invoke(
                     raw.functions.auth.ExportLoginToken(
                         api_id=api_id, api_hash=api_hash, except_ids=[]
