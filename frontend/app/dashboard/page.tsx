@@ -921,7 +921,23 @@ export default function Dashboard() {
                       placeholder={t("two_step_placeholder")}
                       value={qrPassword}
                       onChange={(e) => setQrPassword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        if (qrPhase !== "password") return;
+                        if (!qrPassword || qrPasswordLoading) return;
+                        e.preventDefault();
+                        handleSubmitQrPassword(qrPassword);
+                      }}
                     />
+                    {qrPhase === "password" ? (
+                      <button
+                        className="btn-gradient w-full h-8 !px-3 !py-0 !text-[11px] mb-4"
+                        onClick={() => handleSubmitQrPassword(qrPassword)}
+                        disabled={!qrPassword || qrPasswordLoading}
+                      >
+                        {qrPasswordLoading ? <Spinner className="animate-spin" /> : t("qr_password_submit")}
+                      </button>
+                    ) : null}
 
                     <label className="text-[11px] mb-1">{t("proxy")}</label>
                     <input
