@@ -683,7 +683,7 @@ class TelegramService:
                 pass
         if client:
             try:
-                await client.dispatcher.stop(clear=False)
+                await client.dispatcher.stop(clear=True)
             except Exception:
                 pass
             try:
@@ -1004,11 +1004,6 @@ class TelegramService:
                     "message": "需要 2FA 密码",
                 }
 
-            try:
-                await client.disconnect()
-            except Exception:
-                pass
-
             self._log_qr_state(login_id, "success", data)
             account_name = data.get("account_name")
             await self._cleanup_qr_login(login_id, preserve_session=True)
@@ -1299,11 +1294,6 @@ class TelegramService:
             await self._persist_client_session(
                 client, data.get("account_name"), data.get("proxy")
             )
-
-            try:
-                await client.disconnect()
-            except Exception:
-                pass
 
             account_name = data.get("account_name")
             self._log_qr_state(login_id, "success", data)

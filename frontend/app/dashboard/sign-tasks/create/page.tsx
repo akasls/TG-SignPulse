@@ -62,6 +62,14 @@ export default function CreateSignTaskPage() {
         const code = err?.code;
         return code ? `${base} (${code})` : base;
     }, [t]);
+    const handleAccountSessionInvalid = useCallback((err: any) => {
+        if (err?.code !== "ACCOUNT_SESSION_INVALID") return false;
+        addToast(t("account_session_invalid"), "error");
+        setTimeout(() => {
+            router.replace("/dashboard");
+        }, 800);
+        return true;
+    }, [addToast, router, t]);
 
     // 当前编辑的 Chat
     const [editingChat, setEditingChat] = useState<{
@@ -77,9 +85,10 @@ export default function CreateSignTaskPage() {
             const chatsData = await getAccountChats(tokenStr, accountName);
             setAvailableChats(chatsData);
         } catch (err: any) {
+            if (handleAccountSessionInvalid(err)) return;
             console.error("加载 Chat 失败:", err);
         }
-    }, []);
+    }, [handleAccountSessionInvalid]);
 
     const loadAccounts = useCallback(async (tokenStr: string) => {
         try {
@@ -129,6 +138,7 @@ export default function CreateSignTaskPage() {
                 }
             } catch (err: any) {
                 if (!cancelled) {
+                    if (handleAccountSessionInvalid(err)) return;
                     addToast(formatErrorMessage("search_failed", err), "error");
                     setChatSearchResults([]);
                 }
@@ -142,7 +152,7 @@ export default function CreateSignTaskPage() {
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [chatSearch, token, selectedAccount, addToast, t, formatErrorMessage]);
+    }, [chatSearch, token, selectedAccount, addToast, t, formatErrorMessage, handleAccountSessionInvalid]);
 
     useEffect(() => {
         if (!editingChat) {

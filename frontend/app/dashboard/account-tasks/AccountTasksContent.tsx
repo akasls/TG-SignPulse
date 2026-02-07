@@ -175,6 +175,20 @@ export default function AccountTasksContent() {
         const code = err?.code;
         return code ? `${base} (${code})` : base;
     }, []);
+    const handleAccountSessionInvalid = useCallback((err: any) => {
+        if (err?.code !== "ACCOUNT_SESSION_INVALID") return false;
+        const toast = addToastRef.current;
+        const message = tRef.current
+            ? tRef.current("account_session_invalid")
+            : "账号登录已失效，请重新登录";
+        if (toast) {
+            toast(message, "error");
+        }
+        setTimeout(() => {
+            router.replace("/dashboard");
+        }, 800);
+        return true;
+    }, [router]);
 
     // 创建任务对话框
     const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -215,14 +229,20 @@ export default function AccountTasksContent() {
     const loadData = useCallback(async (tokenStr: string) => {
         try {
             setLoading(true);
-            const [tasksData, chatsData] = await Promise.all([
-                listSignTasks(tokenStr, accountName),
-                getAccountChats(tokenStr, accountName),
-            ]);
-
+            const tasksData = await listSignTasks(tokenStr, accountName);
             setTasks(tasksData);
-            setChats(chatsData);
+            try {
+                const chatsData = await getAccountChats(tokenStr, accountName);
+                setChats(chatsData);
+            } catch (err: any) {
+                if (handleAccountSessionInvalid(err)) return;
+                const toast = addToastRef.current;
+                if (toast) {
+                    toast(formatErrorMessage("load_failed", err), "error");
+                }
+            }
         } catch (err: any) {
+            if (handleAccountSessionInvalid(err)) return;
             const toast = addToastRef.current;
             if (toast) {
                 toast(formatErrorMessage("load_failed", err), "error");
@@ -230,7 +250,7 @@ export default function AccountTasksContent() {
         } finally {
             setLoading(false);
         }
-    }, [accountName, formatErrorMessage]);
+    }, [accountName, formatErrorMessage, handleAccountSessionInvalid]);
 
     useEffect(() => {
         const tokenStr = getToken();
@@ -265,6 +285,7 @@ export default function AccountTasksContent() {
                 }
             } catch (err: any) {
                 if (!cancelled) {
+                    if (handleAccountSessionInvalid(err)) return;
                     const toast = addToastRef.current;
                     if (toast) {
                         toast(formatErrorMessage("search_failed", err), "error");
@@ -281,7 +302,7 @@ export default function AccountTasksContent() {
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [chatSearch, token, accountName, formatErrorMessage]);
+    }, [chatSearch, token, accountName, formatErrorMessage, handleAccountSessionInvalid]);
 
     useEffect(() => {
         if (!showCreateDialog && !showEditDialog) {
@@ -299,6 +320,7 @@ export default function AccountTasksContent() {
             setChats(chatsData);
             addToast(t("chats_refreshed"), "success");
         } catch (err: any) {
+            if (handleAccountSessionInvalid(err)) return;
             addToast(formatErrorMessage("refresh_failed", err), "error");
         } finally {
             setRefreshingChats(false);
@@ -313,6 +335,7 @@ export default function AccountTasksContent() {
             setChats(chatsData);
             addToast(t("chats_refreshed"), "success");
         } catch (err: any) {
+            if (handleAccountSessionInvalid(err)) return;
             addToast(formatErrorMessage("refresh_failed", err), "error");
         } finally {
             setLoading(false);

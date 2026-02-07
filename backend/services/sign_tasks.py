@@ -877,10 +877,12 @@ class SignTaskService:
                 or load_session_string_file(session_dir, account_name)
             )
             if not session_string:
-                raise ValueError(f"账号 {account_name} 的 session_string 不存在")
+                await self._cleanup_invalid_session(account_name)
+                raise ValueError(f"账号 {account_name} 登录已失效，请重新登录")
         else:
             if not (session_dir / f"{account_name}.session").exists():
-                raise ValueError(f"账号 {account_name} 的 Session 文件不存在")
+                await self._cleanup_invalid_session(account_name)
+                raise ValueError(f"账号 {account_name} 登录已失效，请重新登录")
 
         config_service = get_config_service()
         tg_config = config_service.get_telegram_config()
