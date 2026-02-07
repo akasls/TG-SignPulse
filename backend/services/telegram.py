@@ -915,6 +915,14 @@ class TelegramService:
                 "message": "需要 2FA 密码",
             }
 
+        # 未扫码时不要调用 ImportLoginToken，避免服务端轮转 token 导致二维码失效
+        if not data.get("scan_seen") and data.get("status") == "waiting_scan":
+            self._log_qr_state(login_id, "waiting_scan", data)
+            return {
+                "status": "waiting_scan",
+                "expires_at": data.get("expires_at"),
+            }
+
         client = data.get("client")
         token = data.get("token")
         migrate_dc_id = data.get("migrate_dc_id")
