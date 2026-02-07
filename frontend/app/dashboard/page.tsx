@@ -965,16 +965,6 @@ export default function Dashboard() {
                         handleSubmitQrPassword(qrPassword);
                       }}
                     />
-                    {qrPhase === "password" ? (
-                      <button
-                        className="btn-gradient w-full h-8 !px-3 !py-0 !text-[11px] mb-4"
-                        onClick={() => handleSubmitQrPassword(qrPassword)}
-                        disabled={!qrPassword || qrPasswordLoading}
-                      >
-                        {qrPasswordLoading ? <Spinner className="animate-spin" /> : t("qr_password_submit")}
-                      </button>
-                    ) : null}
-
                     <label className="text-[11px] mb-1">{t("proxy")}</label>
                     <input
                       type="text"
@@ -1024,7 +1014,19 @@ export default function Dashboard() {
                   </div>
 
                   <div className="flex gap-3 mt-2">
-                    <button className="btn-secondary flex-1 h-10 !py-0 !text-xs" onClick={handleCloseAddDialog}>{t("cancel")}</button>
+                    <button
+                      className="btn-secondary flex-1 h-10 !py-0 !text-xs"
+                      onClick={handleCloseAddDialog}
+                    >
+                      {t("cancel")}
+                    </button>
+                    <button
+                      className="btn-gradient flex-1 h-10 !py-0 !text-xs"
+                      onClick={() => handleSubmitQrPassword(qrPassword)}
+                      disabled={qrPhase !== "password" || !qrPassword || qrPasswordLoading}
+                    >
+                      {qrPasswordLoading ? <Spinner className="animate-spin" /> : t("confirm_connect")}
+                    </button>
                   </div>
                 </>
               )}
