@@ -682,6 +682,30 @@ class TelegramService:
             data["last_state_logged"] = state
         logger.info("qr_login state=%s login_id=%s", state, login_id)
 
+    async def _apply_migrate_auth(self, client, data: Dict[str, Any]) -> None:
+        migrate_dc_id = data.get("migrate_dc_id")
+        migrate_auth_key = data.get("migrate_auth_key")
+        if migrate_dc_id and migrate_auth_key:
+            try:
+                await client.storage.dc_id(migrate_dc_id)
+                await client.storage.auth_key(migrate_auth_key)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _capture_migrate_auth(data: Dict[str, Any], session: Any) -> None:
+        if not session:
+            return
+        try:
+            auth_key = getattr(session, "auth_key", None)
+            dc_id = getattr(session, "dc_id", None)
+            if auth_key:
+                data["migrate_auth_key"] = auth_key
+            if dc_id:
+                data["migrate_dc_id"] = dc_id
+        except Exception:
+            pass
+
     async def _cleanup_qr_login(self, login_id: str, preserve_session: bool = False) -> None:
         data = _qr_login_sessions.pop(login_id, None)
         if not data:
@@ -1014,6 +1038,7 @@ class TelegramService:
                         "message": "需要 2FA 密码",
                     }
 
+                await self._apply_migrate_auth(client, data)
                 await self._persist_client_session(
                     client, data.get("account_name"), data.get("proxy")
                 )
@@ -1081,6 +1106,7 @@ class TelegramService:
                         for _ in range(2):
                             if migrate_dc_id:
                                 session = await get_session(client, migrate_dc_id)
+                                self._capture_migrate_auth(data, session)
                                 result = await session.invoke(
                                     raw.functions.auth.ImportLoginToken(token=token)
                                 )
@@ -1166,6 +1192,7 @@ class TelegramService:
                                     data["token"] = export_result.token
                                     try:
                                         session = await get_session(client, export_result.dc_id)
+                                        self._capture_migrate_auth(data, session)
                                         migrate_result = await session.invoke(
                                             raw.functions.auth.ImportLoginToken(token=export_result.token)
                                         )
@@ -1286,6 +1313,7 @@ class TelegramService:
             try:
                 if data.get("migrate_dc_id"):
                     session = await get_session(client, data.get("migrate_dc_id"))
+                    self._capture_migrate_auth(data, session)
                     auth = await session.invoke(
                         raw.functions.auth.CheckPassword(
                             password=compute_password_check(
@@ -1315,6 +1343,7 @@ class TelegramService:
             except Exception:
                 me = user_fallback
 
+            await self._apply_migrate_auth(client, data)
             await self._persist_client_session(
                 client, data.get("account_name"), data.get("proxy")
             )
@@ -1359,6 +1388,7 @@ class TelegramService:
                             for _ in range(2):
                                 if migrate_dc_id:
                                     session = await get_session(client, migrate_dc_id)
+                                    self._capture_migrate_auth(data, session)
                                     result = await session.invoke(
                                         raw.functions.auth.ImportLoginToken(token=token)
                                     )
@@ -1453,6 +1483,7 @@ class TelegramService:
                                     session = await get_session(
                                         client, export_result.dc_id
                                     )
+                                    self._capture_migrate_auth(data, session)
                                     migrate_result = await session.invoke(
                                         raw.functions.auth.ImportLoginToken(
                                             token=export_result.token
@@ -1513,6 +1544,7 @@ class TelegramService:
                     for _ in range(2):
                         if migrate_dc_id:
                             session = await get_session(client, migrate_dc_id)
+                            self._capture_migrate_auth(data, session)
                             result = await session.invoke(
                                 raw.functions.auth.ImportLoginToken(token=token)
                             )
@@ -1569,6 +1601,7 @@ class TelegramService:
                         if password_state and getattr(password_state, "has_password", False):
                             return await _finalize_password_login(user)
 
+                        await self._apply_migrate_auth(client, data)
                         await self._persist_client_session(
                             client, data.get("account_name"), data.get("proxy")
                         )
