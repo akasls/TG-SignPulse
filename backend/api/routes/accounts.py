@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from typing import Optional
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -15,6 +16,7 @@ from backend.models.user import User
 from backend.services.telegram import get_telegram_service
 
 router = APIRouter()
+logger = logging.getLogger("backend.qr_login")
 
 
 # ============ Schemas ============
@@ -318,6 +320,7 @@ async def submit_qr_login_password(
             username=result.get("username"),
         )
     except ValueError as e:
+        logger.warning("qr_password_failed login_id=%s error=%s", request.login_id, e)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(

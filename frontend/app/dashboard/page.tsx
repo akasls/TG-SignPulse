@@ -616,11 +616,7 @@ export default function Dashboard() {
   };
 
   
-  useEffect(() => {
-    if (qrPhase !== "password") return;
-    if (!qrPassword || qrPasswordLoading) return;
-    handleSubmitQrPassword(qrPassword);
-  }, [qrPhase, qrPassword, qrPasswordLoading, handleSubmitQrPassword]);
+  // 手动提交 2FA（避免自动重试导致重复请求）
 
   const handleCloseAddDialog = () => {
     if (qrLogin?.login_id) {
