@@ -837,7 +837,7 @@ class SignTaskService:
             or "AUTH_KEY_INVALID" in upper
             or "SESSION_REVOKED" in upper
             or "SESSION_EXPIRED" in upper
-            or "SESSION INVALID" in upper
+            or "USER_DEACTIVATED" in upper
         )
 
     async def _cleanup_invalid_session(self, account_name: str) -> None:
@@ -877,11 +877,9 @@ class SignTaskService:
                 or load_session_string_file(session_dir, account_name)
             )
             if not session_string:
-                await self._cleanup_invalid_session(account_name)
                 raise ValueError(f"账号 {account_name} 登录已失效，请重新登录")
         else:
             if not (session_dir / f"{account_name}.session").exists():
-                await self._cleanup_invalid_session(account_name)
                 raise ValueError(f"账号 {account_name} 登录已失效，请重新登录")
 
         config_service = get_config_service()

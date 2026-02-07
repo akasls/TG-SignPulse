@@ -683,13 +683,16 @@ class TelegramService:
                 pass
         if client:
             try:
-                await client.dispatcher.stop(clear=True)
+                if getattr(client, "is_initialized", False):
+                    await client.stop()
+                elif getattr(client, "is_connected", False):
+                    await client.disconnect()
             except Exception:
-                pass
-            try:
-                await client.disconnect()
-            except Exception:
-                pass
+                try:
+                    if getattr(client, "is_connected", False):
+                        await client.disconnect()
+                except Exception:
+                    pass
         if not preserve_session:
             session_mode = get_session_mode()
             if session_mode == "file":
@@ -865,6 +868,16 @@ class TelegramService:
 
             # 监听扫码更新
             try:
+                # 初始化 updates/dispatcher，确保后续 stop 能完整关闭
+                try:
+                    if not getattr(client, "is_initialized", False):
+                        await client.initialize()
+                except Exception:
+                    try:
+                        await client.dispatcher.start()
+                    except Exception:
+                        pass
+
                 async def _raw_handler(_, update, __, ___):
                     if not isinstance(update, raw.types.UpdateLoginToken):
                         return
@@ -887,7 +900,6 @@ class TelegramService:
 
                 handler = client.add_handler(handlers.RawUpdateHandler(_raw_handler))
                 session_data["handler"] = handler
-                await client.dispatcher.start()
             except Exception:
                 pass
 
