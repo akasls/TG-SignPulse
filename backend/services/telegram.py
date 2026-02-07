@@ -945,6 +945,7 @@ class TelegramService:
         # 扫码后状态保持，避免回退到 waiting_scan
         if data.get("status") == "scanned_wait_confirm":
             data["scan_seen"] = True
+            self._extend_qr_expires(data)
 
         # 未扫码时不要调用 ImportLoginToken，避免服务端轮转 token 导致二维码失效
         if not data.get("scan_seen") and data.get("status") == "waiting_scan":
@@ -1201,6 +1202,7 @@ class TelegramService:
                 data["status"] = "password_required"
                 data["scan_seen"] = True
                 self._extend_qr_expires(data)
+                data["authorized"] = True
                 self._log_qr_state(login_id, "password_required", data)
             return {
                 "status": "password_required",
@@ -1264,6 +1266,10 @@ class TelegramService:
             except PasswordHashInvalid:
                 await self._cleanup_qr_login(login_id)
                 raise ValueError("两步验证密码错误")
+            except Unauthorized:
+                # 可能尚未完成扫码授权
+                self._extend_qr_expires(data)
+                raise ValueError("请先在手机端确认登录")
 
             try:
                 me = await client.get_me()
@@ -1307,8 +1313,158 @@ class TelegramService:
                 if not client.is_connected:
                     await client.connect()
 
+                async def _ensure_authorized():
+                    if data.get("authorized"):
+                        return data.get("authorized_user")
+
+                    token = data.get("token")
+                    migrate_dc_id = data.get("migrate_dc_id")
+                    result = None
+                    if token:
+                        try:
+                            for _ in range(2):
+                                if migrate_dc_id:
+                                    session = await get_session(client, migrate_dc_id)
+                                    result = await session.invoke(
+                                        raw.functions.auth.ImportLoginToken(token=token)
+                                    )
+                                else:
+                                    result = await client.invoke(
+                                        raw.functions.auth.ImportLoginToken(token=token)
+                                    )
+
+                                if isinstance(result, raw.types.auth.LoginTokenMigrateTo):
+                                    migrate_dc_id = result.dc_id
+                                    token = result.token
+                                    data["migrate_dc_id"] = migrate_dc_id
+                                    data["token"] = token
+                                    continue
+                                break
+                        except SessionPasswordNeeded:
+                            data["status"] = "password_required"
+                            data["scan_seen"] = True
+                            data["authorized"] = True
+                            self._extend_qr_expires(data)
+                            return data.get("authorized_user")
+                        except Exception:
+                            result = None
+
+                    if isinstance(result, raw.types.auth.LoginTokenSuccess):
+                        user = types.User._parse(client, result.authorization.user)
+                        await client.storage.user_id(user.id)
+                        await client.storage.is_bot(False)
+                        data["authorized"] = True
+                        data["authorized_user"] = user
+                        return user
+                    if isinstance(result, raw.types.auth.LoginToken):
+                        token_expires = getattr(result, "expires", None)
+                        if token_expires:
+                            data["expires_ts"] = self._normalize_login_token_expires(
+                                token_expires
+                            )
+                            data["expires_at"] = datetime.utcfromtimestamp(
+                                data["expires_ts"]
+                            ).isoformat() + "Z"
+                        if result.token:
+                            data["token"] = result.token
+
+                    api_id = data.get("api_id")
+                    api_hash = data.get("api_hash")
+                    if not api_id or not api_hash:
+                        try:
+                            from backend.services.config import get_config_service
+
+                            tg_config = get_config_service().get_telegram_config()
+                            api_id = os.getenv("TG_API_ID") or tg_config.get("api_id")
+                            api_hash = os.getenv("TG_API_HASH") or tg_config.get(
+                                "api_hash"
+                            )
+                            try:
+                                api_id = int(api_id) if api_id is not None else None
+                            except (TypeError, ValueError):
+                                api_id = None
+                            if isinstance(api_hash, str):
+                                api_hash = api_hash.strip()
+                            if api_id and api_hash:
+                                data["api_id"] = api_id
+                                data["api_hash"] = api_hash
+                        except Exception:
+                            api_id = None
+                            api_hash = None
+
+                    if api_id and api_hash:
+                        try:
+                            export_result = await client.invoke(
+                                raw.functions.auth.ExportLoginToken(
+                                    api_id=api_id, api_hash=api_hash, except_ids=[]
+                                )
+                            )
+                            if isinstance(
+                                export_result, raw.types.auth.LoginTokenSuccess
+                            ):
+                                user = types.User._parse(
+                                    client, export_result.authorization.user
+                                )
+                                await client.storage.user_id(user.id)
+                                await client.storage.is_bot(False)
+                                data["authorized"] = True
+                                data["authorized_user"] = user
+                                return user
+                            if isinstance(
+                                export_result, raw.types.auth.LoginTokenMigrateTo
+                            ):
+                                data["migrate_dc_id"] = export_result.dc_id
+                                data["token"] = export_result.token
+                                try:
+                                    session = await get_session(
+                                        client, export_result.dc_id
+                                    )
+                                    migrate_result = await session.invoke(
+                                        raw.functions.auth.ImportLoginToken(
+                                            token=export_result.token
+                                        )
+                                    )
+                                    if isinstance(
+                                        migrate_result,
+                                        raw.types.auth.LoginTokenSuccess,
+                                    ):
+                                        user = types.User._parse(
+                                            client, migrate_result.authorization.user
+                                        )
+                                        await client.storage.user_id(user.id)
+                                        await client.storage.is_bot(False)
+                                        data["authorized"] = True
+                                        data["authorized_user"] = user
+                                        return user
+                                except SessionPasswordNeeded:
+                                    data["status"] = "password_required"
+                                    data["scan_seen"] = True
+                                    data["authorized"] = True
+                                    self._extend_qr_expires(data)
+                                    return data.get("authorized_user")
+                                except Exception:
+                                    pass
+                            elif isinstance(export_result, raw.types.auth.LoginToken):
+                                token_expires = getattr(export_result, "expires", None)
+                                if token_expires:
+                                    data["expires_ts"] = (
+                                        self._normalize_login_token_expires(token_expires)
+                                    )
+                                    data["expires_at"] = datetime.utcfromtimestamp(
+                                        data["expires_ts"]
+                                    ).isoformat() + "Z"
+                                if export_result.token:
+                                    data["token"] = export_result.token
+                        except Exception:
+                            pass
+
+                    return data.get("authorized_user")
+
                 if data.get("status") == "password_required" or data.get("authorized"):
-                    return await _finalize_password_login(data.get("authorized_user"))
+                    user = await _ensure_authorized()
+                    if not data.get("authorized"):
+                        raise ValueError("请先在手机端确认登录")
+                    return await _finalize_password_login(user)
 
                 token = data.get("token")
                 migrate_dc_id = data.get("migrate_dc_id")
@@ -1335,6 +1491,8 @@ class TelegramService:
                 except SessionPasswordNeeded:
                     data["status"] = "password_required"
                     data["scan_seen"] = True
+                    data["authorized"] = True
+                    self._extend_qr_expires(data)
                     return await _finalize_password_login()
 
                 if isinstance(result, raw.types.auth.LoginToken):
@@ -1412,11 +1570,17 @@ class TelegramService:
             await self._cleanup_qr_login(login_id)
             raise ValueError(f"请求过于频繁，请等待 {e.value} 秒后重试")
         except Unauthorized:
+            if data and data.get("status") in {"password_required", "scanned_wait_confirm"}:
+                self._extend_qr_expires(data)
+                raise ValueError("请先在手机端确认登录")
             await self._cleanup_qr_login(login_id)
             raise ValueError("登录失败，请重试")
         except ValueError:
             raise
         except Exception:
+            if data and data.get("status") in {"password_required", "scanned_wait_confirm"}:
+                self._extend_qr_expires(data)
+                raise ValueError("登录失败，请重试")
             await self._cleanup_qr_login(login_id)
             raise ValueError("登录失败，请重试")
 
