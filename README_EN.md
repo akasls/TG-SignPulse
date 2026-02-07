@@ -146,6 +146,14 @@ frontend/     # Next.js admin UI
 
 ## Recent Updates
 
+### 2026-02-07
+
+- Fixed QR login completion issues (including 2FA submit and authorization flow).
+- QR login status no longer falls back to “waiting for scan”.
+- Login UX: phone code login now auto-verifies after code input.
+- Account deletion is now persistent across restarts.
+- Login modal layout refined: unified confirm button placement and no scrollbar for QR/phone login.
+
 ### 2026-02-04
 
 - Added QR login: new entry, status polling, refresh/cancel on expiry; session output matches existing login.
