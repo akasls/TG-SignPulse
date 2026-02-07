@@ -477,6 +477,11 @@ select option {
   overflow-y: auto;
 }
 
+.modal-content.modal-content-fit {
+  max-height: none;
+  overflow: visible;
+}
+
 .modal-overlay.active .modal-content {
   transform: scale(1);
 }

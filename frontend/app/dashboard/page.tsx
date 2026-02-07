@@ -843,7 +843,7 @@ export default function Dashboard() {
 
       {showAddDialog && (
         <div className="modal-overlay active">
-          <div className="glass-panel modal-content !max-w-[420px] !p-6" onClick={e => e.stopPropagation()}>
+          <div className="glass-panel modal-content modal-content-fit !max-w-[420px] !p-6" onClick={e => e.stopPropagation()}>
             <div className="modal-header !mb-5">
               <div className="modal-title !text-lg">{t("add_account")}</div>
               <div className="modal-close" onClick={handleCloseAddDialog}><X weight="bold" /></div>
