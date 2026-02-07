@@ -942,6 +942,10 @@ class TelegramService:
                 "message": "需要 2FA 密码",
             }
 
+        # 扫码后状态保持，避免回退到 waiting_scan
+        if data.get("status") == "scanned_wait_confirm":
+            data["scan_seen"] = True
+
         # 未扫码时不要调用 ImportLoginToken，避免服务端轮转 token 导致二维码失效
         if not data.get("scan_seen") and data.get("status") == "waiting_scan":
             self._log_qr_state(login_id, "waiting_scan", data)
@@ -1099,6 +1103,79 @@ class TelegramService:
                     if result.token:
                         data["token"] = result.token
                     data["status"] = "scanned_wait_confirm"
+
+                # fallback: 再次调用 ExportLoginToken 获取最终状态（符合官方流程）
+                if result is None or isinstance(result, raw.types.auth.LoginToken):
+                    last_export_ts = data.get("last_export_ts", 0)
+                    if now - last_export_ts >= 3:
+                        api_id = data.get("api_id")
+                        api_hash = data.get("api_hash")
+                        if not api_id or not api_hash:
+                            try:
+                                from backend.services.config import get_config_service
+
+                                tg_config = get_config_service().get_telegram_config()
+                                api_id = os.getenv("TG_API_ID") or tg_config.get("api_id")
+                                api_hash = os.getenv("TG_API_HASH") or tg_config.get("api_hash")
+                                try:
+                                    api_id = int(api_id) if api_id is not None else None
+                                except (TypeError, ValueError):
+                                    api_id = None
+                                if isinstance(api_hash, str):
+                                    api_hash = api_hash.strip()
+                                if api_id and api_hash:
+                                    data["api_id"] = api_id
+                                    data["api_hash"] = api_hash
+                            except Exception:
+                                api_id = None
+                                api_hash = None
+
+                        if api_id and api_hash:
+                            data["last_export_ts"] = now
+                            try:
+                                export_result = await client.invoke(
+                                    raw.functions.auth.ExportLoginToken(
+                                        api_id=api_id, api_hash=api_hash, except_ids=[]
+                                    )
+                                )
+                                if isinstance(export_result, raw.types.auth.LoginTokenSuccess):
+                                    return await _finalize_login(export_result)
+                                if isinstance(export_result, raw.types.auth.LoginTokenMigrateTo):
+                                    data["migrate_dc_id"] = export_result.dc_id
+                                    data["token"] = export_result.token
+                                    try:
+                                        session = await get_session(client, export_result.dc_id)
+                                        migrate_result = await session.invoke(
+                                            raw.functions.auth.ImportLoginToken(token=export_result.token)
+                                        )
+                                        if isinstance(migrate_result, raw.types.auth.LoginTokenSuccess):
+                                            return await _finalize_login(migrate_result)
+                                    except SessionPasswordNeeded:
+                                        data["status"] = "password_required"
+                                        data["scan_seen"] = True
+                                        self._extend_qr_expires(data)
+                                        self._log_qr_state(login_id, "password_required", data)
+                                        return {
+                                            "status": "password_required",
+                                            "expires_at": data.get("expires_at"),
+                                            "message": "需要 2FA 密码",
+                                        }
+                                    except Exception:
+                                        pass
+                                elif isinstance(export_result, raw.types.auth.LoginToken):
+                                    token_expires = getattr(export_result, "expires", None)
+                                    if token_expires:
+                                        data["expires_ts"] = self._normalize_login_token_expires(
+                                            token_expires
+                                        )
+                                        data["expires_at"] = datetime.utcfromtimestamp(
+                                            data["expires_ts"]
+                                        ).isoformat() + "Z"
+                                    if export_result.token:
+                                        data["token"] = export_result.token
+                                    data["status"] = "scanned_wait_confirm"
+                            except Exception:
+                                pass
 
             status = (
                 "scanned_wait_confirm"
