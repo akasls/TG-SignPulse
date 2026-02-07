@@ -1080,6 +1080,7 @@ class TelegramService:
                     except SessionPasswordNeeded:
                         data["status"] = "password_required"
                         data["scan_seen"] = True
+                        data["authorized"] = True
                         self._extend_qr_expires(data)
                         self._log_qr_state(login_id, "password_required", data)
                         return {
@@ -1233,6 +1234,7 @@ class TelegramService:
             Unauthorized,
         )
         from pyrogram.methods.messages.inline_session import get_session
+        from pyrogram.utils import compute_password_check
 
         password = (password or "").strip()
         if not password:
@@ -1261,18 +1263,36 @@ class TelegramService:
         global_semaphore = get_global_semaphore()
 
         async def _finalize_password_login(user_fallback=None) -> Dict[str, Any]:
+            user_from_password = None
             try:
-                await client.check_password(password)
+                if data.get("migrate_dc_id"):
+                    session = await get_session(client, data.get("migrate_dc_id"))
+                    auth = await session.invoke(
+                        raw.functions.auth.CheckPassword(
+                            password=compute_password_check(
+                                await session.invoke(raw.functions.account.GetPassword()),
+                                password,
+                            )
+                        )
+                    )
+                    user_from_password = types.User._parse(client, auth.user)
+                    await client.storage.user_id(user_from_password.id)
+                    await client.storage.is_bot(False)
+                    data["authorized"] = True
+                    data["authorized_user"] = user_from_password
+                else:
+                    user_from_password = await client.check_password(password)
+                    data["authorized"] = True
+                    data["authorized_user"] = user_from_password
             except PasswordHashInvalid:
                 await self._cleanup_qr_login(login_id)
                 raise ValueError("两步验证密码错误")
-            except Unauthorized:
-                # 可能尚未完成扫码授权
-                self._extend_qr_expires(data)
-                raise ValueError("请先在手机端确认登录")
 
             try:
-                me = await client.get_me()
+                if user_from_password is not None:
+                    me = user_from_password
+                else:
+                    me = await client.get_me()
             except Exception:
                 me = user_fallback
 
@@ -1461,10 +1481,16 @@ class TelegramService:
                     return data.get("authorized_user")
 
                 if data.get("status") == "password_required" or data.get("authorized"):
-                    user = await _ensure_authorized()
-                    if not data.get("authorized"):
-                        raise ValueError("请先在手机端确认登录")
-                    return await _finalize_password_login(user)
+                    try:
+                        return await _finalize_password_login(
+                            data.get("authorized_user")
+                        )
+                    except Unauthorized:
+                        user = await _ensure_authorized()
+                        if not data.get("authorized"):
+                            self._extend_qr_expires(data)
+                            raise ValueError("请先在手机端确认登录")
+                        return await _finalize_password_login(user)
 
                 token = data.get("token")
                 migrate_dc_id = data.get("migrate_dc_id")
