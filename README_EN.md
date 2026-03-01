@@ -113,6 +113,24 @@ All variables are optional; default behavior matches the previous version when n
 - `TG_GLOBAL_CONCURRENCY`: global concurrency limit (default `1`, keep `1` on arm64).
 - `APP_TOTP_VALID_WINDOW`: panel 2FA tolerance window (default `0`, set to `1` to allow ±1 step).
 - `PORT`: listen port (default `8080`, read by container command).
+- `APP_DATA_DIR`: custom data directory (higher priority than panel config), e.g. `/opt/tg-signpulse-data`.
+
+## Custom Data Directory (New)
+
+You can now set the data directory in two ways:
+
+1. Panel setting (recommended)
+- Go to `System Settings -> Global Sign-in Settings -> Data Directory`.
+- Save the path.
+- Restart the backend service to apply.
+
+2. Environment variable
+- Set `APP_DATA_DIR=/your/path`.
+- This has higher priority than the panel setting.
+
+Notes:
+- The data directory stores sessions, task configs, logs, and the database.
+- Ensure the directory is writable inside the container and mounted as a persistent volume.
 
 ## Session Migration (Optional)
 
@@ -146,11 +164,20 @@ frontend/     # Next.js admin UI
 
 ## Recent Updates
 
+### 2026-03-01
+
+- AI actions upgraded: both image recognition and math now support two modes each (`send text` / `click button`) for 4 AI action types in total, and can be mixed in one workflow.
+- Fixed AI config save behavior: saving `base_url/model` no longer clears the existing API key.
+- Login flow adjusted: phone code login now requires manual save/verify click (no auto-submit).
+- Stability improvements: reduced frequent `TimeoutError` and `429 transport flood` logs (retry/backoff + scenario-based updates control).
+- Long-run optimization: fixed duplicate message handler registration and cleanup task buildup to reduce memory growth risk.
+- Added custom data directory support: configurable `data_dir` in settings (takes effect after backend restart).
+
 ### 2026-02-07
 
 - Fixed QR login completion issues (including 2FA submit and authorization flow).
 - QR login status no longer falls back to “waiting for scan”.
-- Login UX: phone code login now auto-verifies after code input.
+- Login UX improvements for phone-code flow.
 - Account deletion is now persistent across restarts.
 - Login modal layout refined: unified confirm button placement and no scrollbar for QR/phone login.
 

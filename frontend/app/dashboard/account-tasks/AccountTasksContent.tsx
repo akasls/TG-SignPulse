@@ -226,6 +226,17 @@ export default function AccountTasksContent() {
 
     const [checking, setChecking] = useState(true);
 
+    const isActionValid = useCallback((action: any) => {
+        const actionId = Number(action?.action);
+        if (actionId === 1 || actionId === 3) {
+            return Boolean((action?.text || "").trim());
+        }
+        if (actionId === 2) {
+            return Boolean((action?.dice || "").trim());
+        }
+        return [4, 5, 6, 7].includes(actionId);
+    }, []);
+
     const loadData = useCallback(async (tokenStr: string) => {
         try {
             setLoading(true);
@@ -431,7 +442,7 @@ export default function AccountTasksContent() {
             return;
         }
 
-        if (newTask.actions.length === 0 || !newTask.actions[0].text && newTask.actions[0].action !== 2 && newTask.actions[0].action !== 4 && newTask.actions[0].action !== 5) {
+        if (newTask.actions.length === 0 || newTask.actions.some((action) => !isActionValid(action))) {
             addToast(t("add_action_error"), "error");
             return;
         }
@@ -526,6 +537,10 @@ export default function AccountTasksContent() {
         const chatId = editTask.chat_id || parseInt(editTask.chat_id_manual) || 0;
         if (!chatId) {
             addToast(t("select_chat_error"), "error");
+            return;
+        }
+        if (editTask.actions.length === 0 || editTask.actions.some((action) => !isActionValid(action))) {
+            addToast(t("add_action_error"), "error");
             return;
         }
 
@@ -909,8 +924,10 @@ export default function AccountTasksContent() {
                                                 <option value={1}>{t("action_send_text")}</option>
                                                 <option value={2}>{t("action_send_dice")}</option>
                                                 <option value={3}>{t("action_click_button")}</option>
-                                                <option value={4}>{t("action_ai_vision")}</option>
-                                                <option value={5}>{t("action_ai_logic")}</option>
+                                                <option value={4}>{t("action_ai_vision_click")}</option>
+                                                <option value={6}>{t("action_ai_vision_send")}</option>
+                                                <option value={5}>{t("action_ai_logic_send")}</option>
+                                                <option value={7}>{t("action_ai_logic_click")}</option>
                                             </select>
 
                                             <div className="flex-1">
@@ -952,13 +969,25 @@ export default function AccountTasksContent() {
                                                 {action.action === 4 && (
                                                     <div className="h-10 px-4 flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-[#8183ff] text-xs font-bold uppercase tracking-wider">
                                                         <Robot weight="fill" size={16} />
-                                                        {t("ai_vision_mode")}
+                                                        {t("ai_vision_click_mode")}
+                                                    </div>
+                                                )}
+                                                {action.action === 6 && (
+                                                    <div className="h-10 px-4 flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-[#8183ff] text-xs font-bold uppercase tracking-wider">
+                                                        <Robot weight="fill" size={16} />
+                                                        {t("ai_vision_send_mode")}
                                                     </div>
                                                 )}
                                                 {action.action === 5 && (
                                                     <div className="h-10 px-4 flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-xs font-bold uppercase tracking-wider">
                                                         <MathOperations weight="fill" size={16} />
-                                                        {t("ai_logic_solver")}
+                                                        {t("ai_logic_send_mode")}
+                                                    </div>
+                                                )}
+                                                {action.action === 7 && (
+                                                    <div className="h-10 px-4 flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-xs font-bold uppercase tracking-wider">
+                                                        <MathOperations weight="fill" size={16} />
+                                                        {t("ai_logic_click_mode")}
                                                     </div>
                                                 )}
                                             </div>

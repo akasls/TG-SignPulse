@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from backend.utils.storage import get_writable_base_dir
+from backend.utils.storage import get_initial_data_dir, get_writable_base_dir
 try:
     from pydantic.v1 import BaseSettings
 except ImportError:
@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     access_token_expire_hours: int = 12
 
     timezone: str = os.getenv("TZ", "Asia/Hong_Kong")
-    data_dir: Path = Path("/data")
+    data_dir: Path = get_initial_data_dir()
     db_path: Optional[Path] = None
     signer_workdir: Optional[Path] = None
     session_dir: Optional[Path] = None

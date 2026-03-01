@@ -174,6 +174,8 @@ class SupportAction(int, Enum):
     CLICK_KEYBOARD_BY_TEXT = 3  # 根据文本点击键盘
     CHOOSE_OPTION_BY_IMAGE = 4  # 根据图片选择选项
     REPLY_BY_CALCULATION_PROBLEM = 5  # 回复计算题
+    REPLY_BY_IMAGE_RECOGNITION = 6  # AI image recognition then send text
+    CLICK_BUTTON_BY_CALCULATION_PROBLEM = 7  # AI calculation then click button
 
     @property
     def desc(self):
@@ -183,6 +185,8 @@ class SupportAction(int, Enum):
             SupportAction.CLICK_KEYBOARD_BY_TEXT: "根据文本点击键盘",
             SupportAction.CHOOSE_OPTION_BY_IMAGE: "根据图片选择选项",
             SupportAction.REPLY_BY_CALCULATION_PROBLEM: "回复计算题",
+            SupportAction.REPLY_BY_IMAGE_RECOGNITION: "AI image recognition then send text",
+            SupportAction.CLICK_BUTTON_BY_CALCULATION_PROBLEM: "AI calculation then click button",
         }[self]
 
 
@@ -218,6 +222,17 @@ class ReplyByCalculationProblemAction(SignAction):
         SupportAction.REPLY_BY_CALCULATION_PROBLEM
     )
 
+class ReplyByImageRecognitionAction(SignAction):
+    action: Literal[SupportAction.REPLY_BY_IMAGE_RECOGNITION] = (
+        SupportAction.REPLY_BY_IMAGE_RECOGNITION
+    )
+
+
+class ClickButtonByCalculationProblemAction(SignAction):
+    action: Literal[SupportAction.CLICK_BUTTON_BY_CALCULATION_PROBLEM] = (
+        SupportAction.CLICK_BUTTON_BY_CALCULATION_PROBLEM
+    )
+
 
 ActionT: TypeAlias = Union[
     SendTextAction,
@@ -225,6 +240,8 @@ ActionT: TypeAlias = Union[
     ClickKeyboardByTextAction,
     ChooseOptionByImageAction,
     ReplyByCalculationProblemAction,
+    ReplyByImageRecognitionAction,
+    ClickButtonByCalculationProblemAction,
 ]
 
 
@@ -316,8 +333,21 @@ class SignChatV3(BaseJSONConfig):
         ai_actions = {
             SupportAction.CHOOSE_OPTION_BY_IMAGE,
             SupportAction.REPLY_BY_CALCULATION_PROBLEM,
+            SupportAction.REPLY_BY_IMAGE_RECOGNITION,
+            SupportAction.CLICK_BUTTON_BY_CALCULATION_PROBLEM,
         }
         return any(action.action in ai_actions for action in self.actions)
+
+    @property
+    def requires_updates(self) -> bool:
+        response_actions = {
+            SupportAction.CLICK_KEYBOARD_BY_TEXT,
+            SupportAction.CHOOSE_OPTION_BY_IMAGE,
+            SupportAction.REPLY_BY_CALCULATION_PROBLEM,
+            SupportAction.REPLY_BY_IMAGE_RECOGNITION,
+            SupportAction.CLICK_BUTTON_BY_CALCULATION_PROBLEM,
+        }
+        return any(action.action in response_actions for action in self.actions)
 
 
 class SignConfigV3(BaseJSONConfig):
@@ -334,6 +364,10 @@ class SignConfigV3(BaseJSONConfig):
     @property
     def requires_ai(self) -> bool:
         return any(chat.requires_ai for chat in self.chats)
+
+    @property
+    def requires_updates(self) -> bool:
+        return any(chat.requires_updates for chat in self.chats)
 
 
 MatchRuleT: TypeAlias = Literal["exact", "contains", "regex", "all"]

@@ -155,6 +155,44 @@ class AITools:
         result = json_repair.loads(message.content)
         return int(result["option"])
 
+    async def extract_text_by_image(
+        self,
+        image: bytes,
+        query: str = "",
+        client: "AsyncOpenAI" = None,
+        model: str = None,
+        temperature=0.1,
+    ) -> str:
+        sys_prompt = (
+            "You are an OCR assistant. Extract the most relevant text from the image. "
+            "Return plain text only, no markdown, no explanation."
+        )
+        client = client or self.client
+        model = model or self.default_model
+        text_query = query or "Extract the key text from this image."
+        messages = [
+            {"role": "system", "content": sys_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": text_query},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{encode_image(image)}"
+                        },
+                    },
+                ],
+            },
+        ]
+        completion = await client.chat.completions.create(
+            messages=messages,
+            model=model,
+            stream=False,
+            temperature=temperature,
+        )
+        return (completion.choices[0].message.content or "").strip()
+
     async def calculate_problem(
         self,
         query: str,

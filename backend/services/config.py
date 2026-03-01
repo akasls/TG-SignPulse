@@ -10,6 +10,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from backend.core.config import get_settings
+from backend.utils.storage import (
+    clear_data_dir_override,
+    is_writable_dir,
+    load_data_dir_override,
+    save_data_dir_override,
+)
 
 settings = get_settings()
 
@@ -468,7 +474,10 @@ class ConfigService:
             return None
 
     def save_ai_config(
-        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
+        self,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> bool:
         """
         保存 AI 配置
@@ -481,14 +490,15 @@ class ConfigService:
         Returns:
             是否成功保存
         """
-        config = {
-            "api_key": api_key,
-        }
+        existing = self.get_ai_config() or {}
+        normalized_api_key = (api_key or "").strip()
+        final_api_key = normalized_api_key or existing.get("api_key", "")
+        if not final_api_key:
+            raise ValueError("API Key 不能为空")
 
-        if base_url:
-            config["base_url"] = base_url
-        if model:
-            config["model"] = model
+        config = {"api_key": final_api_key}
+        config["base_url"] = base_url if base_url else None
+        config["model"] = model if model else None
 
         config_file = self._get_ai_config_file()
 
@@ -577,8 +587,11 @@ class ConfigService:
         """
         config_file = self._get_global_settings_file()
 
+        override_data_dir = load_data_dir_override()
         default_settings = {
             "sign_interval": None,  # None 表示使用随机 1-120 秒
+            "log_retention_days": 7,
+            "data_dir": str(override_data_dir) if override_data_dir else None,
         }
 
         if not config_file.exists():
@@ -587,6 +600,8 @@ class ConfigService:
         try:
             with open(config_file, "r", encoding="utf-8") as f:
                 settings = json.load(f)
+                if not isinstance(settings, dict):
+                    return default_settings
                 # 合并默认设置
                 for key, value in default_settings.items():
                     if key not in settings:
@@ -606,10 +621,26 @@ class ConfigService:
             是否成功保存
         """
         config_file = self._get_global_settings_file()
+        merged = dict(self.get_global_settings())
+        merged.update(settings)
+
+        data_dir_value = merged.get("data_dir")
+        if isinstance(data_dir_value, str):
+            data_dir_value = data_dir_value.strip()
+        if data_dir_value:
+            resolved = Path(str(data_dir_value)).expanduser()
+            resolved.mkdir(parents=True, exist_ok=True)
+            if not is_writable_dir(resolved):
+                raise ValueError(f"数据路径不可写: {resolved}")
+            save_data_dir_override(resolved)
+            merged["data_dir"] = str(resolved)
+        elif data_dir_value is None or data_dir_value == "":
+            clear_data_dir_override()
+            merged["data_dir"] = None
 
         try:
             with open(config_file, "w", encoding="utf-8") as f:
-                json.dump(settings, f, ensure_ascii=False, indent=2)
+                json.dump(merged, f, ensure_ascii=False, indent=2)
             return True
         except OSError:
             return False

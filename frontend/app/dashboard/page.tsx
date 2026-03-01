@@ -82,7 +82,6 @@ export default function Dashboard() {
   const [qrPasswordLoading, setQrPasswordLoading] = useState(false);
   const qrPasswordRef = useRef("");
   const qrPasswordLoadingRef = useRef(false);
-  const phoneAutoVerifyRef = useRef("");
 
   const qrPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrCountdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -245,38 +244,6 @@ export default function Dashboard() {
     loadData,
     normalizeAccountName,
     t,
-  ]);
-
-  useEffect(() => {
-    if (!token || loginMode !== "phone" || !showAddDialog) return;
-    if (!loginData.phone_code_hash) return;
-    if (loading) return;
-    const code = loginData.phone_code.trim();
-    if (!code || code.length < 5) return;
-    const trimmedAccountName = normalizeAccountName(loginData.account_name);
-    if (!trimmedAccountName) return;
-    const fingerprint = [
-      trimmedAccountName,
-      loginData.phone_number.trim(),
-      loginData.phone_code_hash,
-      code,
-      (loginData.password || "").trim(),
-    ].join("|");
-    if (phoneAutoVerifyRef.current === fingerprint) return;
-    phoneAutoVerifyRef.current = fingerprint;
-    handleVerifyLogin();
-  }, [
-    token,
-    loginMode,
-    showAddDialog,
-    loginData.account_name,
-    loginData.phone_number,
-    loginData.phone_code,
-    loginData.phone_code_hash,
-    loginData.password,
-    loading,
-    handleVerifyLogin,
-    normalizeAccountName,
   ]);
 
   const handleDeleteAccount = async (name: string) => {

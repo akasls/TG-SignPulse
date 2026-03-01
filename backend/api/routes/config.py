@@ -303,7 +303,7 @@ def delete_sign_task(
 class AIConfigRequest(BaseModel):
     """AI 配置请求"""
 
-    api_key: str
+    api_key: Optional[str] = None
     base_url: Optional[str] = None
     model: Optional[str] = None
 
@@ -383,6 +383,11 @@ def save_ai_config(
 
         return AIConfigSaveResponse(success=True, message="AI 配置已保存")
 
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -428,6 +433,7 @@ class GlobalSettingsRequest(BaseModel):
 
     sign_interval: Optional[int] = None  # None 表示随机 1-120 秒
     log_retention_days: int = 7  # 日志保留天数，默认 7
+    data_dir: Optional[str] = None  # 自定义数据目录（需重启生效）
 
 
 class GlobalSettingsResponse(BaseModel):
@@ -435,6 +441,7 @@ class GlobalSettingsResponse(BaseModel):
 
     sign_interval: Optional[int] = None
     log_retention_days: int = 7
+    data_dir: Optional[str] = None
 
 
 @router.get("/settings", response_model=GlobalSettingsResponse)
@@ -465,10 +472,18 @@ def save_global_settings(
             "sign_interval": request.sign_interval,
             "log_retention_days": request.log_retention_days,
         }
+        fields_set = getattr(request, "model_fields_set", request.__fields_set__)
+        if "data_dir" in fields_set:
+            settings["data_dir"] = request.data_dir
         get_config_service().save_global_settings(settings)
 
         return AIConfigSaveResponse(success=True, message="全局设置已保存")
 
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

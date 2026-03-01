@@ -44,10 +44,12 @@ from tg_signer.config import (
     ActionT,
     BaseJSONConfig,
     ChooseOptionByImageAction,
+    ClickButtonByCalculationProblemAction,
     ClickKeyboardByTextAction,
     HttpCallback,
     MatchConfig,
     MonitorConfig,
+    ReplyByImageRecognitionAction,
     ReplyByCalculationProblemAction,
     SendDiceAction,
     SendTextAction,
@@ -825,6 +827,12 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                 elif action == SupportAction.REPLY_BY_CALCULATION_PROBLEM:
                     print_to_user("计算题将使用大模型回答。")
                     actions.append(ReplyByCalculationProblemAction())
+                elif action == SupportAction.REPLY_BY_IMAGE_RECOGNITION:
+                    print_to_user("AI will recognize text from image and send it automatically.")
+                    actions.append(ReplyByImageRecognitionAction())
+                elif action == SupportAction.CLICK_BUTTON_BY_CALCULATION_PROBLEM:
+                    print_to_user("AI will calculate the answer and click the matching button.")
+                    actions.append(ClickButtonByCalculationProblemAction())
                 else:
                     raise ValueError(f"不支持的动作: {action}")
                 if local_input_("是否继续添加动作？(y/N)：").strip().lower() != "y":
@@ -1042,6 +1050,9 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
 
         sign_record = self.load_sign_record()
         chat_ids = [c.chat_id for c in config.chats]
+        need_update_handlers = bool(getattr(config, "requires_updates", True))
+        message_handler_ref = None
+        edited_handler_ref = None
 
         async def sign_once():
             for chat in config.chats:
@@ -1074,13 +1085,14 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
             return True
 
         while True:
-            self.log(f"为以下Chat添加消息回调处理函数：{chat_ids}")
-            self.app.add_handler(
-                MessageHandler(self.on_message, filters.chat(chat_ids))
-            )
-            self.app.add_handler(
-                EditedMessageHandler(self.on_edited_message, filters.chat(chat_ids))
-            )
+            if need_update_handlers and message_handler_ref is None:
+                self.log(f"adding message handlers for chats: {chat_ids}")
+                message_handler_ref = self.app.add_handler(
+                    MessageHandler(self.on_message, filters.chat(chat_ids))
+                )
+                edited_handler_ref = self.app.add_handler(
+                    EditedMessageHandler(self.on_edited_message, filters.chat(chat_ids))
+                )
             try:
                 async with self.app:
                     now = get_now()
@@ -1108,6 +1120,18 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
             )
             self.log(f"下次运行时间: {next_run}")
             await asyncio.sleep((next_run - now).total_seconds())
+
+
+        if message_handler_ref:
+            try:
+                self.app.remove_handler(*message_handler_ref)
+            except Exception:
+                pass
+        if edited_handler_ref:
+            try:
+                self.app.remove_handler(*edited_handler_ref)
+            except Exception:
+                pass
 
     async def run_once(self, num_of_dialogs):
         return await self.run(num_of_dialogs, only_once=True, force_rerun=True)
@@ -1192,10 +1216,49 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
             self.log("检测到文本回复，尝试调用大模型进行计算题回答")
             self.log(f"问题: \n{message.text}")
             answer = await self.get_ai_tools().calculate_problem(message.text)
+            answer = (answer or "").strip()
             self.log(f"回答为: {answer}")
+            if not answer:
+                self.log("AI 未返回有效答案", level="WARNING")
+                return False
             await self.send_message(message.chat.id, answer)
             return True
         return False
+
+    async def _reply_by_image_recognition(
+        self, action: ReplyByImageRecognitionAction, message
+    ):
+        if not message.photo:
+            return False
+        self.log("检测到图片，尝试识别并发送文本")
+        image_buffer: BinaryIO = await self.app.download_media(
+            message.photo.file_id, in_memory=True
+        )
+        image_buffer.seek(0)
+        image_bytes = image_buffer.read()
+        text = await self.get_ai_tools().extract_text_by_image(image_bytes)
+        text = (text or "").strip()
+        if not text:
+            self.log("AI 未识别到可发送文本", level="WARNING")
+            return False
+        self.log(f"识别结果: {text}")
+        await self.send_message(message.chat.id, text)
+        return True
+
+    async def _click_button_by_calculation_problem(
+        self, action: ClickButtonByCalculationProblemAction, message
+    ):
+        if not message.text:
+            return False
+        self.log("检测到计算题，尝试计算并点击按钮")
+        answer = await self.get_ai_tools().calculate_problem(message.text)
+        answer = (answer or "").strip()
+        if not answer:
+            self.log("AI 未返回可用于点击的答案", level="WARNING")
+            return False
+        self.log(f"计算答案: {answer}")
+        proxy_action = ClickKeyboardByTextAction(text=answer)
+        return await self._click_keyboard_by_text(proxy_action, message)
 
     async def _choose_option_by_image(self, action: ChooseOptionByImageAction, message):
         if reply_markup := message.reply_markup:
@@ -1209,12 +1272,24 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                 image_buffer.seek(0)
                 image_bytes = image_buffer.read()
                 options = list(option_to_btn)
+                if not options:
+                    self.log("未找到可供点击的按钮", level="WARNING")
+                    return False
                 result_index = await self.get_ai_tools().choose_option_by_image(
                     image_bytes,
                     "选择正确的选项",
-                    list(enumerate(options)),
+                    list(enumerate(options, start=1)),
                 )
-                result = options[result_index]
+                if result_index == 0:
+                    selected_idx = 0
+                elif 1 <= result_index <= len(options):
+                    selected_idx = result_index - 1
+                elif 0 <= result_index < len(options):
+                    selected_idx = result_index
+                else:
+                    self.log(f"AI 返回了非法选项序号: {result_index}", level="WARNING")
+                    return False
+                result = options[selected_idx]
                 self.log(f"选择结果为: {result}")
                 target_btn = option_to_btn.get(result.strip())
                 if not target_btn:
@@ -1256,6 +1331,10 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                     ok = await self._reply_by_calculation_problem(action, message)
                 elif isinstance(action, ChooseOptionByImageAction):
                     ok = await self._choose_option_by_image(action, message)
+                elif isinstance(action, ReplyByImageRecognitionAction):
+                    ok = await self._reply_by_image_recognition(action, message)
+                elif isinstance(action, ClickButtonByCalculationProblemAction):
+                    ok = await self._click_button_by_calculation_problem(action, message)
                 if ok:
                     self.context.waiter.sub(message.chat.id)
                     # 将消息ID对应value置为None，保证收到消息的编辑时消息所处的顺序
@@ -1265,7 +1344,13 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
         # Fallback: try recent history in case message handlers missed the reply.
         if isinstance(
             action,
-            (ClickKeyboardByTextAction, ReplyByCalculationProblemAction, ChooseOptionByImageAction),
+            (
+                ClickKeyboardByTextAction,
+                ReplyByCalculationProblemAction,
+                ChooseOptionByImageAction,
+                ReplyByImageRecognitionAction,
+                ClickButtonByCalculationProblemAction,
+            ),
         ):
             try:
                 self.log("等待超时，尝试从历史消息中查找按钮", level="WARNING")
@@ -1274,8 +1359,14 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                         ok = await self._click_keyboard_by_text(action, message)
                     elif isinstance(action, ReplyByCalculationProblemAction):
                         ok = await self._reply_by_calculation_problem(action, message)
-                    else:
+                    elif isinstance(action, ChooseOptionByImageAction):
                         ok = await self._choose_option_by_image(action, message)
+                    elif isinstance(action, ReplyByImageRecognitionAction):
+                        ok = await self._reply_by_image_recognition(action, message)
+                    else:
+                        ok = await self._click_button_by_calculation_problem(
+                            action, message
+                        )
                     if ok:
                         return None
             except Exception as e:
@@ -1292,13 +1383,37 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
         callback_data: Union[str, bytes],
         **kwargs,
     ):
-        try:
-            await client.request_callback_answer(
-                chat_id, message_id, callback_data=callback_data, **kwargs
-            )
-            self.log("点击完成")
-        except (errors.BadRequest, TimeoutError) as e:
-            self.log(e, level="ERROR")
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                await client.request_callback_answer(
+                    chat_id, message_id, callback_data=callback_data, **kwargs
+                )
+                self.log("点击完成")
+                return
+            except errors.FloodWait as e:
+                wait_seconds = max(int(getattr(e, "value", 1) or 1), 1)
+                self.log(
+                    f"触发 FloodWait，{wait_seconds}s 后重试 ({attempt}/{max_retries})",
+                    level="WARNING",
+                )
+                if attempt >= max_retries:
+                    self.log(e, level="ERROR")
+                    return
+                await asyncio.sleep(wait_seconds)
+            except TimeoutError as e:
+                backoff = min(2**attempt, 8)
+                self.log(
+                    f"回调超时，{backoff}s 后重试 ({attempt}/{max_retries})",
+                    level="WARNING",
+                )
+                if attempt >= max_retries:
+                    self.log(e, level="ERROR")
+                    return
+                await asyncio.sleep(backoff)
+            except errors.BadRequest as e:
+                self.log(e, level="ERROR")
+                return
 
     async def schedule_messages(
         self,

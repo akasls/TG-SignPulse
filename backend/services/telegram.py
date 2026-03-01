@@ -23,7 +23,6 @@ from backend.utils.tg_session import (
     get_account_session_string,
     get_account_profile,
     get_global_semaphore,
-    get_no_updates_flag,
     get_session_mode,
     is_string_session_mode,
     list_account_names,
@@ -299,7 +298,6 @@ class TelegramService:
 
         account_lock = get_account_lock(account_name)
         session_mode = get_session_mode()
-        no_updates = get_no_updates_flag()
         global_semaphore = get_global_semaphore()
 
         # 1. 清理全局 _login_sessions 中可能存在的残留连接
@@ -393,10 +391,9 @@ class TelegramService:
             "api_hash": api_hash,
             "proxy": proxy_dict,
             "in_memory": session_mode == "string",
+            # 手机号验证码登录不依赖 updates，关闭可减少 flood/timeout 噪音
+            "no_updates": True,
         }
-        if session_mode == "string":
-            # QR 登录需要接收 UpdateLoginToken，不应禁用 updates
-            client_kwargs["no_updates"] = False
         client = Client(**client_kwargs)
 
         try:
@@ -785,7 +782,6 @@ class TelegramService:
 
         account_lock = get_account_lock(account_name)
         session_mode = get_session_mode()
-        no_updates = get_no_updates_flag()
         global_semaphore = get_global_semaphore()
 
         # 清理同账号残留的扫码会话

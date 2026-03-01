@@ -410,7 +410,7 @@ export const getAIConfig = (token: string) =>
 
 export const saveAIConfig = (
   token: string,
-  config: { api_key: string; base_url?: string; model?: string }
+  config: { api_key?: string; base_url?: string; model?: string }
 ) =>
   request<{ success: boolean; message: string }>("/config/ai", {
     method: "POST",
@@ -432,6 +432,7 @@ export const deleteAIConfig = (token: string) =>
 export interface GlobalSettings {
   sign_interval?: number | null;  // null 表示随机 1-120 秒
   log_retention_days?: number;    // 日志保留天数，默认 7
+  data_dir?: string | null;
 }
 
 export const getGlobalSettings = (token: string) =>

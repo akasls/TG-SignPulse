@@ -22,7 +22,6 @@ from backend.utils.tg_session import (
     get_account_session_string,
     get_account_proxy,
     get_global_semaphore,
-    get_no_updates_flag,
     get_session_mode,
     load_session_string_file,
 )
@@ -93,6 +92,7 @@ class SignTaskService:
         )
         self._active_logs: Dict[tuple[str, str], List[str]] = {}  # (account, task) -> logs
         self._active_tasks: Dict[tuple[str, str], bool] = {}  # (account, task) -> running
+        self._cleanup_tasks: Dict[tuple[str, str], asyncio.Task] = {}
         self._tasks_cache = None  # 内存缓存
         self._account_locks: Dict[str, asyncio.Lock] = {}  # 账号锁
         self._account_last_run_end: Dict[str, float] = {}  # 账号最后一次结束时间
@@ -100,6 +100,34 @@ class SignTaskService:
             os.getenv("SIGN_TASK_ACCOUNT_COOLDOWN", "5")
         )
         self._cleanup_old_logs()
+
+    @staticmethod
+    def _task_requires_updates(task_config: Optional[Dict[str, Any]]) -> bool:
+        """
+        判断任务是否依赖 update handlers。
+        """
+        if not isinstance(task_config, dict):
+            return True
+        chats = task_config.get("chats")
+        if not isinstance(chats, list):
+            return True
+        response_actions = {3, 4, 5, 6, 7}
+        for chat in chats:
+            if not isinstance(chat, dict):
+                continue
+            actions = chat.get("actions")
+            if not isinstance(actions, list):
+                continue
+            for action in actions:
+                if not isinstance(action, dict):
+                    continue
+                try:
+                    action_id = int(action.get("action"))
+                except (TypeError, ValueError):
+                    continue
+                if action_id in response_actions:
+                    return True
+        return False
 
     def _cleanup_old_logs(self):
         """清理超过 3 天的日志"""
@@ -922,12 +950,8 @@ class SignTaskService:
             "session_string": session_string,
             "in_memory": session_mode == "string",
             "proxy": proxy_dict,
+            "no_updates": True,
         }
-        if session_mode == "string":
-            client_kwargs["no_updates"] = get_no_updates_flag()
-        elif session_string:
-            # fallback session_string 时避免开启 updates，降低后台任务干扰
-            client_kwargs["no_updates"] = True
         client = get_client(**client_kwargs)
 
         chats: List[Dict[str, Any]] = []
@@ -1167,6 +1191,13 @@ class SignTaskService:
                     if os.getenv("SIGN_TASK_FORCE_IN_MEMORY") == "1":
                         use_in_memory = True
 
+                task_cfg = self.get_task(task_name, account_name=account_name)
+                requires_updates = self._task_requires_updates(task_cfg)
+                signer_no_updates = not requires_updates
+                self._active_logs[task_key].append(
+                    f"消息更新监听: {'开启' if requires_updates else '关闭'}"
+                )
+
                 # 实例化 UserSigner (使用 BackendUserSigner)
                 # 注意: UserSigner 内部会使用 get_client 复用 client
                 signer = BackendUserSigner(
@@ -1179,7 +1210,7 @@ class SignTaskService:
                     in_memory=use_in_memory,
                     api_id=api_id,
                     api_hash=api_hash,
-                    no_updates=get_no_updates_flag() if session_mode == "string" else None,
+                    no_updates=signer_no_updates,
                 )
 
                 # 执行任务（数据库锁冲突时重试）
@@ -1223,13 +1254,20 @@ class SignTaskService:
             msg = error_msg if not success else ""
             self._save_run_info(task_name, success, msg, account_name)
 
-            # 延迟清理日志
-            async def cleanup():
-                await asyncio.sleep(60)
-                if not self._active_tasks.get(task_key):
-                    self._active_logs.pop(task_key, None)
+            # 延迟清理日志（同一 task_key 仅保留一个 cleanup 协程）
+            old_cleanup_task = self._cleanup_tasks.get(task_key)
+            if old_cleanup_task and not old_cleanup_task.done():
+                old_cleanup_task.cancel()
 
-            asyncio.create_task(cleanup())
+            async def cleanup():
+                try:
+                    await asyncio.sleep(60)
+                    if not self._active_tasks.get(task_key):
+                        self._active_logs.pop(task_key, None)
+                finally:
+                    self._cleanup_tasks.pop(task_key, None)
+
+            self._cleanup_tasks[task_key] = asyncio.create_task(cleanup())
 
         return {
             "success": success,

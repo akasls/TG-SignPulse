@@ -95,7 +95,7 @@ export default function SettingsPage() {
     const [aiTesting, setAITesting] = useState(false);
 
     // 全局设置
-    const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({ sign_interval: null, log_retention_days: 7 });
+    const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({ sign_interval: null, log_retention_days: 7, data_dir: null });
 
     // Telegram API 配置
     const [telegramConfig, setTelegramConfig] = useState<TelegramConfig | null>(null);
@@ -306,7 +306,15 @@ export default function SettingsPage() {
         if (!token) return;
         try {
             setConfigLoading(true);
-            await saveAIConfig(token, aiForm);
+            const payload: { api_key?: string; base_url?: string; model?: string } = {
+                base_url: aiForm.base_url.trim() || undefined,
+                model: aiForm.model.trim() || undefined,
+            };
+            const nextApiKey = aiForm.api_key.trim();
+            if (nextApiKey) {
+                payload.api_key = nextApiKey;
+            }
+            await saveAIConfig(token, payload);
             addToast(t("ai_save_success"), "success");
             loadAIConfig(token);
         } catch (err: any) {
@@ -628,8 +636,13 @@ export default function SettingsPage() {
                                     className="!py-2 !px-4"
                                     value={aiForm.api_key}
                                     onChange={(e) => setAIForm({ ...aiForm, api_key: e.target.value })}
-                                    placeholder={t("api_key")}
+                                    placeholder={aiConfig?.api_key_masked || t("api_key")}
                                 />
+                                {aiConfig?.api_key_masked && (
+                                    <p className="mt-1 text-[9px] text-main/40">
+                                        {t("api_key_keep_hint")}
+                                    </p>
+                                )}
                             </div>
                             <div>
                                 <label className="text-[11px] mb-1">{t("base_url")}</label>
@@ -698,6 +711,17 @@ export default function SettingsPage() {
                                     value={globalSettings.log_retention_days}
                                     onChange={(e) => setGlobalSettings({ ...globalSettings, log_retention_days: parseInt(e.target.value) || 0 })}
                                 />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="text-[11px] mb-1">{t("data_dir")}</label>
+                                <input
+                                    className="!py-2 !px-4"
+                                    value={globalSettings.data_dir || ""}
+                                    onChange={(e) => setGlobalSettings({ ...globalSettings, data_dir: e.target.value || null })}
+                                    placeholder={t("data_dir_placeholder")}
+                                />
+                                <p className="mt-1 text-[9px] text-[#9496a1]">{t("data_dir_desc")}</p>
+                                <p className="mt-1 text-[9px] text-amber-400">{t("data_dir_restart_hint")}</p>
                             </div>
                         </div>
                         <button className="btn-gradient w-fit px-5 !py-2 !text-[11px]" onClick={handleSaveGlobal} disabled={configLoading}>
