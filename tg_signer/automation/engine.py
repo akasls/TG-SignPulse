@@ -26,6 +26,7 @@ from tg_signer.core import BaseUserWorker, get_now
 
 from .handlers import (
     get_handler,
+    list_handlers,
     load_plugins,
     register_builtin_handlers,
 )
@@ -97,7 +98,9 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
     ) -> AutomationConfig:  # type: ignore[override]
         cfg_cls = cfg_cls or self.cfg_cls
         config_path = self._resolve_config_file()
+        self.log(f"读取自动化配置: {config_path}", level="DEBUG")
         if not config_path.exists():
+            self.log("配置文件不存在，生成模板配置", level="INFO")
             config = self.reconfig()
         else:
             payload = self._read_config_payload(config_path)
@@ -107,10 +110,15 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
             config, from_old = loaded
             if config_path.suffix in {".yml", ".yaml"}:
                 self.config = config
+                self.log(
+                    f"配置加载完成: rules={len(config.rules)} (yaml)", level="INFO"
+                )
                 return config
             if config_path.suffix == ".json" and from_old:
                 self.write_config(config)
+                self.log("检测到旧版配置并已自动迁移为当前结构", level="INFO")
         self.config = config
+        self.log(f"配置加载完成: rules={len(config.rules)}", level="INFO")
         return config
 
     def export(self):  # type: ignore[override]
@@ -165,6 +173,7 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
 
         register_builtin_handlers()
         load_plugins(self.handlers_dir, logger)
+        self.log(f"已注册 handlers 数量: {len(list(list_handlers()))}", level="INFO")
 
         self.app.add_handler(MessageHandler(self.on_message, filters.all))
         # startup trigger 每条规则只在进程启动后执行一次。
@@ -173,6 +182,7 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
             for rule in cfg.rules
             if rule.enabled and self._has_trigger(rule, "startup")
         ]
+        self.log(f"startup 任务数: {len(startup_tasks)}", level="DEBUG")
         # timer trigger 统一由轮询调度循环驱动。
         timer_task = asyncio.create_task(self.timer_loop())
         async with self.app:
@@ -190,17 +200,23 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
             if trigger.type != "startup":
                 continue
             trigger_params = trigger.params
+            trigger_id = self._trigger_id(rule, trigger, index)
+            self.log(
+                f"执行 startup 触发: rule={rule.id}, trigger={trigger_id}",
+                level="DEBUG",
+            )
             event = Event(
                 type="startup",
                 chat_id=trigger_params.chat_id,
                 message=None,
                 now=get_now(),
-                trigger_id=self._trigger_id(rule, trigger, index),
+                trigger_id=trigger_id,
                 rule_id=rule.id,
             )
             await self._run_rule(rule, event)
 
     async def timer_loop(self) -> None:
+        self.log(f"timer 轮询启动, tick={self._tick_seconds}s", level="DEBUG")
         while True:
             now = get_now()
             cfg = self.config
@@ -221,8 +237,21 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
                                 rule.id, trigger_id, next_run
                             )
                             self.state.save()
+                            self.log(
+                                f"初始化 timer 下次执行: rule={rule.id}, trigger={trigger_id}, next={next_run.isoformat()}",
+                                level="DEBUG",
+                            )
+                        else:
+                            self.log(
+                                f"timer 未配置 cron/interval: rule={rule.id}, trigger={trigger_id}",
+                                level="DEBUG",
+                            )
                         continue
                     if now >= next_run:
+                        self.log(
+                            f"触发 timer: rule={rule.id}, trigger={trigger_id}, due={next_run.isoformat()}",
+                            level="DEBUG",
+                        )
                         event = Event(
                             type="timer",
                             chat_id=timer_trigger.params.chat_id,
@@ -239,10 +268,15 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
                         self.state.set_trigger_next_run(rule.id, trigger_id, next_run)
                         self.state.set_trigger_last_run(rule.id, trigger_id, now)
                         self.state.save()
+                        self.log(
+                            f"timer 执行完成: rule={rule.id}, trigger={trigger_id}, next={next_run.isoformat() if next_run else 'None'}",
+                            level="DEBUG",
+                        )
             await asyncio.sleep(self._tick_seconds)
 
     async def on_message(self, client, message: Message):
         # 消息触发走“触发器匹配 -> 过滤器匹配 -> handler链”三段式流程。
+        _ = client
         cfg = self.config
         for rule in cfg.rules:
             if not rule.enabled:
@@ -254,12 +288,17 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
                     continue
                 if rule.filters and not self._match_filter(rule.filters, message):
                     continue
+                trigger_id = self._trigger_id(rule, trigger, index)
+                self.log(
+                    f"消息命中规则: rule={rule.id}, trigger={trigger_id}, chat={message.chat.id}",
+                    level="DEBUG",
+                )
                 event = Event(
                     type="message",
                     chat_id=message.chat.id,
                     message=message,
                     now=get_now(),
-                    trigger_id=self._trigger_id(rule, trigger, index),
+                    trigger_id=trigger_id,
                     rule_id=rule.id,
                 )
                 await self._run_rule(rule, event)
@@ -287,6 +326,10 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
             next_dt += timedelta(
                 seconds=random.randint(0, trigger_params.random_seconds)
             )
+        self.log(
+            f"计算下次 timer: cron={trigger_params.cron}, interval={trigger_params.interval_seconds}, next={next_dt.isoformat()}",
+            level="DEBUG",
+        )
         return next_dt
 
     def _match_message_trigger(
@@ -391,6 +434,10 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
     async def _run_rule(self, rule: RuleConfig, event: Event) -> None:
         # 规则级变量 = 配置初始变量 + 持久化状态变量（后者覆盖前者）。
         ctx_vars = {**rule.vars, **self.state.get_rule_vars(rule.id)}
+        self.log(
+            f"开始执行规则: rule={rule.id}, trigger={event.trigger_id}, type={event.type}",
+            level="DEBUG",
+        )
         ctx = AutomationContext(
             vars=ctx_vars,
             state=self.state,
@@ -405,7 +452,15 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
                 self.log(f"未找到handler: {handler_cfg.handler}", level="WARNING")
                 break
             try:
+                self.log(
+                    f"执行 handler: rule={rule.id}, handler={handler_cfg.handler}",
+                    level="DEBUG",
+                )
                 result = await handler(event, ctx, handler_cfg.params or {})
+                self.log(
+                    f"handler 结果: rule={rule.id}, handler={handler_cfg.handler}, result={result}",
+                    level="DEBUG",
+                )
             except Exception as exc:  # noqa: BLE001
                 self.log(
                     f"handler执行失败: {handler_cfg.handler} ({exc})", level="ERROR"
@@ -416,3 +471,7 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
                 break
         self.state.set_rule_vars(rule.id, ctx.vars)
         self.state.save()
+        self.log(
+            f"规则执行结束并持久化变量: rule={rule.id}, keys={list(ctx.vars.keys())}",
+            level="DEBUG",
+        )

@@ -187,8 +187,11 @@ def list_handlers() -> Iterable[str]:
 
 def load_plugins(handlers_dir: Path, logger: logging.Logger) -> None:
     if not handlers_dir.is_dir():
+        logger.debug("插件目录不存在，跳过加载: %s", handlers_dir)
         return
-    for path in handlers_dir.glob("*.py"):
+    loaded_modules = 0
+    registered_handlers = 0
+    for path in sorted(handlers_dir.glob("*.py")):
         module_name = f"tg_signer_user_handlers_{path.stem}"
         try:
             spec = importlib.util.spec_from_file_location(module_name, path)
@@ -197,6 +200,7 @@ def load_plugins(handlers_dir: Path, logger: logging.Logger) -> None:
                 continue
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
+            loaded_modules += 1
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"插件加载失败: {path} ({exc})")
             continue
@@ -212,6 +216,14 @@ def load_plugins(handlers_dir: Path, logger: logging.Logger) -> None:
                 logger.warning(f"插件handler不可调用，跳过: {name}")
                 continue
             _REGISTRY[name] = fn
+            registered_handlers += 1
+            logger.debug("插件 handler 注册成功: %s (%s)", name, path.name)
+    logger.info(
+        "插件加载完成: dir=%s, modules=%s, handlers=%s",
+        handlers_dir,
+        loaded_modules,
+        registered_handlers,
+    )
 
 
 async def send_text(
@@ -228,6 +240,10 @@ async def send_text(
     text = render_template(text, event, ctx)
     delete_after = params.get("delete_after")
     reply_to_message_id = params.get("reply_to_message_id")
+    ctx.log(
+        f"send_text: chat_id={chat_id}, delete_after={delete_after}, reply_to={reply_to_message_id}",
+        level="DEBUG",
+    )
     await ctx.worker.send_message(
         chat_id,
         text,
@@ -256,6 +272,10 @@ async def reply_text(
         return "stop"
     text = render_template(text, event, ctx)
     delete_after = params.get("delete_after")
+    ctx.log(
+        f"reply_text: chat_id={chat_id}, reply_to={reply_to_message_id}, delete_after={delete_after}",
+        level="DEBUG",
+    )
     await ctx.worker.send_message(
         chat_id,
         text,
@@ -278,6 +298,7 @@ async def extract_regex(
     flags = re.IGNORECASE if params.get("ignore_case", True) else 0
     match = re.search(pattern, text, flags=flags)
     if not match:
+        ctx.log("extract_regex: 未匹配到结果", level="DEBUG")
         return "continue"
     group = params.get("group", 1)
     var = params.get("var")
@@ -288,6 +309,7 @@ async def extract_regex(
     if not var:
         var = str(group)
     ctx.vars[var] = value
+    ctx.log(f"extract_regex: 写入变量 {var}={value}", level="DEBUG")
     return "continue"
 
 
@@ -303,17 +325,26 @@ async def ai_reply(
     reply_to_message_id = params.get("reply_to_message_id")
     if reply_to_message_id is None and event.message:
         reply_to_message_id = event.message.id
+    ctx.log(
+        f"ai_reply: 调用模型, prompt_len={len(prompt)}, input_len={len(text)}",
+        level="DEBUG",
+    )
     result = await ctx.worker.get_ai_tools().get_reply(prompt, text)
     store_var = params.get("store_var") or params.get("output_var")
     if store_var:
         # store_var/output_var 语义：只写变量，不直接发送。
         ctx.vars[store_var] = result
+        ctx.log(f"ai_reply: 已写入变量 {store_var}", level="DEBUG")
         return "continue"
     chat_id = params.get("chat_id") or event.chat_id
     if chat_id is None:
         ctx.log("ai_reply: 缺少chat_id", level="WARNING")
         return "stop"
     delete_after = params.get("delete_after")
+    ctx.log(
+        f"ai_reply: 发送回复 chat_id={chat_id}, reply_to={reply_to_message_id}",
+        level="DEBUG",
+    )
     await ctx.worker.send_message(
         chat_id,
         result,
@@ -335,12 +366,14 @@ async def blacklist_filter(
             continue
         needle = kw.lower() if ignore_case else kw
         if needle in matched_text:
+            ctx.log(f"blacklist_filter: 关键词命中 {kw}", level="DEBUG")
             return "stop"
     regex = params.get("regex")
     if regex:
         try:
             flags = re.IGNORECASE if ignore_case else 0
             if re.search(regex, text, flags=flags):
+                ctx.log("blacklist_filter: regex 命中", level="DEBUG")
                 return "stop"
         except re.error:
             ctx.log("blacklist_filter: regex无效", level="WARNING")
@@ -350,6 +383,7 @@ async def blacklist_filter(
 async def delay(
     event: Event, ctx: AutomationContext, params: Dict[str, Any]
 ) -> HandlerResult:
+    _ = event
     seconds = params.get("seconds")
     if seconds is None:
         seconds = params.get("delay_seconds", 0)
@@ -358,6 +392,7 @@ async def delay(
     except (TypeError, ValueError):
         seconds = 0
     if seconds > 0:
+        ctx.log(f"delay: sleep {seconds}s", level="DEBUG")
         await asyncio.sleep(seconds)
     return "continue"
 
@@ -374,6 +409,10 @@ async def forward(
         return "stop"
     from_chat_id = params.get("from_chat_id") or event.chat_id
     message_id = params.get("message_id") or event.message.id
+    ctx.log(
+        f"forward: from={from_chat_id}, to={to_chat_id}, message_id={message_id}",
+        level="DEBUG",
+    )
     await ctx.client.forward_messages(
         to_chat_id,
         from_chat_id,
@@ -389,6 +428,7 @@ async def external_forward(
         ctx.log("external_forward: 缺少message", level="WARNING")
         return "stop"
     targets = params.get("targets") or []
+    success_count = 0
     for target in targets:
         if not isinstance(target, dict):
             continue
@@ -400,6 +440,7 @@ async def external_forward(
                 ctx.log("external_forward: UDP配置无效", level="WARNING")
                 continue
             await UserMonitor.udp_forward(cfg, event.message)
+            success_count += 1
         elif t_type == "http":
             try:
                 cfg = HttpCallback.model_validate(target)
@@ -407,6 +448,10 @@ async def external_forward(
                 ctx.log("external_forward: HTTP配置无效", level="WARNING")
                 continue
             await UserMonitor.http_api_callback(cfg, event.message)
+            success_count += 1
+        else:
+            ctx.log(f"external_forward: 未知目标类型 {t_type}", level="DEBUG")
+    ctx.log(f"external_forward: 转发完成 success={success_count}", level="DEBUG")
     return "continue"
 
 
@@ -423,6 +468,10 @@ async def server_chan(
         body = message_text(event.message)
     title = render_template(title, event, ctx)
     body = render_template(body, event, ctx)
+    ctx.log(
+        f"server_chan: 发送通知 title={str(title)[:32]}",
+        level="DEBUG",
+    )
     await sc_send(send_key, title, body)
     return "continue"
 
@@ -430,9 +479,11 @@ async def server_chan(
 async def schedule_next(
     event: Event, ctx: AutomationContext, params: Dict[str, Any]
 ) -> HandlerResult:
+    # 支持 trigger_id / target_trigger_id 两种命名，默认回落为当前触发器。
     target_trigger_id = (
         params.get("trigger_id") or params.get("target_trigger_id") or event.trigger_id
     )
+    # 先解析基础 delay，再叠加 offset，最终写入 next_run_at。
     delay_seconds = params.get("delay_seconds")
     if delay_seconds is None:
         delay_minutes = params.get("delay_minutes")
@@ -467,6 +518,15 @@ async def schedule_next(
     next_at = event.now + timedelta(seconds=total_seconds) if total_seconds else None
     if total_seconds and next_at:
         ctx.state.set_trigger_next_run(event.rule_id, target_trigger_id, next_at)
+        ctx.log(
+            f"schedule_next: rule={event.rule_id}, trigger={target_trigger_id}, next={next_at.isoformat()}",
+            level="DEBUG",
+        )
+    else:
+        ctx.log(
+            f"schedule_next: 未写入 next_run_at, total_seconds={total_seconds}",
+            level="DEBUG",
+        )
     return "continue"
 
 
@@ -479,15 +539,26 @@ async def store_state(
     else:
         stored = dict(ctx.vars)
     ctx.state.set_rule_vars(event.rule_id, stored)
+    ctx.log(
+        f"store_state: rule={event.rule_id}, keys={list(stored.keys())}",
+        level="DEBUG",
+    )
     return "continue"
 
 
 async def load_state(
     event: Event, ctx: AutomationContext, params: Dict[str, Any]
 ) -> HandlerResult:
+    _ = params
     stored = ctx.state.get_rule_vars(event.rule_id)
     if stored:
         ctx.vars.update(stored)
+        ctx.log(
+            f"load_state: rule={event.rule_id}, keys={list(stored.keys())}",
+            level="DEBUG",
+        )
+    else:
+        ctx.log(f"load_state: rule={event.rule_id}, 无持久化变量", level="DEBUG")
     return "continue"
 
 
@@ -502,12 +573,15 @@ async def random_pick(
     var = params.get("var")
     if var:
         ctx.vars[var] = chosen
+        ctx.log(f"random_pick: 变量模式 {var}={chosen}", level="DEBUG")
         return "continue"
     chat_id = params.get("chat_id") or event.chat_id
     if chat_id is None:
         ctx.log("random_pick: 缺少chat_id", level="WARNING")
         return "stop"
-    await ctx.worker.send_message(chat_id, render_template(str(chosen), event, ctx))
+    rendered = render_template(str(chosen), event, ctx)
+    ctx.log(f"random_pick: 发送模式 chat_id={chat_id}, value={rendered}", level="DEBUG")
+    await ctx.worker.send_message(chat_id, rendered)
     return "continue"
 
 

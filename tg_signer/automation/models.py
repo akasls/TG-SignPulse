@@ -32,10 +32,15 @@ class AutomationContext:
     workdir: Path
 
     def log(self, msg: str, level: str = "INFO") -> None:
-        if level.upper() == "ERROR":
+        normalized_level = level.upper()
+        if normalized_level == "ERROR":
             self.logger.error(msg)
-        elif level.upper() == "WARNING":
+        elif normalized_level == "WARNING":
             self.logger.warning(msg)
+        elif normalized_level == "CRITICAL":
+            self.logger.critical(msg)
+        elif normalized_level == "DEBUG":
+            self.logger.debug(msg)
         else:
             self.logger.info(msg)
 
@@ -52,21 +57,26 @@ class RuleStateStore:
 
     def load(self) -> None:
         if not self.path.is_file():
+            self.logger.debug(f"状态文件不存在，使用空状态: {self.path}")
             return
         try:
             with open(self.path, "r", encoding="utf-8") as fp:
                 self._data = json.load(fp)
-        except (OSError, json.JSONDecodeError):
-            self.logger.warning(f"无法读取状态文件: {self.path}")
+            rules = self._data.get("rules", {})
+            self.logger.debug("状态文件加载完成: %s (rules=%s)", self.path, len(rules))
+        except (OSError, json.JSONDecodeError) as exc:
+            self.logger.warning(f"无法读取状态文件: {self.path} ({exc})")
 
     def save(self, force: bool = False) -> None:
         # 无变更时跳过落盘，减少频繁 IO。
         if not self._dirty and not force:
+            self.logger.debug("状态未变化，跳过写入: %s", self.path)
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.path, "w", encoding="utf-8") as fp:
             json.dump(self._data, fp, ensure_ascii=False, indent=2)
         self._dirty = False
+        self.logger.debug("状态文件写入完成: %s", self.path)
 
     def _rule_bucket(self, rule_id: str) -> Dict[str, Any]:
         # 结构：rules.<rule_id>.{vars,triggers}

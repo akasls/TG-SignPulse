@@ -27,6 +27,7 @@ class AutomationHarness(UserAutomation):
         import logging
 
         self.task_name = "t"
+        self._account = "test_account"
         self._workdir = tmp_path
         self._tasks_dir = "automations"
         self.logger = logging.getLogger("tg-signer")
