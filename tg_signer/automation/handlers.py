@@ -9,6 +9,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Awaitable, Callable, Dict, Iterable, Literal, Optional
 
+from pyrogram.types import Message
+
 from tg_signer.config import HttpCallback, UDPForward
 from tg_signer.core import UserMonitor
 from tg_signer.notification.server_chan import sc_send
@@ -65,27 +67,24 @@ def as_bool(value: Any) -> bool:
     return bool(value)
 
 
-def message_sender(message: Any) -> str:
+def message_sender(message: Message) -> str:
     if message is None:
         return "unknown"
-    from_user = getattr(message, "from_user", None)
+    from_user = message.from_user
     if from_user is not None:
-        username = getattr(from_user, "username", None)
+        username = from_user.username
         if username:
             return f"@{username}"
-        first_name = getattr(from_user, "first_name", None) or ""
-        last_name = getattr(from_user, "last_name", None) or ""
+        first_name = from_user.first_name or ""
+        last_name = from_user.last_name or ""
         full_name = f"{first_name} {last_name}".strip()
         if full_name:
             return full_name
-        user_id = getattr(from_user, "id", None)
-        if user_id is not None:
-            return str(user_id)
-    sender_chat = getattr(message, "sender_chat", None)
+        user_id = from_user.id
+        return str(user_id)
+    sender_chat = message.sender_chat
     if sender_chat is not None:
-        title = getattr(sender_chat, "title", None) or getattr(
-            sender_chat, "username", None
-        )
+        title = sender_chat.title or sender_chat.username
         if title:
             return str(title)
     return "unknown"
@@ -118,17 +117,12 @@ async def resolve_ai_input(
         )
         return message_text(event.message)
 
-    get_chat_history = getattr(ctx.client, "get_chat_history", None)
-    if not callable(get_chat_history):
-        ctx.log(
-            "ai_reply: 当前client不支持读取历史消息，回退为单条输入", level="WARNING"
-        )
-        return message_text(event.message)
-
     lines: list[str] = []
     try:
         # get_chat_history 通常返回新->旧，后续 reverse 成旧->新。
-        async for msg in get_chat_history(history_chat_id, limit=recent_limit):
+        async for msg in ctx.client.get_chat_history(
+            history_chat_id, limit=recent_limit
+        ):
             text = message_text(msg).strip()
             if not text:
                 continue

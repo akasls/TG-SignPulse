@@ -25,6 +25,7 @@ class AutomationHarness(UserAutomation):
 
     def __init__(self, tmp_path):
         import logging
+        from collections import OrderedDict, defaultdict
 
         self.task_name = "t"
         self._account = "test_account"
@@ -34,6 +35,8 @@ class AutomationHarness(UserAutomation):
         _ = self.task_dir  # 触发目录创建
         self.state = RuleStateStore(self.task_dir / "state.json", self.logger)
         self._tick_seconds = 1.0
+        self._message_cache = defaultdict(OrderedDict)
+        self._message_cache_limit = 200
         self.app = SimpleNamespace(forward_messages=lambda *args, **kwargs: None)
 
 
@@ -60,6 +63,7 @@ class DummyMessage:
 
     text: str | None
     chat: DummyChat
+    id: int = 0
     from_user: DummyUser | None = None
     caption: str | None = None
     reply_to_message: "DummyMessage | None" = None
@@ -187,6 +191,52 @@ async def test_timer_schedule_next_override(tmp_path):
 
     next_run = worker.state.get_trigger_next_run("r1", "timer1")
     assert next_run == now + timedelta(seconds=300)
+
+
+@pytest.mark.asyncio
+async def test_on_edited_message_matches_message_trigger(tmp_path):
+    """编辑消息应复用 message trigger 匹配链路。"""
+    worker = make_worker(tmp_path)
+    worker.config = AutomationConfig(
+        rules=[
+            RuleConfig(
+                id="r1",
+                enabled=True,
+                triggers=[MessageTriggerConfig(type="message", params={"chat_id": 1})],
+                handlers=[],
+            )
+        ]
+    )
+    events: list[tuple[str, str, int]] = []
+
+    async def fake_run_rule(rule, event):
+        events.append((rule.id, event.type, event.chat_id))
+
+    worker._run_rule = fake_run_rule  # type: ignore[method-assign]
+    msg = DummyMessage(text="edited", chat=DummyChat(id=1, username="room"))
+
+    await worker.on_edited_message(None, msg)
+
+    assert events == [("r1", "edited_message", 1)]
+
+
+@pytest.mark.asyncio
+async def test_on_edited_message_updates_cache(tmp_path):
+    """编辑消息应覆盖缓存中的同 message_id 内容。"""
+    worker = make_worker(tmp_path)
+    worker.config = AutomationConfig(rules=[])
+
+    original = DummyMessage(
+        id=100, text="before", chat=DummyChat(id=1, username="room")
+    )
+    edited = DummyMessage(id=100, text="after", chat=DummyChat(id=1, username="room"))
+
+    await worker.on_message(None, original)
+    await worker.on_edited_message(None, edited)
+
+    cached = worker.get_cached_messages(1)
+    assert len(cached) == 1
+    assert cached[0].text == "after"
 
 
 def test_trigger_rejects_unknown_params_key():

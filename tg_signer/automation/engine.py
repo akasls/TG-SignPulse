@@ -3,13 +3,14 @@ import json
 import logging
 import random
 import re
+from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Union
 
 from croniter import CroniterBadCronError, croniter
 from pyrogram import filters
-from pyrogram.handlers import MessageHandler
+from pyrogram.handlers import EditedMessageHandler, MessageHandler
 from pyrogram.methods.utilities.idle import idle
 from pyrogram.types import Message
 
@@ -52,6 +53,11 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
         super().__init__(*args, **kwargs)
         self.state = RuleStateStore(self.state_file, logger)
         self._tick_seconds = 1.0
+        # 按 chat_id -> message_id 缓存最近消息，供后续 wait_for/复杂 handler 复用。
+        self._message_cache: dict[int, OrderedDict[int, Message]] = defaultdict(
+            OrderedDict
+        )
+        self._message_cache_limit = 200
 
     def ensure_ctx(self):
         return {}
@@ -176,6 +182,7 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
         self.log(f"已注册 handlers 数量: {len(list(list_handlers()))}", level="INFO")
 
         self.app.add_handler(MessageHandler(self.on_message, filters.all))
+        self.app.add_handler(EditedMessageHandler(self.on_edited_message, filters.all))
         # startup trigger 每条规则只在进程启动后执行一次。
         startup_tasks = [
             asyncio.create_task(self.run_startup(rule))
@@ -275,8 +282,16 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
             await asyncio.sleep(self._tick_seconds)
 
     async def on_message(self, client, message: Message):
-        # 消息触发走“触发器匹配 -> 过滤器匹配 -> handler链”三段式流程。
         _ = client
+        await self._handle_message_event(message, event_type="message")
+
+    async def on_edited_message(self, client, message: Message):
+        _ = client
+        await self._handle_message_event(message, event_type="edited_message")
+
+    async def _handle_message_event(self, message: Message, event_type: str) -> None:
+        # 消息/编辑消息统一走“触发器匹配 -> 过滤器匹配 -> handler链”三段式流程。
+        self._cache_message(message)
         cfg = self.config
         for rule in cfg.rules:
             if not rule.enabled:
@@ -290,11 +305,11 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
                     continue
                 trigger_id = self._trigger_id(rule, trigger, index)
                 self.log(
-                    f"消息命中规则: rule={rule.id}, trigger={trigger_id}, chat={message.chat.id}",
+                    f"{event_type}命中规则: rule={rule.id}, trigger={trigger_id}, chat={message.chat.id}",
                     level="DEBUG",
                 )
                 event = Event(
-                    type="message",
+                    type=event_type,
                     chat_id=message.chat.id,
                     message=message,
                     now=get_now(),
@@ -302,6 +317,32 @@ class UserAutomation(BaseUserWorker[AutomationConfig]):
                     rule_id=rule.id,
                 )
                 await self._run_rule(rule, event)
+
+    def _cache_message(self, message: Message) -> None:
+        message_id = message.id
+        chat_id = message.chat and message.chat.id
+        if chat_id is None:
+            return
+        cache = self._message_cache[chat_id]
+        cache[message_id] = message
+        cache.move_to_end(message_id)
+        while len(cache) > self._message_cache_limit:
+            cache.popitem(last=False)
+        self.log(
+            f"消息已缓存: chat={chat_id}, message_id={message_id}, cached={len(cache)}",
+            level="DEBUG",
+        )
+
+    def get_cached_messages(
+        self, chat_id: int, limit: Optional[int] = None
+    ) -> List[Message]:
+        cache = self._message_cache.get(chat_id)
+        if not cache:
+            return []
+        messages = list(cache.values())
+        if limit is None or limit <= 0:
+            return messages
+        return messages[-limit:]
 
     def _trigger_id(self, rule: RuleConfig, trigger: TriggerConfig, index: int) -> str:
         return trigger.id or f"{rule.id}:{index}"
