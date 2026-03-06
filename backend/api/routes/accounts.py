@@ -689,6 +689,6 @@ def export_account_logs(
         content=content,
         media_type="text/plain",
         headers={
-            "Content-Disposition": f"attachment; filename=logs_{account_name}.txt"
+            "Content-Disposition": 'attachment; filename="account_logs.txt"'
         },
     )

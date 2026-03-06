@@ -279,7 +279,7 @@ class TelegramService:
             return {
                 "account_name": account_name,
                 "ok": False,
-                "status": "error",
+                "status": "checking",
                 "message": "Request timed out",
                 "code": "TIMEOUT",
                 "checked_at": checked_at,
@@ -289,11 +289,11 @@ class TelegramService:
             return {
                 "account_name": account_name,
                 "ok": False,
-                "status": "invalid",
+                "status": "checking",
                 "message": str(e),
-                "code": "ACCOUNT_SESSION_INVALID",
+                "code": "CONNECTION_ERROR",
                 "checked_at": checked_at,
-                "needs_relogin": True,
+                "needs_relogin": False,
             }
         except Exception as e:
             err_text = str(e) or type(e).__name__
@@ -323,9 +323,39 @@ class TelegramService:
                 return {
                     "account_name": account_name,
                     "ok": False,
-                    "status": "error",
+                    "status": "checking",
                     "message": err_text,
                     "code": "FLOOD_WAIT",
+                    "checked_at": checked_at,
+                    "needs_relogin": False,
+                }
+            if (
+                "TIMEOUT" in err_upper
+                or "TIMED OUT" in err_upper
+                or "REQUEST TIMED OUT" in err_upper
+                or "REQUEST TIME OUT" in err_upper
+            ):
+                return {
+                    "account_name": account_name,
+                    "ok": False,
+                    "status": "checking",
+                    "message": err_text,
+                    "code": "TIMEOUT",
+                    "checked_at": checked_at,
+                    "needs_relogin": False,
+                }
+            if (
+                "CONNECTION" in err_upper
+                or "NETWORK" in err_upper
+                or "CONNECTION RESET" in err_upper
+                or "BROKEN PIPE" in err_upper
+            ):
+                return {
+                    "account_name": account_name,
+                    "ok": False,
+                    "status": "checking",
+                    "message": err_text,
+                    "code": "CONNECTION_ERROR",
                     "checked_at": checked_at,
                     "needs_relogin": False,
                 }

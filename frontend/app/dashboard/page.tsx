@@ -211,7 +211,11 @@ export default function Dashboard() {
       setAccountStatusMap((prev) => {
         const merged: Record<string, AccountStatusItem> = {};
         for (const name of accountNames) {
-          const incoming = retryMap[name] || firstMap[name];
+          const incomingRaw = retryMap[name] || firstMap[name];
+          const incoming =
+            incomingRaw && incomingRaw.status === "error" && !incomingRaw.needs_relogin
+              ? { ...incomingRaw, status: "checking" as const }
+              : incomingRaw;
           if (incoming) {
             const prevItem = prev[name];
             if (
@@ -954,22 +958,24 @@ export default function Dashboard() {
               const initial = acc.name.charAt(0).toUpperCase();
               const statusInfo = accountStatusMap[acc.name];
               const status = statusInfo?.status || "checking";
+              const isInvalid = status === "invalid" || Boolean(statusInfo?.needs_relogin);
+              const isCheckingLike = status === "checking" || (status === "error" && !statusInfo?.needs_relogin);
               const statusKey =
                 status === "connected"
                   ? "connected"
-                  : status === "invalid" || statusInfo?.needs_relogin
+                  : isInvalid
                     ? "account_status_invalid"
-                    : status === "error"
-                      ? "account_status_error"
-                      : "account_status_checking";
+                    : isCheckingLike
+                      ? "account_status_checking"
+                      : "account_status_error";
               const statusIconClass =
                 status === "connected"
                   ? "text-emerald-400/50"
-                  : status === "invalid" || statusInfo?.needs_relogin
+                  : isInvalid
                     ? "text-rose-400/60"
-                    : status === "error"
-                      ? "text-amber-400/60"
-                      : "text-main/40";
+                    : isCheckingLike
+                      ? "text-main/40"
+                      : "text-amber-400/60";
               return (
                 <div
                   key={acc.name}

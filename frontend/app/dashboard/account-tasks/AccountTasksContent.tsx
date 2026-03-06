@@ -569,12 +569,12 @@ export default function AccountTasksContent() {
         }
     };
 
-    const importTaskFromConfig = async (rawConfig: string) => {
-        if (!token) return false;
+    const importTaskFromConfig = async (rawConfig: string): Promise<{ ok: boolean; error?: string }> => {
+        if (!token) return { ok: false, error: "NO_TOKEN" };
         const taskConfig = (rawConfig || "").trim();
         if (!taskConfig) {
             addToast(t("import_empty"), "error");
-            return false;
+            return { ok: false, error: t("import_empty") };
         }
 
         try {
@@ -582,11 +582,11 @@ export default function AccountTasksContent() {
             const result = await importSignTask(token, taskConfig, undefined, accountName);
             addToast(pasteTaskSuccess(result.task_name), "success");
             await loadData(token);
-            return true;
+            return { ok: true };
         } catch (err: any) {
             const message = err?.message ? `${pasteTaskFailed}: ${err.message}` : pasteTaskFailed;
             addToast(message, "error");
-            return false;
+            return { ok: false, error: message };
         } finally {
             setLoading(false);
         }
@@ -627,8 +627,8 @@ export default function AccountTasksContent() {
 
     const handlePasteDialogImport = async () => {
         setImportingPastedConfig(true);
-        const ok = await importTaskFromConfig(pasteTaskConfigInput);
-        if (ok) {
+        const result = await importTaskFromConfig(pasteTaskConfigInput);
+        if (result.ok) {
             setShowPasteDialog(false);
             setPasteTaskConfigInput("");
         }
@@ -642,7 +642,12 @@ export default function AccountTasksContent() {
             try {
                 const taskConfig = (await navigator.clipboard.readText()).trim();
                 if (taskConfig) {
-                    await importTaskFromConfig(taskConfig);
+                    const result = await importTaskFromConfig(taskConfig);
+                    if (result.ok) {
+                        return;
+                    }
+                    setPasteTaskConfigInput(taskConfig);
+                    setShowPasteDialog(true);
                     return;
                 }
             } catch {

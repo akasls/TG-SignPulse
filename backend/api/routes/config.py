@@ -89,9 +89,6 @@ def export_sign_task(
         return Response(
             content=config_json.encode("utf-8"),
             media_type="application/json; charset=utf-8",
-            headers={
-                "Content-Disposition": f'attachment; filename="{task_name}_config.json"'
-            },
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
