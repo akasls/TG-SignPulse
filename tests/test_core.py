@@ -1,4 +1,5 @@
 import asyncio
+import json
 import pathlib
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -348,6 +349,37 @@ async def test_login_bootstrap_is_shared_between_concurrent_workers(
     assert calls["get_dialogs"] == 1
     assert calls["save_session_string"] == 1
     assert signer1.user.id == signer2.user.id == 123456
+
+
+def test_user_signer_load_sign_record_migrates_legacy_json(signer_factory):
+    signer = signer_factory(task_name="linuxdo")
+    signer.user = SimpleNamespace(id=123456)
+    legacy_record_file = signer.task_dir / "sign_record.json"
+    legacy_record_file.write_text(
+        json.dumps({"2026-03-17": "2026-03-17T06:00:00+08:00"}),
+        encoding="utf-8",
+    )
+
+    records = signer.load_sign_record()
+
+    assert records == {"2026-03-17": "2026-03-17T06:00:00+08:00"}
+    assert signer.sign_record_store.load_records("linuxdo", "123456") == records
+
+
+def test_user_signer_persist_sign_record_writes_sqlite_only_by_default(signer_factory):
+    signer = signer_factory(task_name="linuxdo")
+    signer.user = SimpleNamespace(id=123456)
+    sign_record = {}
+
+    signer.persist_sign_record(
+        sign_record,
+        "2026-03-17",
+        "2026-03-17T06:00:00+08:00",
+    )
+
+    assert sign_record == {"2026-03-17": "2026-03-17T06:00:00+08:00"}
+    assert signer.sign_record_store.load_records("linuxdo", "123456") == sign_record
+    assert not signer.sign_record_file.exists()
 
 
 @pytest.mark.asyncio

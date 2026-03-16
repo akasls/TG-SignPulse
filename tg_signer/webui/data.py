@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Literal, Optional, Tuple
 
 from tg_signer.config import BaseJSONConfig, MonitorConfig, SignConfigV3
+from tg_signer.sign_record_store import SignRecordStore
 
 ConfigKind = Literal["signer", "monitor"]
 
@@ -179,9 +180,26 @@ def _record_target(path: Path, signs_root: Path) -> Tuple[str, Optional[str]]:
 def load_sign_records(workdir: Optional[Path | str] = None) -> List[SignRecord]:
     base = get_workdir(workdir)
     signs_dir = base / "signs"
-    if not signs_dir.is_dir():
-        return []
     records: List[SignRecord] = []
+    existing_keys: set[tuple[str, Optional[str]]] = set()
+
+    store = SignRecordStore(base)
+    if store.db_path.is_file():
+        for group in store.list_record_groups():
+            key = (group.task_name, group.user_id)
+            existing_keys.add(key)
+            records.append(
+                SignRecord(
+                    task=group.task_name,
+                    user_id=group.user_id,
+                    records=group.records,
+                    path=store.db_path,
+                )
+            )
+
+    if not signs_dir.is_dir():
+        return records
+
     for record_file in sorted(signs_dir.rglob("sign_record.json")):
         try:
             with open(record_file, "r", encoding="utf-8") as fp:
@@ -189,6 +207,11 @@ def load_sign_records(workdir: Optional[Path | str] = None) -> List[SignRecord]:
         except (json.JSONDecodeError, OSError):
             continue
         task, user_id = _record_target(record_file, signs_dir)
+        key = (task, user_id)
+        # Prefer the migrated SQLite rows when both sources exist so the same
+        # task/user pair does not appear twice in the UI.
+        if key in existing_keys:
+            continue
         items: Iterable[Tuple[str, str]] = (
             data.items() if isinstance(data, dict) else []
         )

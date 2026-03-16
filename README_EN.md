@@ -66,6 +66,7 @@ Commands:
   list-members            List chat members (admin rights required for channels)
   list-topics             List group topic IDs (message_thread_id)
   list-schedule-messages  Show configured scheduled messages
+  migrate-sign-records    Migrate check-in records from JSON to SQLite
   login                   Login account (to obtain session)
   logout                  Logout and delete session file
   monitor                 Configure and run monitoring
@@ -84,6 +85,7 @@ Examples:
 tg-signer run
 tg-signer run my_sign  # Run 'my_sign' task without confirmation
 tg-signer run-once my_sign  # Run 'my_sign' task once
+tg-signer migrate-sign-records  # Migrate check-in records under .signer/signs to SQLite
 tg-signer send-text 8671234001 /test  # Send '/test' to chat_id '8671234001'
 tg-signer send-text --message-thread-id 1 -- -1003763902761 checkin  # Send to a group topic (message_thread_id=1)
 tg-signer send-text -- -10006758812 water  # For negative numbers, use POSIX style with '--' before '-'
@@ -353,15 +355,24 @@ Configs and data are stored in `.signer` by default. Running `tree .signer` show
 
 ```
 .signer
-├── latest_chats.json  # Recent chats
-├── me.json  # Personal info
+├── .openai_config.json  # Optional AI config
+├── data.sqlite3  # SQLite check-in record database
 ├── monitors  # Monitoring
 │   ├── my_monitor  # Task name
 │       └── config.json  # Config
+├── users
+│   └── 123456789
+│       ├── latest_chats.json  # Recent chats
+│       └── me.json  # Personal info
 └── signs  # Check-ins
     └── linuxdo  # Task name
         ├── config.json  # Config
-        └── sign_record.json  # Records
+        ├── 123456789
+        │   └── sign_record.json  # Legacy JSON records (migration compatible)
+        └── sign_record.json  # Older legacy JSON path (migration compatible)
 
-3 directories, 4 files
+5 directories, 6 files
 ```
+
+After migration, new check-in records are written only to `data.sqlite3`, while
+legacy `sign_record.json` remains readable.

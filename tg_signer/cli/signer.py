@@ -7,6 +7,7 @@ import click
 from click import Context, HelpFormatter
 
 from tg_signer.core import UserSigner, get_proxy
+from tg_signer.sign_record_store import SignRecordStore
 
 
 class AliasedGroup(click.Group):
@@ -529,6 +530,42 @@ def llm_config(obj):
 
     cfg_manager = OpenAIConfigManager(obj["workdir"])
     cfg_manager.ask_for_config()
+
+
+@tg_signer.command(
+    name="migrate-sign-records",
+    help="将签到记录从 JSON 迁移到 SQLite（默认保留原 sign_record.json）",
+)
+@click.option(
+    "--legacy-user-id",
+    "legacy_user_id",
+    default=None,
+    help="为旧版 signs/<task>/sign_record.json 指定 user_id；未指定时会尝试自动推断",
+)
+@click.option(
+    "--delete-json",
+    "delete_json",
+    default=False,
+    is_flag=True,
+    help="迁移成功后删除原 sign_record.json 文件",
+)
+@click.pass_obj
+def migrate_sign_records(obj, legacy_user_id: str | None, delete_json: bool):
+    store = SignRecordStore(obj["workdir"])
+    summary = store.migrate_all_json_records(
+        legacy_user_id=legacy_user_id,
+        remove_files=delete_json,
+        account=obj["account"],
+    )
+    click.echo(f"SQLite 文件: {store.db_path}")
+    click.echo(f"迁移文件数: {summary.migrated_files}")
+    click.echo(f"迁移记录数: {summary.migrated_records}")
+    if delete_json:
+        click.echo(f"删除 JSON 文件数: {summary.removed_files}")
+    if summary.skipped_files:
+        click.echo("以下文件未迁移（缺少 user_id，且无法自动推断）:")
+        for path in summary.skipped_files:
+            click.echo(f"  - {path}")
 
 
 @tg_signer.command(

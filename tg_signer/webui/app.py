@@ -409,7 +409,7 @@ class SignRecordBlock:
                 user_text = record.user_id or "默认"
                 header = f"{record.task} / {user_text}（{len(record.records)}条）"
                 with ui.expansion(header, icon="event").classes("shadow-sm"):
-                    ui.label(f"文件: {record.path}").classes("text-gray-500")
+                    ui.label(f"来源: {record.path}").classes("text-gray-500")
                     if not record.records:
                         ui.label("暂无记录").classes("text-gray-500")
                         continue
@@ -596,7 +596,9 @@ def _build_dashboard(container) -> None:
                 refreshers.append(user_info_block())
 
             with ui.tab_panel(tab_records):
-                ui.label("签到记录 sign_record.json").classes("text-gray-600")
+                ui.label(
+                    "签到记录（优先读取 SQLite，兼容旧 sign_record.json）"
+                ).classes("text-gray-600")
                 refresh_records = SignRecordBlock()
                 refreshers.append(refresh_records)
 

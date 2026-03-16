@@ -78,6 +78,7 @@ Commands:
   list-schedule-messages  显示已配置的定时消息
   llm-config              配置大模型API
   login                   登录账号（用于获取session）
+  migrate-sign-records    将签到记录从 JSON 迁移到 SQLite（默认保留原...
   logout                  登出账号并删除session文件
   monitor                 配置和运行监控
   multi-run               使用一套配置同时运行多个账号
@@ -98,6 +99,7 @@ Commands:
 tg-signer run
 tg-signer run my_sign  # 不询问，直接运行'my_sign'任务
 tg-signer run-once my_sign  # 直接运行一次'my_sign'任务
+tg-signer migrate-sign-records  # 将.signer/signs 下的签到记录迁移到 SQLite
 tg-signer send-text 8671234001 /test  # 向chat_id为'8671234001'的聊天发送'/test'文本
 tg-signer send-text --message-thread-id 1 -- -1003763902761 checkin  # 发送到群组话题(message_thread_id=1)
 tg-signer send-text -- -10006758812 浇水  # 对于负数需要使用POSIX风格，在短横线'-'前方加上'--'
@@ -481,15 +483,24 @@ tg-signer monitor run my_monitor
 
 ```
 .signer
-├── latest_chats.json  # 获取的最近对话
-├── me.json  # 个人信息
+├── .openai_config.json  # 可选，大模型配置
+├── data.sqlite3  # SQLite 签到记录库
 ├── monitors  # 监控
 │   ├── my_monitor  # 监控任务名
 │       └── config.json  # 监控配置
+├── users
+│   └── 123456789
+│       ├── latest_chats.json  # 获取的最近对话
+│       └── me.json  # 个人信息
 └── signs  # 签到任务
     └── linuxdo  # 签到任务名
         ├── config.json  # 签到配置
-        └── sign_record.json  # 签到记录
+        ├── 123456789
+        │   └── sign_record.json  # 旧版 JSON 签到记录（兼容迁移）
+        └── sign_record.json  # 更旧版 JSON 路径（兼容迁移）
 
-3 directories, 4 files
+5 directories, 6 files
 ```
+
+迁移到 SQLite 后，新的签到记录只写入 `data.sqlite3`，但仍兼容读取旧
+`sign_record.json`。

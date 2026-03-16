@@ -61,6 +61,7 @@ from tg_signer.config import (
 from ._kurigram import SafeGetForumTopics
 from .ai_tools import AITools, OpenAIConfigManager
 from .notification.server_chan import sc_send
+from .sign_record_store import SignRecordStore
 from .utils import UserInput, print_to_user
 
 logger = logging.getLogger("tg-signer")
@@ -739,6 +740,10 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
             waiting_message=None,
         )
 
+    @property
+    def sign_record_store(self) -> SignRecordStore:
+        return SignRecordStore(self.workdir)
+
     @staticmethod
     def get_route_key(
         chat_id: int, message_thread_id: Optional[int] = None
@@ -750,6 +755,10 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
         sign_record_dir = self.task_dir / str(self.user.id)
         make_dirs(sign_record_dir)
         return sign_record_dir / "sign_record.json"
+
+    @property
+    def legacy_sign_record_file(self):
+        return self.task_dir / "sign_record.json"
 
     def _ask_actions(
         self, input_: UserInput, available_actions: List[SupportAction] = None
@@ -892,14 +901,36 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
         return f"{sign_at.minute} {sign_at.hour} * * *"
 
     def load_sign_record(self):
-        sign_record = {}
-        if not self.sign_record_file.is_file():
-            with open(self.sign_record_file, "w", encoding="utf-8") as fp:
-                json.dump(sign_record, fp)
-        else:
-            with open(self.sign_record_file, "r", encoding="utf-8") as fp:
-                sign_record = json.load(fp)
-        return sign_record
+        user_id = str(self.user.id)
+        store = self.sign_record_store
+        if not store.has_records(self.task_name, user_id):
+            # Import legacy JSON lazily so existing workdirs keep working
+            # without requiring an explicit migration step first.
+            store.import_json_file(
+                self.task_name,
+                user_id,
+                self.sign_record_file,
+                account=self._account,
+            )
+            store.import_json_file(
+                self.task_name,
+                user_id,
+                self.legacy_sign_record_file,
+                account=self._account,
+            )
+        return store.load_records(self.task_name, user_id)
+
+    def persist_sign_record(
+        self, sign_record: dict[str, str], sign_date: str, signed_at: str
+    ) -> None:
+        sign_record[sign_date] = signed_at
+        self.sign_record_store.upsert_record(
+            self.task_name,
+            str(self.user.id),
+            sign_date,
+            signed_at,
+            account=self._account,
+        )
 
     async def sign_a_chat(
         self,
@@ -958,9 +989,7 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
 
                 self.context.chat_messages[route_key].clear()
                 await asyncio.sleep(config.sign_interval)
-            sign_record[str(now.date())] = now.isoformat()
-            with open(self.sign_record_file, "w", encoding="utf-8") as fp:
-                json.dump(sign_record, fp)
+            self.persist_sign_record(sign_record, str(now.date()), now.isoformat())
 
         def need_sign(last_date_str):
             if force_rerun:
