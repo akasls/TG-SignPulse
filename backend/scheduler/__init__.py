@@ -11,15 +11,31 @@ from backend.services.tasks import run_task_once
 scheduler: AsyncIOScheduler | None = None
 
 
-def time_to_cron(time_str: str) -> str:
-    """将 HH:MM 格式转换为 Cron 表达式 (0 MM HH * * *)"""
-    if ":" not in time_str:
-        return time_str  # 如果已经是 cron 格式则返回
-    try:
-        hour, minute = time_str.split(":")
-        return f"{int(minute)} {int(hour)} * * *"
-    except Exception:
-        return time_str
+def create_cron_trigger(cron_str: str) -> CronTrigger:
+    """自动解析格式并创建 CronTrigger，支持 5位和6位 cron 表达式以及 HH:MM 或 HH:MM:SS"""
+    if ":" in cron_str:
+        parts = cron_str.split(":")
+        try:
+            if len(parts) == 2:
+                hour, minute = parts
+                cron_str = f"0 {int(minute)} {int(hour)} * * *"
+            elif len(parts) == 3:
+                hour, minute, second = parts
+                cron_str = f"{int(second)} {int(minute)} {int(hour)} * * *"
+        except ValueError:
+            pass
+
+    parts = cron_str.split()
+    if len(parts) == 6:
+        return CronTrigger(
+            second=parts[0],
+            minute=parts[1],
+            hour=parts[2],
+            day=parts[3],
+            month=parts[4],
+            day_of_week=parts[5]
+        )
+    return CronTrigger.from_crontab(cron_str)
 
 
 async def _job_run_task(task_id: int) -> None:
@@ -152,7 +168,7 @@ async def sync_jobs() -> None:
             desired_ids.add(job_id)
 
             try:
-                trigger = CronTrigger.from_crontab(task.cron)
+                trigger = create_cron_trigger(task.cron)
                 if job_id in existing_ids:
                     scheduler.reschedule_job(job_id, trigger=trigger)
                 else:
@@ -181,11 +197,10 @@ async def sync_jobs() -> None:
                 continue
 
             try:
-                cron = time_to_cron(st["sign_at"])
+                trigger = create_cron_trigger(st["sign_at"])
                 if st.get("execution_mode") == "range" and st.get("range_start"):
-                    cron = time_to_cron(st["range_start"])
+                    trigger = create_cron_trigger(st["range_start"])
 
-                trigger = CronTrigger.from_crontab(cron)
                 if job_id in existing_ids:
                     scheduler.reschedule_job(job_id, trigger=trigger)
                 else:
@@ -258,8 +273,8 @@ def add_or_update_sign_task_job(
         return
 
     try:
-        cron = time_to_cron(cron_expression)
-        trigger = CronTrigger.from_crontab(cron)
+        cron = cron_expression
+        trigger = create_cron_trigger(cron)
 
         # 总是使用 replace_existing=True 来覆盖旧的
         scheduler.add_job(

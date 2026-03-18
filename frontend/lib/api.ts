@@ -55,8 +55,11 @@ async function request<T>(
     // 注意：登录相关请求（不带 token）不应触发跳转
     if (res.status === 401 && token) {
       if (typeof window !== "undefined") {
-        localStorage.removeItem("tg-signer-token");
-        window.location.href = "/";
+        const currentToken = localStorage.getItem("tg-signer-token");
+        if (currentToken === token) {
+          localStorage.removeItem("tg-signer-token");
+          window.location.href = "/";
+        }
       }
     }
 
