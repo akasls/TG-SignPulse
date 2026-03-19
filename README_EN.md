@@ -119,6 +119,13 @@ frontend/     Next.js management panel
 
 ## Changelog
 
+### 2026-03-19
+
+- **Account Status Display Fix**: Fixed a frontend string-matching bug where completely normal accounts were erroneously displayed as "Account Invalid".
+- **Old Account Execution Fix**: Resolved critical `PeerIdInvalid` execution crashes for older local `.session` file-based accounts. The task engine was mistakenly defaulting them into an in-memory session mode overriding their reliable local SQLite database, resulting in a loss of tracked peers. Now, caching and cross-account task copying are highly stable.
+- **Bot Final Reply Extraction**: Enhanced log parsing engine. During successful message exchanges, the engine automatically extracts the final reply text from the target signed-bot and presents it beautifully in both the frontend run logs and execution table, keeping the UI intact. 
+- **Code Linter**: Ran full project health & Ruff linter checks, safely pruning dead code.
+
 ### 2026-03-12
 - Core stability fix: Fixed a severe memory leak and high network I/O issue caused by Pyrogram timeout & `FloodWait` infinite retry loops leading to async lock starvation and unretrieved task exceptions.
 

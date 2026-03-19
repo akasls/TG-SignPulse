@@ -20,8 +20,8 @@ from backend.utils.proxy import build_proxy_dict
 from backend.utils.tg_session import (
     delete_account_session_string,
     delete_session_string_file,
-    get_account_session_string,
     get_account_profile,
+    get_account_session_string,
     get_global_semaphore,
     get_session_mode,
     is_string_session_mode,
@@ -975,7 +975,7 @@ class TelegramService:
     ) -> Dict[str, Any]:
         import gc
 
-        from pyrogram import Client, filters, handlers, raw
+        from pyrogram import Client, handlers, raw
         from pyrogram.errors import FloodWait
 
         from tg_signer.core import close_client_by_name

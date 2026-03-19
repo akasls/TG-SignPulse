@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 
-import os
 import pyotp
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer

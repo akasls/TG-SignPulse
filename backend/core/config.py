@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from backend.utils.storage import get_initial_data_dir, get_writable_base_dir
+
 try:
     from pydantic.v1 import BaseSettings
 except ImportError:

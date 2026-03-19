@@ -6,9 +6,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from typing import Optional
-import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel

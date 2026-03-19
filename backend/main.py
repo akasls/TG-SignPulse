@@ -29,8 +29,17 @@ sqlite3.connect = _patched_sqlite3_connect
 
 from backend.api import router as api_router  # noqa: E402
 from backend.core.config import get_settings  # noqa: E402
-from backend.core.database import Base, get_engine, get_session_local, init_engine  # noqa: E402
-from backend.scheduler import init_scheduler, shutdown_scheduler, sync_jobs  # noqa: E402
+from backend.core.database import (  # noqa: E402
+    Base,
+    get_engine,
+    get_session_local,
+    init_engine,
+)
+from backend.scheduler import (  # noqa: E402
+    init_scheduler,
+    shutdown_scheduler,
+    sync_jobs,
+)
 from backend.services.users import ensure_admin  # noqa: E402
 from backend.utils.paths import ensure_data_dirs  # noqa: E402
 
