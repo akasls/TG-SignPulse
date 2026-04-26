@@ -142,6 +142,12 @@ def readable_message(message: Message):
                 s += "\n   "
                 for button in row:
                     s += f"{button.text} | "
+        elif isinstance(message.reply_markup, ReplyKeyboardMarkup):
+            s += "\n  ReplyKeyboard: "
+            for row in message.reply_markup.keyboard:
+                s += "\n   "
+                for button in row:
+                    s += f"{getattr(button, 'text', str(button))} | "
     return s
 
 
@@ -635,6 +641,14 @@ class BaseUserWorker(Generic[ConfigT]):
         :return:
         """
         message = await self.app.send_message(chat_id, text, **kwargs)
+        self.log(
+            f"已发送文本消息到 {chat_id}: {text}"
+            + (
+                f" (thread_id={kwargs.get('message_thread_id')})"
+                if kwargs.get("message_thread_id") is not None
+                else ""
+            )
+        )
         if delete_after is not None:
             self.log(
                 f"Message「{text}」 to {chat_id} will be deleted after {delete_after} seconds."
@@ -667,6 +681,14 @@ class BaseUserWorker(Generic[ConfigT]):
                 level="WARNING",
             )
         message = await self.app.send_dice(chat_id, emoji, **kwargs)
+        self.log(
+            f"已发送骰子到 {chat_id}: {emoji}"
+            + (
+                f" (thread_id={kwargs.get('message_thread_id')})"
+                if kwargs.get("message_thread_id") is not None
+                else ""
+            )
+        )
         if message and delete_after is not None:
             self.log(
                 f"Dice「{emoji}」 to {chat_id} will be deleted after {delete_after} seconds."
@@ -1104,10 +1126,13 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                     f"Failed to preheat chat_id {chat.chat_id}: {e}"
                 ) from e
         self.log(f"开始执行: \n{chat}")
-        for action in chat.actions:
-            self.log(f"等待处理动作: {action}")
-            await self.wait_for(chat, action)
-            self.log(f"处理完成: {action}")
+        total_actions = len(chat.actions)
+        for index, action in enumerate(chat.actions, start=1):
+            self.log(f"开始第 {index}/{total_actions} 步动作: {action}")
+            result = await self.wait_for(chat, action)
+            if result is False:
+                raise RuntimeError(f"第 {index}/{total_actions} 步动作执行失败: {action}")
+            self.log(f"完成第 {index}/{total_actions} 步动作: {action}")
             self.context.waiting_message = None
             await asyncio.sleep(chat.action_interval)
 
@@ -1307,7 +1332,11 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
         return text.strip().lower()
 
     async def _click_keyboard_by_text(
-        self, action: ClickKeyboardByTextAction, message: Message
+        self,
+        action: ClickKeyboardByTextAction,
+        message: Message,
+        *,
+        message_thread_id: Optional[int] = None,
     ):
         target_text = self._clean_text_for_match(action.text)
         if not target_text:
@@ -1343,7 +1372,10 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                         btn_text_clean = self._clean_text_for_match(btn_text)
                         if target_text in btn_text_clean:
                             self.log(f"成功匹配并发送回复键盘文本: [{btn_text}] (匹配词: {action.text})")
-                            await self.send_message(message.chat.id, btn_text)
+                            kwargs = {}
+                            if message_thread_id is not None:
+                                kwargs["message_thread_id"] = message_thread_id
+                            await self.send_message(message.chat.id, btn_text, **kwargs)
                             return True
                 self.log(
                     f"Target button '{action.text}' not found in reply keyboard.",
@@ -1458,6 +1490,26 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
         start = time.perf_counter()
         last_message = None
         try:
+            if isinstance(action, ClickKeyboardByTextAction):
+                self.log("先从最近消息中查找可点击按钮")
+                try:
+                    async for message in self.app.get_chat_history(chat.chat_id, limit=8):
+                        if chat.message_thread_id is not None:
+                            msg_thread_id = getattr(message, "message_thread_id", None) or getattr(
+                                message, "reply_to_top_message_id", None
+                            )
+                            if msg_thread_id != chat.message_thread_id:
+                                continue
+                        ok = await self._click_keyboard_by_text(
+                            action,
+                            message,
+                            message_thread_id=chat.message_thread_id,
+                        )
+                        if ok:
+                            return True
+                except Exception as e:
+                    self.log(f"最近消息按钮查找失败: {e}", level="WARNING")
+
             while time.perf_counter() - start < timeout:
                 await asyncio.sleep(0.3)
                 messages_dict = self.context.chat_messages.get(chat.chat_id)
@@ -1474,7 +1526,11 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                     self.context.waiting_message = message
                     ok = False
                     if isinstance(action, ClickKeyboardByTextAction):
-                        ok = await self._click_keyboard_by_text(action, message)
+                        ok = await self._click_keyboard_by_text(
+                            action,
+                            message,
+                            message_thread_id=chat.message_thread_id,
+                        )
                     elif isinstance(action, ReplyByCalculationProblemAction):
                         ok = await self._reply_by_calculation_problem(action, message)
                     elif isinstance(action, ChooseOptionByImageAction):
@@ -1503,7 +1559,11 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                     self.log("等待超时，尝试从历史消息中查找按钮", level="WARNING")
                     async for message in self.app.get_chat_history(chat.chat_id, limit=5):
                         if isinstance(action, ClickKeyboardByTextAction):
-                            ok = await self._click_keyboard_by_text(action, message)
+                            ok = await self._click_keyboard_by_text(
+                                action,
+                                message,
+                                message_thread_id=chat.message_thread_id,
+                            )
                         elif isinstance(action, ReplyByCalculationProblemAction):
                             ok = await self._reply_by_calculation_problem(action, message)
                         elif isinstance(action, ChooseOptionByImageAction):
@@ -1520,14 +1580,9 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                     self.log(f"历史消息回退失败: {e}", level="WARNING")
 
             self.log(f"等待超时: \nchat: \n{chat} \naction: {action}", level="WARNING")
-            if isinstance(
-                action,
-                (ClickKeyboardByTextAction, ClickButtonByCalculationProblemAction),
-            ):
-                raise RuntimeError(
-                    f"Target button not found within {timeout}s. chat_id={chat.chat_id}, action={action}"
-                )
-            return None
+            raise RuntimeError(
+                f"Action did not complete within {timeout}s. chat_id={chat.chat_id}, action={action}"
+            )
         finally:
             self.context.waiter.discard(chat.chat_id)
             self.context.waiting_message = None

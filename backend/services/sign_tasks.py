@@ -563,6 +563,15 @@ class SignTaskService:
             chat_id = (cfg.get("telegram_bot_chat_id") or "").strip()
             if not bot_token or not chat_id:
                 return
+            message_thread_id = cfg.get("telegram_bot_message_thread_id")
+            try:
+                message_thread_id = (
+                    int(message_thread_id)
+                    if message_thread_id is not None and str(message_thread_id).strip()
+                    else None
+                )
+            except (TypeError, ValueError):
+                message_thread_id = None
 
             log_tail = "\n".join((flow_logs or [])[-20:])
             text = (
@@ -578,9 +587,12 @@ class SignTaskService:
             import httpx
 
             async with httpx.AsyncClient(timeout=10) as client:
+                payload = {"chat_id": chat_id, "text": text}
+                if message_thread_id is not None:
+                    payload["message_thread_id"] = message_thread_id
                 await client.post(
                     f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                    json={"chat_id": chat_id, "text": text},
+                    json=payload,
                 )
         except Exception as e:
             logging.getLogger("backend.sign_tasks").warning(
@@ -1472,6 +1484,26 @@ class SignTaskService:
                             pass
                         if last_reply:
                             break
+                if last_reply:
+                    reply_lower = last_reply.lower()
+                    failure_keywords = (
+                        "失败",
+                        "错误",
+                        "异常",
+                        "未成功",
+                        "无法",
+                        "failed",
+                        "failure",
+                        "error",
+                        "invalid",
+                        "not found",
+                    )
+                    if any(keyword in reply_lower for keyword in failure_keywords):
+                        success = False
+                        error_msg = f"机器人回复疑似失败: {last_reply}"
+                        final_logs.append(error_msg)
+                        self._active_logs.setdefault(task_key, []).append(error_msg)
+                        output_str = "\n".join(final_logs)
 
             msg = error_msg if not success else last_reply
             self._save_run_info(

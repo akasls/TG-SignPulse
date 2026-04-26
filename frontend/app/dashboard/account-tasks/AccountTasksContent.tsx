@@ -16,6 +16,7 @@ import {
     exportSignTask,
     importSignTask,
     importAllConfigs,
+    getSignTaskLogs,
     SignTask,
     SignTaskHistoryItem,
     ChatInfo,
@@ -58,9 +59,10 @@ const DICE_OPTIONS = [
 ] as const;
 
 // Memoized Task Item Component
-const TaskItem = memo(({ task, loading, onEdit, onRun, onViewLogs, onCopy, onDelete, t, language }: {
+const TaskItem = memo(({ task, loading, running, onEdit, onRun, onViewLogs, onCopy, onDelete, t, language }: {
     task: SignTask;
     loading: boolean;
+    running: boolean;
     onEdit: (task: SignTask) => void;
     onRun: (name: string) => void;
     onViewLogs: (task: SignTask) => void;
@@ -72,7 +74,7 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onViewLogs, onCopy, onDel
     const copyTaskTitle = language === "zh" ? "\u590D\u5236\u4EFB\u52A1" : "Copy Task";
 
     return (
-        <div className="glass-panel p-4 md:p-5 group hover:border-[#8a3ffc]/30 transition-all">
+        <div className={`glass-panel p-4 md:p-5 group hover:border-[#8a3ffc]/30 transition-all ${running ? "border-emerald-500/40 shadow-[0_0_0_1px_rgba(16,185,129,0.25)]" : ""}`}>
             <div className="flex items-start gap-4 min-w-0">
                 <div className="w-10 h-10 rounded-xl bg-[#8a3ffc]/10 flex items-center justify-center text-[#b57dff] shrink-0">
                     <ChatCircleText weight="bold" size={20} />
@@ -80,6 +82,12 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onViewLogs, onCopy, onDel
                 <div className="min-w-0 flex-1 flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                         <h3 className="font-bold truncate text-sm" title={task.name}>{task.name}</h3>
+                        {running && (
+                            <span className="inline-flex items-center gap-1 text-[9px] text-emerald-400 font-bold uppercase">
+                                <Spinner className="animate-spin" size={10} />
+                                {t("task_running")}
+                            </span>
+                        )}
                         <span className="text-[9px] font-mono text-main/30 bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
                             {task.chats[0]?.chat_id || "-"}
                         </span>
@@ -123,11 +131,11 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onViewLogs, onCopy, onDel
             <div className="mt-3 grid grid-cols-5 gap-2 md:hidden">
                 <button
                     onClick={() => onRun(task.name)}
-                    disabled={loading}
+                    disabled={loading || running}
                     className="action-btn !w-full !h-10 !text-emerald-400 hover:bg-emerald-500/10"
                     title={t("run")}
                 >
-                    <Play weight="fill" size={14} />
+                    {running ? <Spinner className="animate-spin" size={14} /> : <Play weight="fill" size={14} />}
                 </button>
                 <button
                     onClick={() => onEdit(task)}
@@ -183,11 +191,11 @@ const TaskItem = memo(({ task, loading, onEdit, onRun, onViewLogs, onCopy, onDel
                 <div className="flex items-center gap-1 bg-black/10 rounded-xl p-1 border border-white/5">
                     <button
                         onClick={() => onRun(task.name)}
-                        disabled={loading}
+                        disabled={loading || running}
                         className="action-btn !w-8 !h-8 !text-emerald-400 hover:bg-emerald-500/10"
                         title={t("run")}
                     >
-                        <Play weight="fill" size={14} />
+                        {running ? <Spinner className="animate-spin" size={14} /> : <Play weight="fill" size={14} />}
                     </button>
                     <button
                         onClick={() => onEdit(task)}
@@ -248,6 +256,9 @@ export default function AccountTasksContent() {
     const [historyTaskName, setHistoryTaskName] = useState<string | null>(null);
     const [historyLogs, setHistoryLogs] = useState<SignTaskHistoryItem[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
+    const [runningTaskNames, setRunningTaskNames] = useState<Set<string>>(new Set());
+    const [liveLogTaskName, setLiveLogTaskName] = useState<string | null>(null);
+    const [liveLogs, setLiveLogs] = useState<string[]>([]);
 
     const addToastRef = useRef(addToast);
     const tRef = useRef(t);
@@ -467,6 +478,27 @@ export default function AccountTasksContent() {
         }
     }, [showCreateDialog, showEditDialog, accountName]);
 
+    useEffect(() => {
+        if (!token || !accountName || !liveLogTaskName) return;
+        let cancelled = false;
+        const fetchLiveLogs = async () => {
+            try {
+                const logs = await getSignTaskLogs(token, liveLogTaskName, accountName);
+                if (!cancelled) {
+                    setLiveLogs(logs || []);
+                }
+            } catch {
+                // Live logs are best-effort; the final result toast still reports errors.
+            }
+        };
+        fetchLiveLogs();
+        const timer = setInterval(fetchLiveLogs, 1000);
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
+    }, [token, accountName, liveLogTaskName]);
+
     const handleRefreshChats = async () => {
         if (!token || !accountName) return;
         try {
@@ -544,8 +576,17 @@ export default function AccountTasksContent() {
         if (!token) return;
 
         try {
-            setLoading(true);
+            setRunningTaskNames((prev) => new Set(prev).add(taskName));
+            setLiveLogTaskName(taskName);
+            setLiveLogs([]);
+            addToast(t("task_executing"), "info");
             const result = await runSignTask(token, taskName, accountName);
+            try {
+                const logs = await getSignTaskLogs(token, taskName, accountName);
+                setLiveLogs(logs || []);
+            } catch {
+                // ignore live log refresh errors after completion
+            }
 
             if (result.success) {
                 addToast(t("task_run_success").replace("{name}", taskName), "success");
@@ -559,7 +600,12 @@ export default function AccountTasksContent() {
         } catch (err: any) {
             addToast(formatErrorMessage("task_run_failed", err), "error");
         } finally {
-            setLoading(false);
+            setRunningTaskNames((prev) => {
+                const next = new Set(prev);
+                next.delete(taskName);
+                return next;
+            });
+            await loadData(token);
         }
     };
 
@@ -971,7 +1017,7 @@ export default function AccountTasksContent() {
                     <button
                         onClick={handleCopyAllTasks}
                         disabled={loading}
-                        className="action-btn !w-8 !h-8 !text-emerald-400 hover:bg-emerald-500/10"
+                        className="action-btn !w-8 !h-8"
                         title={copyAllTasksTitle}
                     >
                         <Copy weight="bold" size={18} />
@@ -979,12 +1025,12 @@ export default function AccountTasksContent() {
                     <button
                         onClick={handlePasteTask}
                         disabled={loading}
-                        className="action-btn !w-8 !h-8 !text-sky-400 hover:bg-sky-500/10"
+                        className="action-btn !w-8 !h-8"
                         title={pasteTaskTitle}
                     >
                         <ClipboardText weight="bold" size={18} />
                     </button>
-                    <button onClick={() => setShowCreateDialog(true)} className="action-btn !w-8 !h-8 !text-[#8a3ffc] hover:bg-[#8a3ffc]/10" title={t("add_task")}>
+                    <button onClick={() => setShowCreateDialog(true)} className="action-btn !w-8 !h-8" title={t("add_task")}>
                         <Plus weight="bold" size={18} />
                     </button>
                 </div>
@@ -1012,6 +1058,7 @@ export default function AccountTasksContent() {
                                 key={task.name}
                                 task={task}
                                 loading={loading}
+                                running={runningTaskNames.has(task.name)}
                                 onEdit={handleEditTask}
                                 onRun={handleRunTask}
                                 onViewLogs={handleShowTaskHistory}
@@ -1512,6 +1559,54 @@ export default function AccountTasksContent() {
                                 {importingPastedConfig ? <Spinner className="animate-spin" /> : importTaskAction}
                             </button>
                         </footer>
+                    </div>
+                </div>
+            )}
+
+            {liveLogTaskName && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <div className="glass-panel w-full max-w-4xl h-[72vh] flex flex-col shadow-2xl border border-white/10 overflow-hidden animate-zoom-in">
+                        <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/2">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-400">
+                                    {runningTaskNames.has(liveLogTaskName) ? (
+                                        <Spinner className="animate-spin" size={18} />
+                                    ) : (
+                                        <ListDashes weight="bold" size={18} />
+                                    )}
+                                </div>
+                                <h3 className="font-bold tracking-tight">
+                                    {t("task_run_logs_title").replace("{name}", liveLogTaskName)}
+                                </h3>
+                            </div>
+                            <button
+                                onClick={() => setLiveLogTaskName(null)}
+                                className="action-btn !w-8 !h-8 hover:bg-white/10"
+                            >
+                                <X weight="bold" />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] leading-relaxed bg-black/20">
+                            {liveLogs.length === 0 ? (
+                                <div className="flex items-center gap-2 text-main/30 italic">
+                                    {runningTaskNames.has(liveLogTaskName) ? (
+                                        <Spinner className="animate-spin" size={12} />
+                                    ) : null}
+                                    {t("logs_waiting")}
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    {liveLogs.map((line, index) => (
+                                        <div key={`${index}-${line}`} className="text-main/80 flex gap-2">
+                                            <span className="text-main/20 select-none w-8 text-right">
+                                                {(index + 1).toString().padStart(2, "0")}
+                                            </span>
+                                            <span className="break-all">{line}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

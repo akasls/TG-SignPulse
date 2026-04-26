@@ -54,6 +54,7 @@ class ImportAllResponse(BaseModel):
     signs_skipped: int
     monitors_imported: int
     monitors_skipped: int
+    settings_imported: int
     errors: list[str]
     message: str
 
@@ -208,6 +209,7 @@ async def import_all_configs(
             signs_skipped=int(result.get("signs_skipped", 0)),
             monitors_imported=int(result.get("monitors_imported", 0)),
             monitors_skipped=int(result.get("monitors_skipped", 0)),
+            settings_imported=int(result.get("settings_imported", 0)),
             errors=[str(item) for item in result.get("errors", [])],
             message=message,
         )
@@ -354,6 +356,7 @@ class GlobalSettingsRequest(BaseModel):
     telegram_bot_notify_enabled: bool = False
     telegram_bot_token: Optional[str] = None
     telegram_bot_chat_id: Optional[str] = None
+    telegram_bot_message_thread_id: Optional[int] = None
 
 
 class GlobalSettingsResponse(BaseModel):
@@ -364,6 +367,7 @@ class GlobalSettingsResponse(BaseModel):
     telegram_bot_notify_enabled: bool = False
     telegram_bot_token: Optional[str] = None
     telegram_bot_chat_id: Optional[str] = None
+    telegram_bot_message_thread_id: Optional[int] = None
 
 
 @router.get("/settings", response_model=GlobalSettingsResponse)
@@ -390,6 +394,7 @@ def save_global_settings(
             "telegram_bot_notify_enabled": request.telegram_bot_notify_enabled,
             "telegram_bot_token": request.telegram_bot_token,
             "telegram_bot_chat_id": request.telegram_bot_chat_id,
+            "telegram_bot_message_thread_id": request.telegram_bot_message_thread_id,
         }
         fields_set = getattr(request, "model_fields_set", getattr(request, "__fields_set__", set()))
         if "data_dir" in fields_set:

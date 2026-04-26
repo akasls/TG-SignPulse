@@ -103,6 +103,7 @@ export default function SettingsPage() {
         telegram_bot_notify_enabled: false,
         telegram_bot_token: null,
         telegram_bot_chat_id: null,
+        telegram_bot_message_thread_id: null,
     });
 
     // Telegram API 配置
@@ -759,7 +760,7 @@ export default function SettingsPage() {
                                         <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all shadow-md ${globalSettings.telegram_bot_notify_enabled ? 'left-6' : 'left-0.5'}`}></span>
                                     </button>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
                                         <label className="text-[11px] mb-1">{t("telegram_bot_token")}</label>
                                         <input
@@ -777,6 +778,19 @@ export default function SettingsPage() {
                                             value={globalSettings.telegram_bot_chat_id || ""}
                                             onChange={(e) => setGlobalSettings({ ...globalSettings, telegram_bot_chat_id: e.target.value || null })}
                                             placeholder={t("telegram_bot_chat_id_placeholder")}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] mb-1">{t("telegram_bot_thread_id")}</label>
+                                        <input
+                                            type="number"
+                                            className="!py-2 !px-4"
+                                            value={globalSettings.telegram_bot_message_thread_id ?? ""}
+                                            onChange={(e) => setGlobalSettings({
+                                                ...globalSettings,
+                                                telegram_bot_message_thread_id: e.target.value ? parseInt(e.target.value) : null,
+                                            })}
+                                            placeholder={t("telegram_bot_thread_id_placeholder")}
                                         />
                                     </div>
                                 </div>

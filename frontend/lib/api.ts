@@ -360,6 +360,7 @@ export const importAllConfigs = (token: string, configJson: string, overwrite = 
     signs_skipped: number;
     monitors_imported: number;
     monitors_skipped: number;
+    settings_imported: number;
     errors: string[];
     message: string;
   }>("/config/import/all", {
@@ -466,6 +467,7 @@ export interface GlobalSettings {
   telegram_bot_notify_enabled?: boolean;
   telegram_bot_token?: string | null;
   telegram_bot_chat_id?: string | null;
+  telegram_bot_message_thread_id?: number | null;
 }
 
 export const getGlobalSettings = (token: string) =>
