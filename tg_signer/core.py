@@ -1321,10 +1321,11 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
     def _clean_text_for_match(self, text: str) -> str:
         if not text:
             return ""
-        # Remove emojis and zero-width characters (using a broad unicode range for emojis and symbols)
+        # Remove emojis, variation selectors, and zero-width characters before matching.
         text = re.sub(r'[\U00010000-\U0010ffff]', '', text)
         text = re.sub(r'[\u2600-\u27bf]', '', text)
         text = re.sub(r'[\u2B50]', '', text)  # ⭐
+        text = re.sub(r'[\ufe00-\ufe0f\u200c\u200d\u20e3]', '', text)
         # Remove all whitespace and zero width joiners to make fuzzy match extremely forgiving
         text = re.sub(r'[\s\u200b\u200e\u200f\u202a-\u202e]', '', text)
         # Remove all common punctuation
@@ -1366,7 +1367,7 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
             elif isinstance(reply_markup, ReplyKeyboardMarkup):
                 for row in reply_markup.keyboard:
                     for btn in row:
-                        btn_text = getattr(btn, "text", "")
+                        btn_text = btn if isinstance(btn, str) else getattr(btn, "text", "")
                         if not btn_text:
                             continue
                         btn_text_clean = self._clean_text_for_match(btn_text)
@@ -1509,6 +1510,16 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                             return True
                 except Exception as e:
                     self.log(f"最近消息按钮查找失败: {e}", level="WARNING")
+                self.log(
+                    f"未在最近消息中匹配到按钮，尝试直接发送按钮文本: {action.text}",
+                    level="WARNING",
+                )
+                await self.send_message(
+                    chat.chat_id,
+                    action.text,
+                    **kwargs,
+                )
+                return True
 
             while time.perf_counter() - start < timeout:
                 await asyncio.sleep(0.3)

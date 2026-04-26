@@ -181,12 +181,10 @@ class SignTaskService:
 
         total = len(flow_logs)
         trimmed: List[str] = []
-        for line in flow_logs[: self._history_max_flow_lines]:
+        for line in flow_logs:
             text = str(line).replace("\r", "").rstrip("\n")
-            if len(text) > self._history_max_line_chars:
-                text = text[: self._history_max_line_chars] + "..."
             trimmed.append(text)
-        return trimmed, total > len(trimmed), total
+        return trimmed, False, total
 
     def _load_history_entries(
         self, task_name: str, account_name: str = ""

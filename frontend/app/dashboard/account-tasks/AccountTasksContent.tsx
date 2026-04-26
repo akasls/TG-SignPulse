@@ -256,6 +256,7 @@ export default function AccountTasksContent() {
     const [historyTaskName, setHistoryTaskName] = useState<string | null>(null);
     const [historyLogs, setHistoryLogs] = useState<SignTaskHistoryItem[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
+    const [expandedHistoryLogs, setExpandedHistoryLogs] = useState<Set<string>>(new Set());
     const [runningTaskNames, setRunningTaskNames] = useState<Set<string>>(new Set());
     const [liveLogTaskName, setLiveLogTaskName] = useState<string | null>(null);
     const [liveLogs, setLiveLogs] = useState<string[]>([]);
@@ -579,7 +580,6 @@ export default function AccountTasksContent() {
             setRunningTaskNames((prev) => new Set(prev).add(taskName));
             setLiveLogTaskName(taskName);
             setLiveLogs([]);
-            addToast(t("task_executing"), "info");
             const result = await runSignTask(token, taskName, accountName);
             try {
                 const logs = await getSignTaskLogs(token, taskName, accountName);
@@ -588,17 +588,14 @@ export default function AccountTasksContent() {
                 // ignore live log refresh errors after completion
             }
 
-            if (result.success) {
-                addToast(t("task_run_success").replace("{name}", taskName), "success");
-            } else {
-                if (result.error && result.error.includes("运行中")) {
-                    addToast(language === "zh" ? "该任务正在运行中，任务结束后才能再次执行" : "Task is currently running, please wait until it finishes.", "info");
-                } else {
-                    addToast(result.error || t("task_run_failed"), "error");
-                }
+            if (!result.success && result.error) {
+                setLiveLogs((prev) => (prev.length > 0 ? prev : [result.error]));
             }
         } catch (err: any) {
-            addToast(formatErrorMessage("task_run_failed", err), "error");
+            setLiveLogs((prev) => [
+                ...prev,
+                `${t("task_run_failed")}: ${err?.message || err}`,
+            ]);
         } finally {
             setRunningTaskNames((prev) => {
                 const next = new Set(prev);
@@ -613,6 +610,7 @@ export default function AccountTasksContent() {
         if (!token) return;
         setHistoryTaskName(task.name);
         setHistoryLogs([]);
+        setExpandedHistoryLogs(new Set());
         setHistoryLoading(true);
         try {
             const logs = await getSignTaskHistory(token, task.name, accountName, 30);
@@ -999,8 +997,8 @@ export default function AccountTasksContent() {
             <nav className="navbar">
                 <div className="nav-brand">
                     <div className="flex items-center gap-4">
-                        <Link href="/dashboard" className="action-btn !w-8 !h-8" title={t("sidebar_home")}>
-                            <CaretLeft weight="bold" size={18} />
+                        <Link href="/dashboard" className="action-btn" title={t("sidebar_home")}>
+                            <CaretLeft weight="bold" />
                         </Link>
                         <h1 className="text-lg font-bold tracking-tight">{accountName}</h1>
                     </div>
@@ -1009,29 +1007,29 @@ export default function AccountTasksContent() {
                     <button
                         onClick={refreshChats}
                         disabled={loading}
-                        className="action-btn !w-8 !h-8"
+                        className="action-btn"
                         title={t("refresh_chats")}
                     >
-                        <ArrowClockwise weight="bold" size={18} className={loading ? 'animate-spin' : ''} />
+                        <ArrowClockwise weight="bold" className={loading ? 'animate-spin' : ''} />
                     </button>
                     <button
                         onClick={handleCopyAllTasks}
                         disabled={loading}
-                        className="action-btn !w-8 !h-8"
+                        className="action-btn"
                         title={copyAllTasksTitle}
                     >
-                        <Copy weight="bold" size={18} />
+                        <Copy weight="bold" />
                     </button>
                     <button
                         onClick={handlePasteTask}
                         disabled={loading}
-                        className="action-btn !w-8 !h-8"
+                        className="action-btn"
                         title={pasteTaskTitle}
                     >
-                        <ClipboardText weight="bold" size={18} />
+                        <ClipboardText weight="bold" />
                     </button>
-                    <button onClick={() => setShowCreateDialog(true)} className="action-btn !w-8 !h-8" title={t("add_task")}>
-                        <Plus weight="bold" size={18} />
+                    <button onClick={() => setShowCreateDialog(true)} className="action-btn" title={t("add_task")}>
+                        <Plus weight="bold" />
                     </button>
                 </div>
             </nav>
@@ -1640,12 +1638,40 @@ export default function AccountTasksContent() {
                                 <div className="text-main/30 italic">{t("task_history_empty")}</div>
                             ) : (
                                 <div className="space-y-4">
-                                    {historyLogs.map((log, i) => (
-                                        <div key={`${log.time}-${i}`} className="rounded-xl border border-white/5 bg-white/5 overflow-hidden">
+                                    {historyLogs.map((log, i) => {
+                                        const logKey = `${log.time}-${i}`;
+                                        const hasMultiLineLogs = Boolean(log.flow_logs && log.flow_logs.length > 1);
+                                        const isExpanded = expandedHistoryLogs.has(logKey);
+                                        const visibleFlowLogs = hasMultiLineLogs && !isExpanded
+                                            ? (log.flow_logs || []).slice(0, 1)
+                                            : (log.flow_logs || []);
+                                        return (
+                                        <div key={logKey} className="rounded-xl border border-white/5 bg-white/5 overflow-hidden">
                                             <div className="flex justify-between items-center px-3 py-2 border-b border-white/5 text-[10px]">
-                                                <span className="text-main/30">
-                                                    {new Date(log.time).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}
-                                                </span>
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="text-main/30 truncate">
+                                                        {new Date(log.time).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}
+                                                    </span>
+                                                    {hasMultiLineLogs && (
+                                                        <button
+                                                            type="button"
+                                                            className="text-[#8a3ffc] hover:text-[#b57dff] font-bold shrink-0"
+                                                            onClick={() => {
+                                                                setExpandedHistoryLogs((prev) => {
+                                                                    const next = new Set(prev);
+                                                                    if (next.has(logKey)) {
+                                                                        next.delete(logKey);
+                                                                    } else {
+                                                                        next.add(logKey);
+                                                                    }
+                                                                    return next;
+                                                                });
+                                                            }}
+                                                        >
+                                                            {isExpanded ? (isZh ? "收缩" : "Collapse") : (isZh ? "展开完整日志" : "Expand full log")}
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 <span className={log.success ? "text-emerald-400" : "text-rose-400"}>
                                                     {log.success ? t("success") : t("failure")}
                                                 </span>
@@ -1661,8 +1687,8 @@ export default function AccountTasksContent() {
                                                         {isZh ? `机器人消息：${log.message}` : `Bot message: ${log.message}`}
                                                     </div>
                                                 ) : null}
-                                                {log.flow_logs && log.flow_logs.length > 0 ? (
-                                                    log.flow_logs.map((line, lineIndex) => (
+                                                {visibleFlowLogs.length > 0 ? (
+                                                    visibleFlowLogs.map((line, lineIndex) => (
                                                         <div key={lineIndex} className="text-main/80 flex gap-2">
                                                             <span className="text-main/20 select-none w-6 text-right">
                                                                 {(lineIndex + 1).toString().padStart(2, "0")}
@@ -1682,7 +1708,8 @@ export default function AccountTasksContent() {
                                                 )}
                                             </div>
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>

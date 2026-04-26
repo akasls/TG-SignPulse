@@ -228,8 +228,8 @@ export default function SignTasksPage() {
             <nav className="navbar">
                 <div className="nav-brand">
                     <div className="flex items-center gap-4">
-                        <Link href="/dashboard" className="action-btn !w-8 !h-8" title={t("sidebar_home")}>
-                            <CaretLeft weight="bold" size={18} />
+                        <Link href="/dashboard" className="action-btn" title={t("sidebar_home")}>
+                            <CaretLeft weight="bold" />
                         </Link>
                         <h1 className="text-lg font-bold tracking-tight">{t("sidebar_tasks")}</h1>
                     </div>
@@ -238,33 +238,33 @@ export default function SignTasksPage() {
                     <button
                         onClick={handleExportTasks}
                         disabled={loading}
-                        className="action-btn !w-8 !h-8"
+                        className="action-btn"
                         title={t("export_tasks") || "Export All Tasks to Clipboard"}
                     >
-                        <Copy weight="bold" size={18} />
+                        <Copy weight="bold" />
                     </button>
                     <button
                         onClick={handleImportTasks}
                         disabled={loading}
-                        className="action-btn !w-8 !h-8"
+                        className="action-btn"
                         title={t("import_tasks") || "Paste to Import Tasks"}
                     >
-                        <ClipboardText weight="bold" size={18} />
+                        <ClipboardText weight="bold" />
                     </button>
                     <button
                         onClick={() => loadData(token)}
                         disabled={loading}
-                        className="action-btn !w-8 !h-8"
+                        className="action-btn"
                         title={t("refresh_list")}
                     >
-                        <ArrowClockwise weight="bold" size={18} className={loading ? 'animate-spin' : ''} />
+                        <ArrowClockwise weight="bold" className={loading ? 'animate-spin' : ''} />
                     </button>
                     <Link
                         href="/dashboard/sign-tasks/create"
-                        className={`action-btn !w-8 !h-8 !text-[#8a3ffc] hover:bg-[#8a3ffc]/10 ${loading ? 'pointer-events-none opacity-20' : ''}`}
+                        className={`action-btn !text-[#8a3ffc] hover:bg-[#8a3ffc]/10 ${loading ? 'pointer-events-none opacity-20' : ''}`}
                         title={t("add_task")}
                     >
-                        <Plus weight="bold" size={18} />
+                        <Plus weight="bold" />
                     </Link>
                 </div>
             </nav>
