@@ -1277,7 +1277,7 @@ export default function AccountTasksContent() {
                                 <div className="space-y-2 mt-4">
                                     <label className="text-[10px] text-main/40 uppercase tracking-wider">{t("topic_id_label") || "Topic/Thread ID (Optional)"}</label>
                                     <input
-                                        type="number"
+                                        inputMode="numeric"
                                         className="!mb-0"
                                         placeholder={t("topic_id_placeholder") || "Leave blank if not applicable"}
                                         value={showCreateDialog ? (newTask.message_thread_id || "") : (editTask.message_thread_id || "")}

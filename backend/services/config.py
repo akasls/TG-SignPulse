@@ -599,6 +599,16 @@ class ConfigService:
             "telegram_bot_token": None,
             "telegram_bot_chat_id": None,
             "telegram_bot_message_thread_id": None,
+            "keyword_monitor_enabled": False,
+            "keyword_monitor_account_name": None,
+            "keyword_monitor_chat_id": None,
+            "keyword_monitor_message_thread_id": None,
+            "keyword_monitor_keywords": [],
+            "keyword_monitor_match_mode": "contains",
+            "keyword_monitor_ignore_case": True,
+            "keyword_monitor_push_channel": "telegram",
+            "keyword_monitor_bark_url": None,
+            "keyword_monitor_custom_url": None,
         }
 
         if not config_file.exists():

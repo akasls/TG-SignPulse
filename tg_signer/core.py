@@ -1127,6 +1127,8 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                 ) from e
         self.log(f"开始执行: \n{chat}")
         total_actions = len(chat.actions)
+        if total_actions == 0:
+            raise RuntimeError("任务没有配置任何执行动作")
         for index, action in enumerate(chat.actions, start=1):
             self.log(f"开始第 {index}/{total_actions} 步动作: {action}")
             result = await self.wait_for(chat, action)
@@ -1150,10 +1152,17 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
     async def in_memory_run(
         self, num_of_dialogs=20, only_once: bool = False, force_rerun: bool = False
     ):
-        async with self.app:
+        started_here = False
+        if not getattr(self.app, "is_connected", False):
+            await self.app.start()
+            started_here = True
+        try:
             await self.normal_run(
                 num_of_dialogs, only_once=only_once, force_rerun=force_rerun
             )
+        finally:
+            if started_here:
+                await self.app.stop()
 
     async def normal_run(
         self, num_of_dialogs=20, only_once: bool = False, force_rerun: bool = False
@@ -1217,7 +1226,11 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                     EditedMessageHandler(self.on_edited_message, filters.chat(chat_ids))
                 )
             try:
-                async with self.app:
+                started_here = False
+                if not getattr(self.app, "is_connected", False):
+                    await self.app.start()
+                    started_here = True
+                try:
                     now = get_now()
                     self.log(f"当前时间: {now}")
                     now_date_str = str(now.date())
@@ -1229,6 +1242,9 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                                 self.log(f"单次执行随机延迟: {delay} 秒")
                                 await asyncio.sleep(delay)
                         await sign_once()
+                finally:
+                    if started_here:
+                        await self.app.stop()
 
             except (OSError, errors.Unauthorized) as e:
                 logger.exception(e)
@@ -1438,45 +1454,55 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
     async def _choose_option_by_image(self, action: ChooseOptionByImageAction, message):
         if reply_markup := message.reply_markup:
             if isinstance(reply_markup, InlineKeyboardMarkup) and message.photo:
-                flat_buttons = (b for row in reply_markup.inline_keyboard for b in row)
-                option_to_btn = {btn.text: btn for btn in flat_buttons if btn.text}
-                self.log("检测到图片，尝试调用大模型进行图片识别并选择选项")
+                flat_buttons = [b for row in reply_markup.inline_keyboard for b in row]
+                clickable_buttons = [btn for btn in flat_buttons if btn.text]
+                self.log("检测到图片按钮验证，调用 AI 识别并按顺序点击选项")
                 image_buffer: BinaryIO = await self.app.download_media(
                     message.photo.file_id, in_memory=True
                 )
                 image_buffer.seek(0)
                 image_bytes = image_buffer.read()
-                options = list(option_to_btn)
+                options = [btn.text for btn in clickable_buttons]
                 if not options:
                     self.log("未找到可供点击的按钮", level="WARNING")
                     return False
-                result_index = await self.get_ai_tools().choose_option_by_image(
+                question_text = (message.caption or message.text or "").strip()
+                if not question_text:
+                    question_text = "选择正确的选项"
+                result_indexes = await self.get_ai_tools().choose_options_by_image(
                     image_bytes,
-                    "选择正确的选项",
+                    question_text,
                     list(enumerate(options, start=1)),
                 )
-                if result_index == 0:
-                    selected_idx = 0
-                elif 1 <= result_index <= len(options):
-                    selected_idx = result_index - 1
-                elif 0 <= result_index < len(options):
-                    selected_idx = result_index
-                else:
-                    self.log(f"AI 返回了非法选项序号: {result_index}", level="WARNING")
+                if not result_indexes:
+                    self.log("AI 未返回可点击选项", level="WARNING")
                     return False
-                result = options[selected_idx]
-                self.log(f"选择结果为: {result}")
-                target_btn = option_to_btn.get(result.strip())
-                if not target_btn:
-                    self.log("未找到匹配的按钮", level="WARNING")
-                    return False
-                await self.request_callback_answer(
-                    self.app,
-                    message.chat.id,
-                    message.id,
-                    target_btn.callback_data,
-                )
-                return True
+                clicked = 0
+                for result_index in result_indexes:
+                    if result_index == 0:
+                        selected_idx = 0
+                    elif 1 <= result_index <= len(options):
+                        selected_idx = result_index - 1
+                    elif 0 <= result_index < len(options):
+                        selected_idx = result_index
+                    else:
+                        self.log(f"AI 返回了非法选项序号: {result_index}", level="WARNING")
+                        return False
+                    result = options[selected_idx]
+                    self.log(f"AI 选择并点击选项: {result}")
+                    target_btn = clickable_buttons[selected_idx]
+                    if not target_btn:
+                        self.log("未找到匹配的按钮", level="WARNING")
+                        return False
+                    await self.request_callback_answer(
+                        self.app,
+                        message.chat.id,
+                        message.id,
+                        target_btn.callback_data,
+                    )
+                    clicked += 1
+                    await asyncio.sleep(0.3)
+                return clicked > 0
         return False
 
     async def wait_for(self, chat: SignChatV3, action: ActionT, timeout=15):
@@ -1514,12 +1540,27 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                     f"未在最近消息中匹配到按钮，尝试直接发送按钮文本: {action.text}",
                     level="WARNING",
                 )
+                before_message_ids = set(
+                    self.context.chat_messages.get(chat.chat_id, {}).keys()
+                )
                 await self.send_message(
                     chat.chat_id,
                     action.text,
                     **kwargs,
                 )
-                return True
+                direct_send_wait_until = time.perf_counter() + min(6, timeout)
+                while time.perf_counter() < direct_send_wait_until:
+                    await asyncio.sleep(0.3)
+                    messages_dict = self.context.chat_messages.get(chat.chat_id)
+                    if not messages_dict:
+                        continue
+                    for message_id, message in messages_dict.items():
+                        if message_id in before_message_ids or message is None:
+                            continue
+                        self.log("直接发送按钮文本后收到新消息，继续执行后续动作")
+                        return True
+                self.log("直接发送按钮文本后未收到响应，判定该动作失败", level="WARNING")
+                return False
 
             while time.perf_counter() - start < timeout:
                 await asyncio.sleep(0.3)

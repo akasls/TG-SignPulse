@@ -459,7 +459,7 @@ export default function CreateSignTaskPage() {
                                     <div className="mt-4">
                                         <label className="text-[10px] text-main/40 uppercase tracking-wider">{t("topic_id_label") || "Topic/Thread ID (Optional)"}</label>
                                         <input
-                                            type="number"
+                                            inputMode="numeric"
                                             className="!mb-0"
                                             placeholder={t("topic_id_placeholder") || "Leave blank if not applicable"}
                                             value={editingChat.message_thread_id || ""}

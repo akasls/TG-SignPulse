@@ -155,6 +155,66 @@ class AITools:
         result = json_repair.loads(message.content)
         return int(result["option"])
 
+    async def choose_options_by_image(
+        self,
+        image: bytes,
+        query: str,
+        options: list[tuple[int, str]],
+        client: "AsyncOpenAI" = None,
+        model: str = None,
+        temperature=0.1,
+    ) -> list[int]:
+        sys_prompt = (
+            "You solve Telegram bot visual or text verification challenges. "
+            "Use the image, caption, and button options to decide which button(s) "
+            "must be clicked, in exact order. Challenges may ask to complete a poem, "
+            "idiom, phrase, math result, or image question. Return JSON only: "
+            '{"options":[1],"reason":"short reason"}. '
+            "The options field must be a list of option indexes starting at 1. "
+            "If only one click is needed, return a one-item list."
+        )
+        client = client or self.client
+        model = model or self.default_model
+        text_query = (
+            f"Question/caption:\n{query}\n\n"
+            f"Button options in row order:\n{json.dumps(options, ensure_ascii=False)}"
+        )
+        messages = [
+            {"role": "system", "content": sys_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": text_query},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{encode_image(image)}"
+                        },
+                    },
+                ],
+            },
+        ]
+        completion = await client.chat.completions.create(
+            messages=messages,
+            model=model,
+            response_format={"type": "json_object"},
+            stream=False,
+            temperature=temperature,
+        )
+        result = json_repair.loads(completion.choices[0].message.content)
+        raw_options = result.get("options")
+        if raw_options is None:
+            raw_options = [result.get("option")]
+        if not isinstance(raw_options, list):
+            raw_options = [raw_options]
+        selected: list[int] = []
+        for item in raw_options:
+            try:
+                selected.append(int(item))
+            except (TypeError, ValueError):
+                continue
+        return selected
+
     async def extract_text_by_image(
         self,
         image: bytes,

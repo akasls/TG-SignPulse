@@ -580,18 +580,14 @@ class SignTaskService:
             )
             if log_tail:
                 text += f"\n\n最近日志:\n{log_tail}"
-            text = text[:3900]
+            from backend.services.push_notifications import send_telegram_bot_message
 
-            import httpx
-
-            async with httpx.AsyncClient(timeout=10) as client:
-                payload = {"chat_id": chat_id, "text": text}
-                if message_thread_id is not None:
-                    payload["message_thread_id"] = message_thread_id
-                await client.post(
-                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                    json=payload,
-                )
+            await send_telegram_bot_message(
+                bot_token=bot_token,
+                chat_id=chat_id,
+                text=text,
+                message_thread_id=message_thread_id,
+            )
         except Exception as e:
             logging.getLogger("backend.sign_tasks").warning(
                 "Failed to send Telegram failure notification: %s", e

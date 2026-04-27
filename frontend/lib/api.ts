@@ -468,6 +468,16 @@ export interface GlobalSettings {
   telegram_bot_token?: string | null;
   telegram_bot_chat_id?: string | null;
   telegram_bot_message_thread_id?: number | null;
+  keyword_monitor_enabled?: boolean;
+  keyword_monitor_account_name?: string | null;
+  keyword_monitor_chat_id?: string | null;
+  keyword_monitor_message_thread_id?: number | null;
+  keyword_monitor_keywords?: string[];
+  keyword_monitor_match_mode?: "contains" | "exact" | "regex";
+  keyword_monitor_ignore_case?: boolean;
+  keyword_monitor_push_channel?: "telegram" | "bark" | "custom";
+  keyword_monitor_bark_url?: string | null;
+  keyword_monitor_custom_url?: string | null;
 }
 
 export const getGlobalSettings = (token: string) =>

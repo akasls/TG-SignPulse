@@ -6,7 +6,7 @@ import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.core.auth import get_current_user
 from backend.models.user import User
@@ -357,6 +357,16 @@ class GlobalSettingsRequest(BaseModel):
     telegram_bot_token: Optional[str] = None
     telegram_bot_chat_id: Optional[str] = None
     telegram_bot_message_thread_id: Optional[int] = None
+    keyword_monitor_enabled: bool = False
+    keyword_monitor_account_name: Optional[str] = None
+    keyword_monitor_chat_id: Optional[str] = None
+    keyword_monitor_message_thread_id: Optional[int] = None
+    keyword_monitor_keywords: list[str] = Field(default_factory=list)
+    keyword_monitor_match_mode: str = "contains"
+    keyword_monitor_ignore_case: bool = True
+    keyword_monitor_push_channel: str = "telegram"
+    keyword_monitor_bark_url: Optional[str] = None
+    keyword_monitor_custom_url: Optional[str] = None
 
 
 class GlobalSettingsResponse(BaseModel):
@@ -368,6 +378,16 @@ class GlobalSettingsResponse(BaseModel):
     telegram_bot_token: Optional[str] = None
     telegram_bot_chat_id: Optional[str] = None
     telegram_bot_message_thread_id: Optional[int] = None
+    keyword_monitor_enabled: bool = False
+    keyword_monitor_account_name: Optional[str] = None
+    keyword_monitor_chat_id: Optional[str] = None
+    keyword_monitor_message_thread_id: Optional[int] = None
+    keyword_monitor_keywords: list[str] = Field(default_factory=list)
+    keyword_monitor_match_mode: str = "contains"
+    keyword_monitor_ignore_case: bool = True
+    keyword_monitor_push_channel: str = "telegram"
+    keyword_monitor_bark_url: Optional[str] = None
+    keyword_monitor_custom_url: Optional[str] = None
 
 
 @router.get("/settings", response_model=GlobalSettingsResponse)
@@ -383,7 +403,7 @@ def get_global_settings(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/settings", response_model=AIConfigSaveResponse)
-def save_global_settings(
+async def save_global_settings(
     request: GlobalSettingsRequest, current_user: User = Depends(get_current_user)
 ):
     try:
@@ -395,12 +415,28 @@ def save_global_settings(
             "telegram_bot_token": request.telegram_bot_token,
             "telegram_bot_chat_id": request.telegram_bot_chat_id,
             "telegram_bot_message_thread_id": request.telegram_bot_message_thread_id,
+            "keyword_monitor_enabled": request.keyword_monitor_enabled,
+            "keyword_monitor_account_name": request.keyword_monitor_account_name,
+            "keyword_monitor_chat_id": request.keyword_monitor_chat_id,
+            "keyword_monitor_message_thread_id": request.keyword_monitor_message_thread_id,
+            "keyword_monitor_keywords": request.keyword_monitor_keywords,
+            "keyword_monitor_match_mode": request.keyword_monitor_match_mode,
+            "keyword_monitor_ignore_case": request.keyword_monitor_ignore_case,
+            "keyword_monitor_push_channel": request.keyword_monitor_push_channel,
+            "keyword_monitor_bark_url": request.keyword_monitor_bark_url,
+            "keyword_monitor_custom_url": request.keyword_monitor_custom_url,
         }
         fields_set = getattr(request, "model_fields_set", getattr(request, "__fields_set__", set()))
         if "data_dir" in fields_set:
             settings["data_dir"] = request.data_dir
 
         get_config_service().save_global_settings(settings)
+        try:
+            from backend.services.keyword_monitor import get_keyword_monitor_service
+
+            await get_keyword_monitor_service().restart_from_settings()
+        except Exception:
+            pass
         return AIConfigSaveResponse(success=True, message="Global settings saved")
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

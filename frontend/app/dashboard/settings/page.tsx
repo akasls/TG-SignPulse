@@ -26,6 +26,8 @@ import {
     saveTelegramConfig,
     resetTelegramConfig,
     TelegramConfig,
+    listAccounts,
+    AccountInfo,
 } from "../../../lib/api";
 import {
     CaretLeft,
@@ -59,6 +61,7 @@ export default function SettingsPage() {
     const [totpLoading, setTotpLoading] = useState(false);
     const [configLoading, setConfigLoading] = useState(false);
     const [telegramLoading, setTelegramLoading] = useState(false);
+    const [accounts, setAccounts] = useState<AccountInfo[]>([]);
 
     // 用户名修改
     const [usernameForm, setUsernameForm] = useState({
@@ -104,6 +107,16 @@ export default function SettingsPage() {
         telegram_bot_token: null,
         telegram_bot_chat_id: null,
         telegram_bot_message_thread_id: null,
+        keyword_monitor_enabled: false,
+        keyword_monitor_account_name: null,
+        keyword_monitor_chat_id: null,
+        keyword_monitor_message_thread_id: null,
+        keyword_monitor_keywords: [],
+        keyword_monitor_match_mode: "contains",
+        keyword_monitor_ignore_case: true,
+        keyword_monitor_push_channel: "telegram",
+        keyword_monitor_bark_url: null,
+        keyword_monitor_custom_url: null,
     });
 
     // Telegram API 配置
@@ -133,6 +146,7 @@ export default function SettingsPage() {
         loadAIConfig(tokenStr);
         loadGlobalSettings(tokenStr);
         loadTelegramConfig(tokenStr);
+        loadAccounts(tokenStr);
     }, []);
 
     const loadTOTPStatus = async (tokenStr: string) => {
@@ -173,6 +187,13 @@ export default function SettingsPage() {
                     api_hash: config.api_hash || "",
                 });
             }
+        } catch (err) { }
+    };
+
+    const loadAccounts = async (tokenStr: string) => {
+        try {
+            const res = await listAccounts(tokenStr);
+            setAccounts(res.accounts || []);
         } catch (err) { }
     };
 
@@ -783,7 +804,7 @@ export default function SettingsPage() {
                                     <div>
                                         <label className="text-[11px] mb-1">{t("telegram_bot_thread_id")}</label>
                                         <input
-                                            type="number"
+                                            inputMode="numeric"
                                             className="!py-2 !px-4"
                                             value={globalSettings.telegram_bot_message_thread_id ?? ""}
                                             onChange={(e) => setGlobalSettings({
@@ -791,6 +812,122 @@ export default function SettingsPage() {
                                                 telegram_bot_message_thread_id: e.target.value ? parseInt(e.target.value) : null,
                                             })}
                                             placeholder={t("telegram_bot_thread_id_placeholder")}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="md:col-span-2 rounded-xl border border-white/5 bg-white/3 p-3 space-y-3">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                        <label className="text-[11px] mb-1">{t("keyword_monitor")}</label>
+                                        <p className="text-[9px] text-[#9496a1]">{t("keyword_monitor_desc")}</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className={`w-12 h-7 rounded-full relative transition-all shadow-sm border-2 ${globalSettings.keyword_monitor_enabled ? 'bg-[#8a3ffc] border-[#8a3ffc]' : 'bg-black/20 dark:bg-white/10 border-black/10 dark:border-white/30'}`}
+                                        onClick={() => setGlobalSettings({
+                                            ...globalSettings,
+                                            keyword_monitor_enabled: !globalSettings.keyword_monitor_enabled,
+                                        })}
+                                        aria-label={t("keyword_monitor")}
+                                    >
+                                        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all shadow-md ${globalSettings.keyword_monitor_enabled ? 'left-6' : 'left-0.5'}`}></span>
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <label className="text-[11px] mb-1">{t("monitor_account")}</label>
+                                        <select
+                                            className="!py-2 !px-4"
+                                            value={globalSettings.keyword_monitor_account_name || ""}
+                                            onChange={(e) => setGlobalSettings({ ...globalSettings, keyword_monitor_account_name: e.target.value || null })}
+                                        >
+                                            <option value="">{t("select_account")}</option>
+                                            {accounts.map((account) => (
+                                                <option key={account.name} value={account.name}>{account.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] mb-1">{t("monitor_chat_id")}</label>
+                                        <input
+                                            className="!py-2 !px-4"
+                                            value={globalSettings.keyword_monitor_chat_id || ""}
+                                            onChange={(e) => setGlobalSettings({ ...globalSettings, keyword_monitor_chat_id: e.target.value || null })}
+                                            placeholder={t("monitor_chat_id_placeholder")}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] mb-1">{t("telegram_bot_thread_id")}</label>
+                                        <input
+                                            inputMode="numeric"
+                                            className="!py-2 !px-4"
+                                            value={globalSettings.keyword_monitor_message_thread_id ?? ""}
+                                            onChange={(e) => setGlobalSettings({
+                                                ...globalSettings,
+                                                keyword_monitor_message_thread_id: e.target.value ? parseInt(e.target.value) : null,
+                                            })}
+                                            placeholder={t("telegram_bot_thread_id_placeholder")}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] mb-1">{t("match_mode")}</label>
+                                        <select
+                                            className="!py-2 !px-4"
+                                            value={globalSettings.keyword_monitor_match_mode || "contains"}
+                                            onChange={(e) => setGlobalSettings({ ...globalSettings, keyword_monitor_match_mode: e.target.value as any })}
+                                        >
+                                            <option value="contains">{t("match_contains")}</option>
+                                            <option value="exact">{t("match_exact")}</option>
+                                            <option value="regex">{t("match_regex")}</option>
+                                        </select>
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label className="text-[11px] mb-1">{t("monitor_keywords")}</label>
+                                        <textarea
+                                            className="w-full min-h-[76px] bg-white/2 rounded-xl p-3 text-[11px] text-main/70 border border-white/5 focus:border-[#8a3ffc]/30 outline-none transition-all placeholder:text-main/20 custom-scrollbar"
+                                            value={(globalSettings.keyword_monitor_keywords || []).join("\n")}
+                                            onChange={(e) => setGlobalSettings({
+                                                ...globalSettings,
+                                                keyword_monitor_keywords: e.target.value.split(/\n|,|，/).map((item) => item.trim()).filter(Boolean),
+                                            })}
+                                            placeholder={t("monitor_keywords_placeholder")}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] mb-1">{t("push_channel")}</label>
+                                        <select
+                                            className="!py-2 !px-4"
+                                            value={globalSettings.keyword_monitor_push_channel || "telegram"}
+                                            onChange={(e) => setGlobalSettings({ ...globalSettings, keyword_monitor_push_channel: e.target.value as any })}
+                                        >
+                                            <option value="telegram">{t("telegram_bot_notify")}</option>
+                                            <option value="bark">Bark</option>
+                                            <option value="custom">{t("custom_push_url")}</option>
+                                        </select>
+                                        <label className="mt-3 flex items-center gap-2 text-[11px] text-main/60 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={globalSettings.keyword_monitor_ignore_case ?? true}
+                                                onChange={(e) => setGlobalSettings({ ...globalSettings, keyword_monitor_ignore_case: e.target.checked })}
+                                            />
+                                            {t("ignore_case")}
+                                        </label>
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] mb-1">{globalSettings.keyword_monitor_push_channel === "bark" ? "Bark URL" : t("custom_push_url")}</label>
+                                        <input
+                                            className="!py-2 !px-4"
+                                            value={globalSettings.keyword_monitor_push_channel === "bark" ? (globalSettings.keyword_monitor_bark_url || "") : (globalSettings.keyword_monitor_custom_url || "")}
+                                            onChange={(e) => {
+                                                if (globalSettings.keyword_monitor_push_channel === "bark") {
+                                                    setGlobalSettings({ ...globalSettings, keyword_monitor_bark_url: e.target.value || null });
+                                                } else {
+                                                    setGlobalSettings({ ...globalSettings, keyword_monitor_custom_url: e.target.value || null });
+                                                }
+                                            }}
+                                            placeholder={globalSettings.keyword_monitor_push_channel === "telegram" ? t("use_telegram_bot_settings") : t("custom_push_url_placeholder")}
+                                            disabled={globalSettings.keyword_monitor_push_channel === "telegram"}
                                         />
                                     </div>
                                 </div>

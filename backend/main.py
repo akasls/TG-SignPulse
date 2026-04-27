@@ -146,6 +146,9 @@ async def on_startup() -> None:
     async def _post_startup() -> None:
         try:
             await sync_jobs()
+            from backend.services.keyword_monitor import get_keyword_monitor_service
+
+            await get_keyword_monitor_service().restart_from_settings()
         except Exception as exc:
             logging.getLogger("backend.startup").error(
                 f"Delayed scheduler sync failed: {exc}"
@@ -157,5 +160,11 @@ async def on_startup() -> None:
 
 
 @app.on_event("shutdown")
-def on_shutdown() -> None:
+async def on_shutdown() -> None:
     shutdown_scheduler()
+    try:
+        from backend.services.keyword_monitor import get_keyword_monitor_service
+
+        await get_keyword_monitor_service().stop()
+    except Exception:
+        pass
