@@ -38,8 +38,6 @@ import {
     ListDashes,
     X,
     DotsThreeVertical,
-    Robot,
-    MathOperations,
     Lightning,
     Copy,
     ClipboardText
@@ -341,10 +339,9 @@ export default function AccountTasksContent() {
     const keywordPlaceholder = isZh ? "\u6BCF\u884C\u4E00\u4E2A\u5173\u952E\u8BCD\uFF0C\u4E5F\u652F\u6301\u9017\u53F7\u5206\u9694" : "One keyword per line, comma-separated also works";
     const barkUrlLabel = isZh ? "Bark 推送" : "Bark Push";
     const forwardPushLabel = isZh ? "\u8F6C\u53D1" : "Forward";
-    const forwardThreadIdPlaceholder = isZh ? "\u7559\u7A7A\u5219\u4E0D\u6307\u5B9A\u8BDD\u9898" : "Leave empty for no topic";
+    const forwardThreadIdPlaceholder = isZh ? "\u53EF\u9009" : "Optional";
     const forwardChatIdLabel = isZh ? "\u8F6C\u53D1 Chat ID" : "Forward Chat ID";
     const forwardThreadIdLabel = isZh ? "\u8F6C\u53D1\u8BDD\u9898 ID" : "Forward Topic ID";
-    const forwardChatIdPlaceholder = isZh ? "\u7559\u7A7A\u5219\u4E0D\u8F6C\u53D1" : "Leave empty to skip forwarding";
     const sendTextPlaceholder = isZh ? "\u53D1\u9001\u7684\u6587\u672C\u5185\u5BB9" : "Text to send";
     const clickButtonPlaceholder = isZh ? "\u8F93\u5165\u6309\u94AE\u6587\u5B57\uFF0C\u4E0D\u8981\u8868\u60C5\uFF01" : "Button text to click, no emoji";
     const aiVisionSendModeLabel = isZh ? "\u8BC6\u56FE\u540E\u53D1\u6587\u672C" : "Vision -> Send Text";
@@ -1448,50 +1445,53 @@ export default function AccountTasksContent() {
                                                     </div>
                                                 )}
                                                 {(action.action === 4 || action.action === 6) && (
-                                                    <div className="flex items-center gap-2">
-                                                        <Robot weight="fill" size={16} className="text-main/40 shrink-0" />
-                                                        <select
-                                                            className="!mb-0 !h-10 !py-0 !text-xs !w-[220px] max-w-full"
-                                                            value={action.action === 4 ? "click" : "send"}
-                                                            onChange={(e) => {
-                                                                const nextActionId = e.target.value === "click" ? 4 : 6;
-                                                                updateCurrentDialogAction(index, (currentAction) => ({
-                                                                    ...currentAction,
-                                                                    action: nextActionId,
-                                                                }));
-                                                            }}
-                                                        >
-                                                            <option value="send">{aiVisionSendModeLabel}</option>
-                                                            <option value="click">{aiVisionClickModeLabel}</option>
-                                                        </select>
-                                                    </div>
+                                                    <select
+                                                        className="!mb-0 !h-10 !py-0 !text-xs !w-[220px] max-w-full"
+                                                        value={action.action === 4 ? "click" : "send"}
+                                                        onChange={(e) => {
+                                                            const nextActionId = e.target.value === "click" ? 4 : 6;
+                                                            updateCurrentDialogAction(index, (currentAction) => ({
+                                                                ...currentAction,
+                                                                action: nextActionId,
+                                                            }));
+                                                        }}
+                                                    >
+                                                        <option value="send">{aiVisionSendModeLabel}</option>
+                                                        <option value="click">{aiVisionClickModeLabel}</option>
+                                                    </select>
                                                 )}
                                                 {(action.action === 5 || action.action === 7) && (
-                                                    <div className="flex items-center gap-2">
-                                                        <MathOperations weight="fill" size={16} className="text-main/40 shrink-0" />
-                                                        <select
-                                                            className="!mb-0 !h-10 !py-0 !text-xs !w-[220px] max-w-full"
-                                                            value={action.action === 7 ? "click" : "send"}
-                                                            onChange={(e) => {
-                                                                const nextActionId = e.target.value === "click" ? 7 : 5;
-                                                                updateCurrentDialogAction(index, (currentAction) => ({
-                                                                    ...currentAction,
-                                                                    action: nextActionId,
-                                                                }));
-                                                            }}
-                                                        >
-                                                            <option value="send">{aiCalcSendModeLabel}</option>
-                                                            <option value="click">{aiCalcClickModeLabel}</option>
-                                                        </select>
-                                                    </div>
+                                                    <select
+                                                        className="!mb-0 !h-10 !py-0 !text-xs !w-[220px] max-w-full"
+                                                        value={action.action === 7 ? "click" : "send"}
+                                                        onChange={(e) => {
+                                                            const nextActionId = e.target.value === "click" ? 7 : 5;
+                                                            updateCurrentDialogAction(index, (currentAction) => ({
+                                                                ...currentAction,
+                                                                action: nextActionId,
+                                                            }));
+                                                        }}
+                                                    >
+                                                        <option value="send">{aiCalcSendModeLabel}</option>
+                                                        <option value="click">{aiCalcClickModeLabel}</option>
+                                                    </select>
                                                 )}
                                                 {action.action === 8 && (
-                                                    <div className="space-y-3">
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <div className="rounded-lg border border-white/10 bg-white/[0.035] p-3 space-y-3">
                                                         <div className="space-y-1.5">
-                                                            <label className="text-[10px] uppercase tracking-wider text-main/40">{t("monitor_keywords")}</label>
+                                                            <textarea
+                                                                className="w-full min-h-[86px] bg-white/2 rounded-xl p-3 text-[11px] text-main/70 border border-white/5 focus:border-[#8a3ffc]/30 outline-none transition-all placeholder:text-main/20 custom-scrollbar"
+                                                                value={(action.keywords || []).join("\n")}
+                                                                onChange={(e) => {
+                                                                    updateCurrentDialogAction(index, (currentAction) => ({
+                                                                        ...currentAction,
+                                                                        keywords: e.target.value.split(/\n|,/).map((item) => item.trim()).filter(Boolean),
+                                                                    }));
+                                                                }}
+                                                                placeholder={keywordPlaceholder}
+                                                            />
                                                         </div>
-                                                        <div className="space-y-1.5">
+                                                        <div className="grid grid-cols-1 md:grid-cols-[120px_minmax(0,1fr)] gap-2 md:gap-3 items-center">
                                                             <label className="text-[10px] uppercase tracking-wider text-main/40">{t("match_mode")}</label>
                                                             <select
                                                                 className="!mb-0 !h-10 !py-0 !text-xs"
@@ -1507,24 +1507,7 @@ export default function AccountTasksContent() {
                                                                 <option value="exact">{t("match_exact")}</option>
                                                                 <option value="regex">{t("match_regex")}</option>
                                                             </select>
-                                                        </div>
-                                                        <div className="space-y-1.5 md:col-span-2">
-                                                            <textarea
-                                                                className="w-full min-h-[86px] bg-white/2 rounded-xl p-3 text-[11px] text-main/70 border border-white/5 focus:border-[#8a3ffc]/30 outline-none transition-all placeholder:text-main/20 custom-scrollbar"
-                                                                value={(action.keywords || []).join("\n")}
-                                                                onChange={(e) => {
-                                                                    updateCurrentDialogAction(index, (currentAction) => ({
-                                                                        ...currentAction,
-                                                                        keywords: e.target.value.split(/\n|,/).map((item) => item.trim()).filter(Boolean),
-                                                                    }));
-                                                                }}
-                                                                placeholder={keywordPlaceholder}
-                                                            />
-                                                        </div>
-                                                        <div className="space-y-1.5">
                                                             <label className="text-[10px] uppercase tracking-wider text-main/40">{t("push_channel")}</label>
-                                                        </div>
-                                                        <div className="space-y-1.5">
                                                             <select
                                                                 className="!mb-0 !h-10 !py-0 !text-xs"
                                                                 value={action.push_channel || "telegram"}
@@ -1541,6 +1524,7 @@ export default function AccountTasksContent() {
                                                                 <option value="custom">{t("custom_push_url")}</option>
                                                             </select>
                                                         </div>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                         {(action.push_channel || "telegram") === "forward" && (
                                                             <>
                                                                 <div className="space-y-1.5">
@@ -1559,7 +1543,6 @@ export default function AccountTasksContent() {
                                                                                 forward_chat_id: e.target.value,
                                                                             }));
                                                                         }}
-                                                                        placeholder={forwardChatIdPlaceholder}
                                                                     />
                                                                 </div>
                                                                 <div className="space-y-1.5">
@@ -1604,8 +1587,8 @@ export default function AccountTasksContent() {
                                                                     <label className="text-[10px] uppercase tracking-wider text-main/40">{t("custom_push_url")}</label>
                                                                 </div>
                                                                 <div className="space-y-1.5 md:col-span-2">
-                                                                    <input
-                                                                        className="!mb-0 !h-10 !text-xs"
+                                                                    <textarea
+                                                                        className="!mb-0 min-h-[64px] w-full bg-white/2 rounded-xl p-3 !text-[10px] text-main/70 border border-white/5 focus:border-[#8a3ffc]/30 outline-none transition-all placeholder:text-main/20 custom-scrollbar"
                                                                         value={action.custom_url || ""}
                                                                         onChange={(e) => {
                                                                             updateCurrentDialogAction(index, (currentAction) => ({
