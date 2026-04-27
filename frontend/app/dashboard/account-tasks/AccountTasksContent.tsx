@@ -337,9 +337,12 @@ export default function AccountTasksContent() {
     const sendDiceLabel = isZh ? "\u53D1\u9001\u9AB0\u5B50" : "Send Dice";
     const aiVisionLabel = isZh ? "AI\u8BC6\u56FE" : "AI Vision";
     const aiCalcLabel = isZh ? "AI\u8BA1\u7B97" : "AI Calculate";
-    const keywordNotifyLabel = isZh ? "\u5173\u952E\u8BCD\u76D1\u542C\u901A\u77E5" : "Keyword Notify";
+    const keywordNotifyLabel = isZh ? "\u5173\u952E\u8BCD\u76D1\u542C" : "Keyword Monitor";
     const keywordPlaceholder = isZh ? "\u6BCF\u884C\u4E00\u4E2A\u5173\u952E\u8BCD\uFF0C\u4E5F\u652F\u6301\u9017\u53F7\u5206\u9694" : "One keyword per line, comma-separated also works";
     const pushUrlPlaceholder = isZh ? "Bark \u6216\u81EA\u5B9A\u4E49\u63A8\u9001 URL" : "Bark or custom push URL";
+    const forwardChatIdLabel = isZh ? "\u8F6C\u53D1 Chat ID" : "Forward Chat ID";
+    const forwardThreadIdLabel = isZh ? "\u8F6C\u53D1\u8BDD\u9898 ID" : "Forward Topic ID";
+    const forwardChatIdPlaceholder = isZh ? "\u7559\u7A7A\u5219\u4E0D\u8F6C\u53D1" : "Leave empty to skip forwarding";
     const sendTextPlaceholder = isZh ? "\u53D1\u9001\u7684\u6587\u672C\u5185\u5BB9" : "Text to send";
     const clickButtonPlaceholder = isZh ? "\u8F93\u5165\u6309\u94AE\u6587\u5B57\uFF0C\u4E0D\u8981\u8868\u60C5\uFF01" : "Button text to click, no emoji";
     const aiVisionSendModeLabel = isZh ? "\u8BC6\u56FE\u540E\u53D1\u6587\u672C" : "Vision -> Send Text";
@@ -1385,6 +1388,8 @@ export default function AccountTasksContent() {
                                                                 push_channel: currentAction?.push_channel || "telegram",
                                                                 bark_url: currentAction?.bark_url || "",
                                                                 custom_url: currentAction?.custom_url || "",
+                                                                forward_chat_id: currentAction?.forward_chat_id || "",
+                                                                forward_message_thread_id: currentAction?.forward_message_thread_id,
                                                             };
                                                         }
                                                         if (selectedType === "ai_vision") {
@@ -1476,71 +1481,120 @@ export default function AccountTasksContent() {
                                                     </div>
                                                 )}
                                                 {action.action === 8 && (
-                                                    <div className="space-y-2 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3">
-                                                        <textarea
-                                                            className="w-full min-h-[72px] bg-white/2 rounded-xl p-3 text-[11px] text-main/70 border border-white/5 focus:border-[#8a3ffc]/30 outline-none transition-all placeholder:text-main/20 custom-scrollbar"
-                                                            value={(action.keywords || []).join("\n")}
-                                                            onChange={(e) => {
-                                                                updateCurrentDialogAction(index, (currentAction) => ({
-                                                                    ...currentAction,
-                                                                    keywords: e.target.value.split(/\n|,/).map((item) => item.trim()).filter(Boolean),
-                                                                }));
-                                                            }}
-                                                            placeholder={keywordPlaceholder}
-                                                        />
-                                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                                                            <select
-                                                                className="!mb-0 !h-9 !py-0 !text-xs"
-                                                                value={action.match_mode || "contains"}
-                                                                onChange={(e) => {
-                                                                    updateCurrentDialogAction(index, (currentAction) => ({
-                                                                        ...currentAction,
-                                                                        match_mode: e.target.value,
-                                                                    }));
-                                                                }}
-                                                            >
-                                                                <option value="contains">{t("match_contains")}</option>
-                                                                <option value="exact">{t("match_exact")}</option>
-                                                                <option value="regex">{t("match_regex")}</option>
-                                                            </select>
-                                                            <select
-                                                                className="!mb-0 !h-9 !py-0 !text-xs"
-                                                                value={action.push_channel || "telegram"}
-                                                                onChange={(e) => {
-                                                                    updateCurrentDialogAction(index, (currentAction) => ({
-                                                                        ...currentAction,
-                                                                        push_channel: e.target.value,
-                                                                    }));
-                                                                }}
-                                                            >
-                                                                <option value="telegram">{t("telegram_bot_notify")}</option>
-                                                                <option value="bark">Bark</option>
-                                                                <option value="custom">{t("custom_push_url")}</option>
-                                                            </select>
-                                                            <label className="h-9 flex items-center gap-2 text-[11px] text-main/60">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={action.ignore_case ?? true}
+                                                    <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3 space-y-4">
+                                                        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)] gap-3">
+                                                            <div className="space-y-1.5">
+                                                                <label className="text-[10px] uppercase tracking-wider text-main/40">{t("monitor_keywords")}</label>
+                                                                <textarea
+                                                                    className="w-full min-h-[104px] bg-white/2 rounded-xl p-3 text-[11px] text-main/70 border border-white/5 focus:border-[#8a3ffc]/30 outline-none transition-all placeholder:text-main/20 custom-scrollbar"
+                                                                    value={(action.keywords || []).join("\n")}
                                                                     onChange={(e) => {
                                                                         updateCurrentDialogAction(index, (currentAction) => ({
                                                                             ...currentAction,
-                                                                            ignore_case: e.target.checked,
+                                                                            keywords: e.target.value.split(/\n|,/).map((item) => item.trim()).filter(Boolean),
                                                                         }));
                                                                     }}
+                                                                    placeholder={keywordPlaceholder}
                                                                 />
-                                                                {t("ignore_case")}
-                                                            </label>
-                                                            <input
-                                                                className="!mb-0 !h-9 !text-xs"
-                                                                value={action.push_channel === "bark" ? (action.bark_url || "") : (action.custom_url || "")}
-                                                                onChange={(e) => {
-                                                                    updateCurrentDialogAction(index, (currentAction) => action.push_channel === "bark"
-                                                                        ? { ...currentAction, bark_url: e.target.value }
-                                                                        : { ...currentAction, custom_url: e.target.value });
-                                                                }}
-                                                                placeholder={action.push_channel === "telegram" ? t("use_telegram_bot_settings") : pushUrlPlaceholder}
-                                                                disabled={(action.push_channel || "telegram") === "telegram"}
-                                                            />
+                                                            </div>
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2">
+                                                                <div className="space-y-1.5">
+                                                                    <label className="text-[10px] uppercase tracking-wider text-main/40">{t("match_mode")}</label>
+                                                                    <select
+                                                                        className="!mb-0 !h-10 !py-0 !text-xs"
+                                                                        value={action.match_mode || "contains"}
+                                                                        onChange={(e) => {
+                                                                            updateCurrentDialogAction(index, (currentAction) => ({
+                                                                                ...currentAction,
+                                                                                match_mode: e.target.value,
+                                                                            }));
+                                                                        }}
+                                                                    >
+                                                                        <option value="contains">{t("match_contains")}</option>
+                                                                        <option value="exact">{t("match_exact")}</option>
+                                                                        <option value="regex">{t("match_regex")}</option>
+                                                                    </select>
+                                                                </div>
+                                                                <label className="h-10 mt-auto flex items-center gap-2 text-[11px] text-main/60">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={action.ignore_case ?? true}
+                                                                        onChange={(e) => {
+                                                                            updateCurrentDialogAction(index, (currentAction) => ({
+                                                                                ...currentAction,
+                                                                                ignore_case: e.target.checked,
+                                                                            }));
+                                                                        }}
+                                                                    />
+                                                                    {t("ignore_case")}
+                                                                </label>
+                                                            </div>
+                                                        </div>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                            <div className="space-y-2 rounded-lg border border-white/5 bg-black/10 p-3">
+                                                                <div className="text-[10px] uppercase tracking-wider text-main/40 font-bold">{isZh ? "转发目标" : "Forward Target"}</div>
+                                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                                    <div className="space-y-1">
+                                                                        <label className="text-[10px] text-main/45">{forwardChatIdLabel}</label>
+                                                                        <input
+                                                                            className="!mb-0 !h-9 !text-xs"
+                                                                            value={action.forward_chat_id || ""}
+                                                                            onChange={(e) => {
+                                                                                updateCurrentDialogAction(index, (currentAction) => ({
+                                                                                    ...currentAction,
+                                                                                    forward_chat_id: e.target.value,
+                                                                                }));
+                                                                            }}
+                                                                            placeholder={forwardChatIdPlaceholder}
+                                                                        />
+                                                                    </div>
+                                                                    <div className="space-y-1">
+                                                                        <label className="text-[10px] text-main/45">{forwardThreadIdLabel}</label>
+                                                                        <input
+                                                                            inputMode="numeric"
+                                                                            className="!mb-0 !h-9 !text-xs"
+                                                                            value={action.forward_message_thread_id ?? ""}
+                                                                            onChange={(e) => {
+                                                                                updateCurrentDialogAction(index, (currentAction) => ({
+                                                                                    ...currentAction,
+                                                                                    forward_message_thread_id: e.target.value ? parseInt(e.target.value) : undefined,
+                                                                                }));
+                                                                            }}
+                                                                            placeholder={forwardThreadIdLabel}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="space-y-2 rounded-lg border border-white/5 bg-black/10 p-3">
+                                                                <div className="text-[10px] uppercase tracking-wider text-main/40 font-bold">{t("push_channel")}</div>
+                                                                <div className="grid grid-cols-1 sm:grid-cols-[140px_minmax(0,1fr)] gap-2">
+                                                                    <select
+                                                                        className="!mb-0 !h-9 !py-0 !text-xs"
+                                                                        value={action.push_channel || "telegram"}
+                                                                        onChange={(e) => {
+                                                                            updateCurrentDialogAction(index, (currentAction) => ({
+                                                                                ...currentAction,
+                                                                                push_channel: e.target.value,
+                                                                            }));
+                                                                        }}
+                                                                    >
+                                                                        <option value="telegram">{t("telegram_bot_notify")}</option>
+                                                                        <option value="bark">Bark</option>
+                                                                        <option value="custom">{t("custom_push_url")}</option>
+                                                                    </select>
+                                                                    <input
+                                                                        className="!mb-0 !h-9 !text-xs"
+                                                                        value={action.push_channel === "bark" ? (action.bark_url || "") : (action.custom_url || "")}
+                                                                        onChange={(e) => {
+                                                                            updateCurrentDialogAction(index, (currentAction) => action.push_channel === "bark"
+                                                                                ? { ...currentAction, bark_url: e.target.value }
+                                                                                : { ...currentAction, custom_url: e.target.value });
+                                                                        }}
+                                                                        placeholder={action.push_channel === "telegram" ? t("use_telegram_bot_settings") : pushUrlPlaceholder}
+                                                                        disabled={(action.push_channel || "telegram") === "telegram"}
+                                                                    />
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 )}

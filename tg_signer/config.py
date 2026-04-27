@@ -176,7 +176,7 @@ class SupportAction(int, Enum):
     REPLY_BY_CALCULATION_PROBLEM = 5  # 回复计算题
     REPLY_BY_IMAGE_RECOGNITION = 6  # AI image recognition then send text
     CLICK_BUTTON_BY_CALCULATION_PROBLEM = 7  # AI calculation then click button
-    KEYWORD_NOTIFY = 8  # Listen for keywords and push notification
+    KEYWORD_NOTIFY = 8  # Listen for keywords
 
     @property
     def desc(self):
@@ -188,7 +188,7 @@ class SupportAction(int, Enum):
             SupportAction.REPLY_BY_CALCULATION_PROBLEM: "回复计算题",
             SupportAction.REPLY_BY_IMAGE_RECOGNITION: "AI image recognition then send text",
             SupportAction.CLICK_BUTTON_BY_CALCULATION_PROBLEM: "AI calculation then click button",
-            SupportAction.KEYWORD_NOTIFY: "监听关键词并通知",
+            SupportAction.KEYWORD_NOTIFY: "关键词监听",
         }[self]
 
 
@@ -244,6 +244,8 @@ class KeywordNotifyAction(SignAction):
     push_channel: Literal["telegram", "bark", "custom"] = "telegram"
     bark_url: Optional[str] = None
     custom_url: Optional[str] = None
+    forward_chat_id: Optional[Union[int, str]] = None
+    forward_message_thread_id: Optional[int] = None
 
 
 ActionT: TypeAlias = Union[

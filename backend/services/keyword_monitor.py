@@ -5,7 +5,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pyrogram import filters
 from pyrogram.handlers import MessageHandler
@@ -72,6 +72,20 @@ def _as_int_or_none(value: Any) -> Optional[int]:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _parse_forward_chat_id(value: Any) -> Optional[Union[int, str]]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.startswith("@"):
+        return text
+    try:
+        return int(text)
+    except ValueError:
+        return text
 
 
 class KeywordMonitorService:
@@ -163,7 +177,7 @@ class KeywordMonitorService:
             or getattr(message, "reply_to_top_message_id", None)
         )
 
-    async def _on_message(self, account_name: str, message: Message) -> None:
+    async def _on_message(self, account_name: str, client: Any, message: Message) -> None:
         try:
             from backend.services.config import get_config_service
 
@@ -219,6 +233,33 @@ class KeywordMonitorService:
                     body_lines.append(f"Sender: {sender}")
                 body_lines.append("")
                 body_lines.append(text)
+                forward_text = "\n".join(body_lines)
+
+                forward_chat_id = _parse_forward_chat_id(
+                    rule.action.get("forward_chat_id")
+                )
+                if forward_chat_id is not None:
+                    try:
+                        forward_kwargs: dict[str, Any] = {}
+                        forward_thread_id = _as_int_or_none(
+                            rule.action.get("forward_message_thread_id")
+                        )
+                        if forward_thread_id is not None:
+                            forward_kwargs["message_thread_id"] = forward_thread_id
+                        forward_payload = forward_text
+                        if url:
+                            forward_payload += f"\n\nLink: {url}"
+                        await client.send_message(
+                            forward_chat_id,
+                            forward_payload[:3900],
+                            **forward_kwargs,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to forward keyword match to %r: %s",
+                            forward_chat_id,
+                            exc,
+                        )
 
                 push_settings = dict(global_settings)
                 push_settings["keyword_monitor_push_channel"] = rule.action.get(
@@ -232,7 +273,7 @@ class KeywordMonitorService:
                     push_settings,
                     {
                         "title": "TG-SignPulse keyword matched",
-                        "body": "\n".join(body_lines),
+                        "body": forward_text,
                         "text": text,
                         "keyword": matched,
                         "account_name": account_name,
@@ -307,8 +348,8 @@ class KeywordMonitorService:
                     api_hash=api_hash,
                 )
 
-                async def handler(_, message: Message, name: str = account_name) -> None:
-                    await self._on_message(name, message)
+                async def handler(client, message: Message, name: str = account_name) -> None:
+                    await self._on_message(name, client, message)
 
                 handler_ref = client.add_handler(
                     MessageHandler(
