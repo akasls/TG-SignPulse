@@ -21,9 +21,11 @@ from backend.utils.proxy import build_proxy_dict
 from backend.utils.tg_session import (
     get_account_proxy,
     get_account_session_string,
+    get_account_status,
     get_global_semaphore,
     get_session_mode,
     load_session_string_file,
+    set_account_status,
 )
 from tg_signer.core import UserSigner, get_client
 
@@ -173,6 +175,44 @@ class SignTaskService:
             return self.run_history_dir / f"{safe_account}__{safe_task}.json"
         return self.run_history_dir / f"{self._safe_history_key(task_name)}.json"
 
+    @staticmethod
+    def _repair_mojibake(text: str) -> str:
+        if not isinstance(text, str) or not text:
+            return "" if text is None else str(text)
+
+        suspicious_tokens = (
+            "绛",
+            "璐",
+            "浠",
+            "鐧",
+            "鏃",
+            "閰",
+            "杩",
+            "鍙",
+            "鍦",
+            "娑",
+            "妫",
+            "瀛",
+            "�",
+        )
+        suspicious_count = sum(text.count(token) for token in suspicious_tokens)
+        if suspicious_count < 2 and "�" not in text:
+            return text
+
+        try:
+            candidate = text.encode("gbk", errors="strict").decode(
+                "utf-8", errors="strict"
+            )
+        except Exception:
+            return text
+
+        candidate_suspicious = sum(
+            candidate.count(token) for token in suspicious_tokens
+        )
+        if candidate_suspicious < suspicious_count:
+            return candidate
+        return text
+
     def _normalize_flow_logs(
         self, flow_logs: Optional[List[str]]
     ) -> tuple[List[str], bool, int]:
@@ -182,7 +222,7 @@ class SignTaskService:
         total = len(flow_logs)
         trimmed: List[str] = []
         for line in flow_logs:
-            text = str(line).replace("\r", "").rstrip("\n")
+            text = self._repair_mojibake(str(line)).replace("\r", "").rstrip("\n")
             trimmed.append(text)
         return trimmed, False, total
 
@@ -245,8 +285,8 @@ class SignTaskService:
                 {
                     "time": item.get("time", ""),
                     "success": bool(item.get("success", False)),
-                    "message": item.get("message", "") or "",
-                    "flow_logs": [str(line) for line in flow_logs],
+                    "message": self._repair_mojibake(item.get("message", "") or ""),
+                    "flow_logs": [self._repair_mojibake(str(line)) for line in flow_logs],
                     "flow_truncated": bool(item.get("flow_truncated", False)),
                     "flow_line_count": int(item.get("flow_line_count", len(flow_logs))),
                 }
@@ -284,6 +324,15 @@ class SignTaskService:
                     for data in data_list:
                         if data.get("account_name") == account_name:
                             data["task_name"] = task_name
+                            data["message"] = self._repair_mojibake(
+                                data.get("message", "") or ""
+                            )
+                            flow_logs = data.get("flow_logs")
+                            if isinstance(flow_logs, list):
+                                data["flow_logs"] = [
+                                    self._repair_mojibake(str(line))
+                                    for line in flow_logs
+                                ]
                             all_history.append(data)
             except Exception:
                 continue
@@ -457,7 +506,7 @@ class SignTaskService:
         new_entry = {
             "time": datetime.now().isoformat(),
             "success": success,
-            "message": message,
+            "message": self._repair_mojibake(message),
             "account_name": account_name,
             "flow_logs": normalized_logs,
             "flow_truncated": flow_truncated,
@@ -592,6 +641,125 @@ class SignTaskService:
             logging.getLogger("backend.sign_tasks").warning(
                 "Failed to send Telegram failure notification: %s", e
             )
+
+    async def _send_account_invalid_notification(
+        self,
+        account_name: str,
+        task_name: str,
+        message: str,
+    ) -> None:
+        try:
+            from backend.services.config import get_config_service
+
+            cfg = get_config_service().get_global_settings()
+            if not cfg.get("telegram_bot_notify_enabled"):
+                return
+            bot_token = (cfg.get("telegram_bot_token") or "").strip()
+            chat_id = (cfg.get("telegram_bot_chat_id") or "").strip()
+            if not bot_token or not chat_id:
+                return
+            message_thread_id = cfg.get("telegram_bot_message_thread_id")
+            try:
+                message_thread_id = (
+                    int(message_thread_id)
+                    if message_thread_id is not None and str(message_thread_id).strip()
+                    else None
+                )
+            except (TypeError, ValueError):
+                message_thread_id = None
+
+            text = (
+                "TG-SignPulse 账号登录失效\n"
+                f"账号: {account_name}\n"
+                f"触发任务: {task_name}\n"
+                f"原因: {message or 'session 已失效，请重新登录'}\n\n"
+                "该账号下的任务已跳过。"
+            )
+            from backend.services.push_notifications import send_telegram_bot_message
+
+            await send_telegram_bot_message(
+                bot_token=bot_token,
+                chat_id=chat_id,
+                text=text,
+                message_thread_id=message_thread_id,
+            )
+        except Exception as e:
+            logging.getLogger("backend.sign_tasks").warning(
+                "Failed to send Telegram account invalid notification: %s", e
+            )
+
+    async def _mark_account_invalid(
+        self,
+        account_name: str,
+        task_name: str,
+        message: str,
+    ) -> bool:
+        current = get_account_status(account_name)
+        already_notified = bool(current.get("invalid_notified_at"))
+        notified_at = current.get("invalid_notified_at") or datetime.utcnow().isoformat()
+        set_account_status(
+            account_name,
+            status="invalid",
+            message=message,
+            code="ACCOUNT_SESSION_INVALID",
+            needs_relogin=True,
+            invalid_notified_at=notified_at,
+        )
+        if not already_notified:
+            await self._send_account_invalid_notification(
+                account_name=account_name,
+                task_name=task_name,
+                message=message,
+            )
+        return not already_notified
+
+    async def _check_account_before_task(
+        self,
+        account_name: str,
+        task_name: str,
+    ) -> Optional[str]:
+        stored_status = get_account_status(account_name)
+        if (
+            stored_status.get("status") == "invalid"
+            and stored_status.get("needs_relogin")
+        ):
+            message = (
+                str(stored_status.get("message") or "").strip()
+                or f"账号 {account_name} 登录已失效，请重新登录"
+            )
+            await self._mark_account_invalid(account_name, task_name, message)
+            return message
+
+        try:
+            from backend.services.telegram import get_telegram_service
+
+            result = await get_telegram_service().check_account_status(
+                account_name, timeout_seconds=10.0
+            )
+        except Exception as e:
+            logging.getLogger("backend.sign_tasks").warning(
+                "Account status check failed before task %s/%s: %s",
+                account_name,
+                task_name,
+                e,
+            )
+            return None
+
+        if result.get("ok"):
+            return None
+
+        needs_relogin = bool(result.get("needs_relogin"))
+        status = str(result.get("status") or "")
+        code = str(result.get("code") or "")
+        if needs_relogin or status in {"invalid", "not_found"} or code == "ACCOUNT_SESSION_INVALID":
+            message = (
+                str(result.get("message") or "").strip()
+                or f"账号 {account_name} 登录已失效，请重新登录"
+            )
+            await self._mark_account_invalid(account_name, task_name, message)
+            return message
+
+        return None
 
     def list_tasks(
         self, account_name: Optional[str] = None, force_refresh: bool = False
@@ -1325,117 +1493,129 @@ class SignTaskService:
         success = False
         error_msg = ""
         output_str = ""
+        account_invalid_detected = False
 
         try:
-            async with account_lock:
-                last_end = self._account_last_run_end.get(account_name)
-                if last_end:
-                    gap = time.time() - last_end
-                    wait_seconds = self._account_cooldown_seconds - gap
-                    if wait_seconds > 0:
-                        self._active_logs[task_key].append(
-                            f"等待账号冷却 {int(wait_seconds)} 秒"
-                        )
-                        await asyncio.sleep(wait_seconds)
+            invalid_reason = await self._check_account_before_task(account_name, task_name)
+            if invalid_reason:
+                account_invalid_detected = True
+                error_msg = f"账号 {account_name} 登录已失效，请重新登录: {invalid_reason}"
+                self._active_logs[task_key].append(error_msg)
+            else:
+                async with account_lock:
+                    last_end = self._account_last_run_end.get(account_name)
+                    if last_end:
+                        gap = time.time() - last_end
+                        wait_seconds = self._account_cooldown_seconds - gap
+                        if wait_seconds > 0:
+                            self._active_logs[task_key].append(
+                                f"等待账号冷却 {int(wait_seconds)} 秒"
+                            )
+                            await asyncio.sleep(wait_seconds)
 
-                print(f"DEBUG: 已获取账号锁 {account_name}，开始执行任务 {task_name}")
-                self._active_logs[task_key].append(
-                    f"开始执行任务: {task_name} (账号: {account_name})"
-                )
-
-                # 配置 API 凭据
-                from backend.services.config import get_config_service
-
-                config_service = get_config_service()
-                tg_config = config_service.get_telegram_config()
-                api_id = os.getenv("TG_API_ID") or tg_config.get("api_id")
-                api_hash = os.getenv("TG_API_HASH") or tg_config.get("api_hash")
-
-                try:
-                    api_id = int(api_id) if api_id is not None else None
-                except (TypeError, ValueError):
-                    api_id = None
-
-                if isinstance(api_hash, str):
-                    api_hash = api_hash.strip()
-
-                if not api_id or not api_hash:
-                    raise ValueError("未配置 Telegram API ID 或 API Hash")
-
-                session_dir = settings.resolve_session_dir()
-                session_mode = get_session_mode()
-                session_string = None
-                use_in_memory = False
-                proxy_dict = None
-                proxy_value = self._get_effective_proxy(account_name)
-                if proxy_value:
-                    proxy_dict = build_proxy_dict(proxy_value)
-
-                if session_mode == "string":
-                    session_string = (
-                        get_account_session_string(account_name)
-                        or load_session_string_file(session_dir, account_name)
+                    print(f"DEBUG: 已获取账号锁 {account_name}，开始执行任务 {task_name}")
+                    self._active_logs[task_key].append(
+                        f"开始执行任务: {task_name} (账号: {account_name})"
                     )
-                    if not session_string:
-                        raise ValueError(f"账号 {account_name} 的 session_string 不存在")
-                    use_in_memory = True
-                else:
+
+                    # 配置 API 凭据
+                    from backend.services.config import get_config_service
+
+                    config_service = get_config_service()
+                    tg_config = config_service.get_telegram_config()
+                    api_id = os.getenv("TG_API_ID") or tg_config.get("api_id")
+                    api_hash = os.getenv("TG_API_HASH") or tg_config.get("api_hash")
+
+                    try:
+                        api_id = int(api_id) if api_id is not None else None
+                    except (TypeError, ValueError):
+                        api_id = None
+
+                    if isinstance(api_hash, str):
+                        api_hash = api_hash.strip()
+
+                    if not api_id or not api_hash:
+                        raise ValueError("未配置 Telegram API ID 或 API Hash")
+
+                    session_dir = settings.resolve_session_dir()
+                    session_mode = get_session_mode()
                     session_string = None
                     use_in_memory = False
+                    proxy_dict = None
+                    proxy_value = self._get_effective_proxy(account_name)
+                    if proxy_value:
+                        proxy_dict = build_proxy_dict(proxy_value)
 
-                    if os.getenv("SIGN_TASK_FORCE_IN_MEMORY") == "1":
-                        session_string = load_session_string_file(
-                            session_dir, account_name
+                    if session_mode == "string":
+                        session_string = (
+                            get_account_session_string(account_name)
+                            or load_session_string_file(session_dir, account_name)
                         )
-                        use_in_memory = bool(session_string)
+                        if not session_string:
+                            account_invalid_detected = True
+                            raise ValueError(f"账号 {account_name} 的 session_string 不存在")
+                        use_in_memory = True
+                    else:
+                        session_string = None
+                        use_in_memory = False
 
-                task_cfg = self.get_task(task_name, account_name=account_name)
-                requires_updates = self._task_requires_updates(task_cfg)
-                signer_no_updates = not requires_updates
-                self._active_logs[task_key].append(
-                    f"消息更新监听: {'开启' if requires_updates else '关闭'}"
-                )
+                        if os.getenv("SIGN_TASK_FORCE_IN_MEMORY") == "1":
+                            session_string = load_session_string_file(
+                                session_dir, account_name
+                            )
+                            use_in_memory = bool(session_string)
 
-                # 实例化 UserSigner (使用 BackendUserSigner)
-                # 注意: UserSigner 内部会使用 get_client 复用 client
-                signer = BackendUserSigner(
-                    task_name=task_name,
-                    session_dir=str(session_dir),
-                    account=account_name,
-                    workdir=self.workdir,
-                    proxy=proxy_dict,
-                    session_string=session_string,
-                    in_memory=use_in_memory,
-                    api_id=api_id,
-                    api_hash=api_hash,
-                    no_updates=signer_no_updates,
-                )
+                    task_cfg = self.get_task(task_name, account_name=account_name)
+                    requires_updates = self._task_requires_updates(task_cfg)
+                    signer_no_updates = not requires_updates
+                    self._active_logs[task_key].append(
+                        f"消息更新监听: {'开启' if requires_updates else '关闭'}"
+                    )
 
-                # 执行任务（数据库锁冲突时重试）
-                async with get_global_semaphore():
-                    max_retries = 3
-                    for attempt in range(max_retries):
-                        try:
-                            await signer.run_once(num_of_dialogs=20)
-                            break
-                        except Exception as e:
-                            if "database is locked" in str(e).lower():
-                                if attempt < max_retries - 1:
-                                    delay = (attempt + 1) * 3
-                                    self._active_logs[task_key].append(
-                                        f"Session 被锁定，{delay} 秒后重试..."
-                                    )
-                                    await asyncio.sleep(delay)
-                                    continue
-                            raise
+                    # 实例化 UserSigner (使用 BackendUserSigner)
+                    # 注意: UserSigner 内部会使用 get_client 复用 client
+                    signer = BackendUserSigner(
+                        task_name=task_name,
+                        session_dir=str(session_dir),
+                        account=account_name,
+                        workdir=self.workdir,
+                        proxy=proxy_dict,
+                        session_string=session_string,
+                        in_memory=use_in_memory,
+                        api_id=api_id,
+                        api_hash=api_hash,
+                        no_updates=signer_no_updates,
+                    )
 
-                success = True
-                self._active_logs[task_key].append("任务执行完成")
+                    # 执行任务（数据库锁冲突时重试）
+                    async with get_global_semaphore():
+                        max_retries = 3
+                        for attempt in range(max_retries):
+                            try:
+                                await signer.run_once(num_of_dialogs=20)
+                                break
+                            except Exception as e:
+                                if "database is locked" in str(e).lower():
+                                    if attempt < max_retries - 1:
+                                        delay = (attempt + 1) * 3
+                                        self._active_logs[task_key].append(
+                                            f"Session 被锁定，{delay} 秒后重试..."
+                                        )
+                                        await asyncio.sleep(delay)
+                                        continue
+                                raise
 
-                # 增加缓冲时间，防止同账号连续执行任务时，Session文件锁尚未完全释放导致 "database is locked"
-                await asyncio.sleep(2)
+                    success = True
+                    self._active_logs[task_key].append("任务执行完成")
+
+                    # 增加缓冲时间，防止同账号连续执行任务时，Session文件锁尚未完全释放导致 "database is locked"
+                    await asyncio.sleep(2)
 
         except Exception as e:
+            if account_invalid_detected or self._is_invalid_session_error(e):
+                account_invalid_detected = True
+                invalid_message = str(e) or f"账号 {account_name} 登录已失效，请重新登录"
+                await self._mark_account_invalid(account_name, task_name, invalid_message)
             error_msg = f"任务执行出错: {str(e)}"
             self._active_logs[task_key].append(error_msg)
             # 打印堆栈以便调试
@@ -1508,7 +1688,7 @@ class SignTaskService:
                 flow_logs=final_logs,
             )
 
-            if not success:
+            if not success and not account_invalid_detected:
                 await self._send_failure_notification(
                     account_name,
                     task_name,

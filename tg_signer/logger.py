@@ -43,6 +43,12 @@ def configure_logger(
     logger.propagate = False
 
     console_handler = logging.StreamHandler()
+    stream = getattr(console_handler, "stream", None)
+    if hasattr(stream, "reconfigure"):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 

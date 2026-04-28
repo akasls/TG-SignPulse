@@ -301,6 +301,22 @@ export default function Dashboard() {
         listSignTasks(tokenStr),
       ]);
       setAccounts(accountsData.accounts);
+      setAccountStatusMap((prev) => {
+        const next = { ...prev };
+        for (const acc of accountsData.accounts) {
+          if (!acc.status && !acc.needs_relogin) continue;
+          next[acc.name] = {
+            account_name: acc.name,
+            ok: acc.status === "connected" || acc.status === "valid",
+            status: acc.status || "connected",
+            message: acc.status_message || "",
+            code: acc.status_code || undefined,
+            checked_at: acc.status_checked_at || undefined,
+            needs_relogin: Boolean(acc.needs_relogin),
+          };
+        }
+        return next;
+      });
       setTasks(tasksData);
     } catch (err: any) {
       addToastRef.current(formatErrorMessage("load_failed", err), "error");
@@ -335,14 +351,22 @@ export default function Dashboard() {
     }
   }, [accountStatusMap]);
 
+  useEffect(() => {
+    if (!token || !dataLoaded || statusCheckedRef.current || accounts.length === 0) return;
+    if (!shouldRunStatusCheck()) return;
+    statusCheckedRef.current = true;
+    checkAccountStatusOnce(token, accounts).finally(() => {
+      try {
+        sessionStorage.setItem(DASHBOARD_STATUS_CHECKED_KEY, "1");
+      } catch {
+        // ignore storage write errors
+      }
+    });
+  }, [accounts, checkAccountStatusOnce, dataLoaded, shouldRunStatusCheck, token]);
+
   const getAccountTaskCount = (accountName: string) => {
     return tasks.filter(task => task.account_name === accountName).length;
   };
-
-  const hasAllTasksFailed = useCallback((accountName: string) => {
-    const accountTasks = tasks.filter(task => task.account_name === accountName);
-    return accountTasks.length > 0 && accountTasks.every(task => task.last_run && !task.last_run.success);
-  }, [tasks]);
 
   const openAddDialog = () => {
     setReloginAccountName(null);
@@ -576,12 +600,14 @@ export default function Dashboard() {
 
   const handleAccountCardClick = useCallback((acc: AccountInfo) => {
     const statusInfo = accountStatusMap[acc.name];
-    if (statusInfo?.needs_relogin || hasAllTasksFailed(acc.name)) {
+    const needsRelogin = Boolean(statusInfo?.needs_relogin || acc.needs_relogin);
+    const status = statusInfo?.status || acc.status;
+    if (needsRelogin || status === "invalid") {
       openReloginDialog(acc);
       return;
     }
     router.push(`/dashboard/account-tasks?name=${acc.name}`);
-  }, [accountStatusMap, hasAllTasksFailed, openReloginDialog, router]);
+  }, [accountStatusMap, openReloginDialog, router]);
 
   const performQrLoginStart = useCallback(async (options?: { autoRefresh?: boolean; silent?: boolean; reason?: string }) => {
     if (!token) return null;
@@ -1007,14 +1033,13 @@ export default function Dashboard() {
             {accounts.map((acc) => {
               const initial = acc.name.charAt(0).toUpperCase();
               const statusInfo = accountStatusMap[acc.name];
-              const allTasksFailed = hasAllTasksFailed(acc.name);
-              const status = statusInfo?.status || "checking";
-              const isInvalid = allTasksFailed || status === "invalid" || Boolean(statusInfo?.needs_relogin);
-              const isCheckingLike = status === "checking" || (status === "error" && !statusInfo?.needs_relogin);
+              const status = statusInfo?.status || acc.status || "checking";
+              const needsRelogin = Boolean(statusInfo?.needs_relogin || acc.needs_relogin);
+              const isInvalid = status === "invalid" || needsRelogin;
               const statusKey = (() => {
-                if (allTasksFailed) return "account_status_invalid";
-                const currentStatus = statusInfo?.status || "connected"; // Default to "connected" if statusInfo is undefined
-                const isCheckingOrError = currentStatus === "checking" || (currentStatus === "error" && !statusInfo?.needs_relogin);
+                if (isInvalid) return "account_status_invalid";
+                const currentStatus = statusInfo?.status || acc.status || "connected"; // Default to "connected" if statusInfo is undefined
+                const isCheckingOrError = currentStatus === "checking" || (currentStatus === "error" && !needsRelogin);
                 return (currentStatus === "connected" || currentStatus === "valid")
                   ? "connected"
                   : isCheckingOrError
@@ -1022,9 +1047,9 @@ export default function Dashboard() {
                     : "account_status_invalid";
               })();
               const statusIconClass = (() => {
-                if (allTasksFailed) return "text-rose-400";
-                const currentStatus = statusInfo?.status || "connected"; // Default to "connected" if statusInfo is undefined
-                const isCheckingOrError = currentStatus === "checking" || (currentStatus === "error" && !statusInfo?.needs_relogin);
+                if (isInvalid) return "text-rose-400";
+                const currentStatus = statusInfo?.status || acc.status || "connected"; // Default to "connected" if statusInfo is undefined
+                const isCheckingOrError = currentStatus === "checking" || (currentStatus === "error" && !needsRelogin);
                 // Since proactive status testing was removed, default "checking" to valid UI unless error.
                 return isCheckingOrError || currentStatus === "connected" || currentStatus === "valid"
                   ? "text-emerald-400"
@@ -1056,8 +1081,8 @@ export default function Dashboard() {
                   <div className="flex-1"></div>
 
                   <div className="card-bottom !pt-3">
-                    <div className="create-time" title={statusInfo?.message || ""}>
-                      {statusKey === "account_status_checking" ? (
+                    <div className="create-time" title={statusInfo?.message || acc.status_message || ""}>
+                      {statusKey === "account_status_checking" && !isInvalid ? (
                         <Spinner className="animate-spin text-main/40" size={12} />
                       ) : (
                         <Clock weight="fill" className={statusIconClass} />

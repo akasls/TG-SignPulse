@@ -127,6 +127,12 @@ def get_account_profile(account_name: str) -> dict[str, Any]:
     return {
         "remark": entry.get("remark"),
         "proxy": entry.get("proxy"),
+        "status": entry.get("status"),
+        "status_message": entry.get("status_message"),
+        "status_code": entry.get("status_code"),
+        "status_checked_at": entry.get("status_checked_at"),
+        "needs_relogin": bool(entry.get("needs_relogin", False)),
+        "invalid_notified_at": entry.get("invalid_notified_at"),
     }
 
 
@@ -161,6 +167,50 @@ def set_account_profile(
         entry["remark"] = remark.strip() if isinstance(remark, str) else remark
     if proxy is not None:
         entry["proxy"] = proxy.strip() if isinstance(proxy, str) else proxy
+    entry["updated_at"] = datetime.utcnow().isoformat()
+    accounts[account_name] = entry
+    _save_account_store(data)
+
+
+def get_account_status(account_name: str) -> dict[str, Any]:
+    profile = get_account_profile(account_name)
+    status = profile.get("status")
+    return {
+        "status": status if isinstance(status, str) and status else "connected",
+        "message": profile.get("status_message") or "",
+        "code": profile.get("status_code"),
+        "checked_at": profile.get("status_checked_at"),
+        "needs_relogin": bool(profile.get("needs_relogin", False)),
+        "invalid_notified_at": profile.get("invalid_notified_at"),
+    }
+
+
+def set_account_status(
+    account_name: str,
+    *,
+    status: str,
+    message: str = "",
+    code: Optional[str] = None,
+    needs_relogin: bool = False,
+    invalid_notified_at: Optional[str] = None,
+) -> None:
+    data = _load_account_store()
+    accounts = data.get("accounts")
+    if not isinstance(accounts, dict):
+        accounts = {}
+        data["accounts"] = accounts
+    entry = accounts.get(account_name)
+    if not isinstance(entry, dict):
+        entry = {}
+    entry["status"] = status
+    entry["status_message"] = message or ""
+    entry["status_code"] = code
+    entry["status_checked_at"] = datetime.utcnow().isoformat()
+    entry["needs_relogin"] = bool(needs_relogin)
+    if invalid_notified_at is not None:
+        entry["invalid_notified_at"] = invalid_notified_at
+    if status != "invalid":
+        entry.pop("invalid_notified_at", None)
     entry["updated_at"] = datetime.utcnow().isoformat()
     accounts[account_name] = entry
     _save_account_store(data)

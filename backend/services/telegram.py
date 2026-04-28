@@ -22,6 +22,7 @@ from backend.utils.tg_session import (
     delete_session_string_file,
     get_account_profile,
     get_account_session_string,
+    get_account_status,
     get_global_semaphore,
     get_session_mode,
     is_string_session_mode,
@@ -29,6 +30,7 @@ from backend.utils.tg_session import (
     load_session_string_file,
     save_session_string_file,
     set_account_session_string,
+    set_account_status,
 )
 
 settings = get_settings()
@@ -47,6 +49,17 @@ class TelegramService:
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self._accounts_cache: Optional[List[Dict[str, Any]]] = None
 
+    @staticmethod
+    def _account_status_payload(account_name: str) -> Dict[str, Any]:
+        status = get_account_status(account_name)
+        return {
+            "status": status.get("status") or "connected",
+            "status_message": status.get("message") or "",
+            "status_code": status.get("code"),
+            "status_checked_at": status.get("checked_at"),
+            "needs_relogin": bool(status.get("needs_relogin", False)),
+        }
+
     def list_accounts(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """
         获取所有账号列表（基于 session 文件）
@@ -59,7 +72,10 @@ class TelegramService:
             - size: 文件大小（字节）
         """
         if self._accounts_cache is not None and not force_refresh:
-            return self._accounts_cache
+            return [
+                {**acc, **self._account_status_payload(acc.get("name", ""))}
+                for acc in self._accounts_cache
+            ]
 
         accounts = []
 
@@ -94,6 +110,7 @@ class TelegramService:
                             else 0,
                             "remark": profile.get("remark"),
                             "proxy": profile.get("proxy"),
+                            **self._account_status_payload(account_name),
                         }
                     )
 
@@ -114,6 +131,7 @@ class TelegramService:
                             else 0,
                             "remark": profile.get("remark"),
                             "proxy": profile.get("proxy"),
+                            **self._account_status_payload(account_name),
                         }
                     )
             else:
@@ -134,6 +152,7 @@ class TelegramService:
                             else 0,
                             "remark": profile.get("remark"),
                             "proxy": profile.get("proxy"),
+                            **self._account_status_payload(account_name),
                         }
                     )
 
@@ -232,6 +251,13 @@ class TelegramService:
                 account_name
             ) or load_session_string_file(self.session_dir, account_name)
             if not session_string:
+                set_account_status(
+                    account_name,
+                    status="invalid",
+                    message="session_string 不存在或已失效",
+                    code="ACCOUNT_SESSION_INVALID",
+                    needs_relogin=True,
+                )
                 return {
                     "account_name": account_name,
                     "ok": False,
@@ -271,6 +297,13 @@ class TelegramService:
                 if not getattr(client, "is_connected", False):
                     await client.connect()
                 me = await asyncio.wait_for(client.get_me(), timeout=timeout_seconds)
+            set_account_status(
+                account_name,
+                status="connected",
+                message="",
+                code="OK",
+                needs_relogin=False,
+            )
             return {
                 "account_name": account_name,
                 "ok": True,
@@ -320,6 +353,13 @@ class TelegramService:
                     "needs_relogin": False,
                 }
             if "SESSION" in err_upper and "INVALID" in err_upper:
+                set_account_status(
+                    account_name,
+                    status="invalid",
+                    message=err_text,
+                    code="ACCOUNT_SESSION_INVALID",
+                    needs_relogin=True,
+                )
                 return {
                     "account_name": account_name,
                     "ok": False,
@@ -330,6 +370,13 @@ class TelegramService:
                     "needs_relogin": True,
                 }
             if "UNAUTHORIZED" in err_upper or "AUTH_KEY_UNREGISTERED" in err_upper:
+                set_account_status(
+                    account_name,
+                    status="invalid",
+                    message=err_text,
+                    code="ACCOUNT_SESSION_INVALID",
+                    needs_relogin=True,
+                )
                 return {
                     "account_name": account_name,
                     "ok": False,
@@ -726,6 +773,13 @@ class TelegramService:
                 raise ValueError("导出 session_string 失败")
             set_account_session_string(account_name, session_string)
             save_session_string_file(self.session_dir, account_name, session_string)
+            set_account_status(
+                account_name,
+                status="connected",
+                message="",
+                code="OK",
+                needs_relogin=False,
+            )
             self._accounts_cache = None
 
         def _persist_proxy_setting() -> None:
@@ -760,6 +814,13 @@ class TelegramService:
                     me = await client.get_me()
                     await _persist_session_string()
                     _persist_proxy_setting()
+                    set_account_status(
+                        account_name,
+                        status="connected",
+                        message="",
+                        code="OK",
+                        needs_relogin=False,
+                    )
 
                     # 断开连接并清理
                     await client.disconnect()
@@ -785,6 +846,13 @@ class TelegramService:
                         me = await client.get_me()
                         await _persist_session_string()
                         _persist_proxy_setting()
+                        set_account_status(
+                            account_name,
+                            status="connected",
+                            message="",
+                            code="OK",
+                            needs_relogin=False,
+                        )
 
                         # 断开连接并清理
                         await client.disconnect()
@@ -858,6 +926,13 @@ class TelegramService:
                 raise ValueError("导出 session_string 失败")
             set_account_session_string(account_name, session_string)
             save_session_string_file(self.session_dir, account_name, session_string)
+            set_account_status(
+                account_name,
+                status="connected",
+                message="",
+                code="OK",
+                needs_relogin=False,
+            )
         else:
             # 即使在 file 模式，也尝试保存 session_string 作为降级方案
             try:
@@ -868,6 +943,13 @@ class TelegramService:
                 try:
                     set_account_session_string(account_name, session_string)
                     save_session_string_file(self.session_dir, account_name, session_string)
+                    set_account_status(
+                        account_name,
+                        status="connected",
+                        message="",
+                        code="OK",
+                        needs_relogin=False,
+                    )
                 except Exception:
                     pass
         if not proxy:
@@ -879,6 +961,13 @@ class TelegramService:
             from backend.utils.tg_session import set_account_profile
 
             set_account_profile(account_name, proxy=proxy)
+        set_account_status(
+            account_name,
+            status="connected",
+            message="",
+            code="OK",
+            needs_relogin=False,
+        )
         self._accounts_cache = None
 
     def _log_qr_state(

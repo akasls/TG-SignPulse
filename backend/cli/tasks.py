@@ -38,6 +38,8 @@ async def async_run_task_cli(
         str(num_of_dialogs),
     ]
     env = os.environ.copy()
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.setdefault("PYTHONUTF8", "1")
     if not env.get("TG_PROXY"):
         try:
             from backend.services.config import get_config_service

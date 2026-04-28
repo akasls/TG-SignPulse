@@ -178,6 +178,11 @@ export interface AccountInfo {
   size: number;
   remark?: string | null;
   proxy?: string | null;
+  status?: "connected" | "invalid" | "checking" | "error" | string;
+  status_message?: string | null;
+  status_code?: string | null;
+  status_checked_at?: string | null;
+  needs_relogin?: boolean;
 }
 
 export interface AccountStatusCheckRequest {

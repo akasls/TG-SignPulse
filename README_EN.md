@@ -24,7 +24,7 @@ TG-SignPulse is a Telegram automation panel. It helps you manage multiple accoun
 - Action sequences: `Send Text`, `Click Text Button`, `Send Dice`, `AI Vision`, `AI Calculate`, `Keyword Monitor`
 - Topic check-ins for specific Thread/Topic IDs in Telegram forum groups
 - Task migration via clipboard export/import with duplicate skipping
-- Telegram Bot notifications, keyword-match notifications, and dashboard invalid-session hints when all tasks under an account fail
+- Telegram Bot notifications, keyword-match notifications, and pre-task invalid-session detection
 - Visual logs with per-run flow details and latest bot replies
 - Stability improvements for timeout/429 scenarios and long-running memory behavior
 - Docker-first deployment (easy to start and migrate)
@@ -122,12 +122,18 @@ Notes:
 - Restart backend service after changing it
 - The path must be writable and mounted as persistent volume
 
+## Local Development
+
+- Python 3.12 is recommended; supported versions are Python `>=3.10,<3.14`
+- Python 3.14 or newer is not recommended because the Telegram/Pydantic runtime dependencies are not fully compatible yet
+- The frontend uses Node.js 20; run `npm ci` inside `frontend/`
+
 ## Common Panel Settings
 
 In `System Settings -> Global Sign-in Settings`, you can configure:
 
 - Global Proxy: used by login, chat refresh, and task execution when an account has no dedicated proxy
-- Telegram Bot Notifications: set Bot Token and target Chat ID to receive failed-task or keyword-match alerts
+- Telegram Bot Notifications: set Bot Token and target Chat ID to receive failed-task, invalid-account-session, or keyword-match alerts
 - Data Directory: stores sessions, logs, database, and task files
 
 On the account task page, you can:
@@ -152,6 +158,15 @@ frontend/     Next.js management panel
 ```
 
 ## Changelog
+
+### 2026-04-28
+
+- **Pre-task Account Status Check**: Sign tasks now verify the account session before execution. If the session is confirmed invalid, tasks for that account are skipped instead of being reported as successful.
+- **Invalid-session Notification and Persistent State**: Invalid accounts are persisted in account metadata and reported through the Telegram Bot notification settings. Repeated tasks under the same invalid state do not spam duplicate alerts.
+- **Dashboard Re-login Flow**: Account cards now show `Session Invalid` in the lower-left status area, and clicking an invalid account opens the re-login dialog directly instead of relying on the older "all tasks failed" heuristic.
+- **Task Log Encoding Fix**: Runtime logs, historical log reads, and account log exports now consistently use UTF-8 and repair common mojibake in older stored entries.
+- **Python Version Constraint**: Project metadata now requires Python `>=3.10,<3.14`, matching the Python 3.12 Docker image and preventing installs on incompatible interpreters.
+- **Project Health Check**: Verified with `compileall`, `pytest`, `ruff check .`, frontend `npm run lint`, and `npm run build`.
 
 ### 2026-04-27
 

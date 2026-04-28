@@ -87,6 +87,11 @@ class AccountInfo(BaseModel):
     size: int
     remark: Optional[str] = None
     proxy: Optional[str] = None
+    status: str = "connected"
+    status_message: Optional[str] = None
+    status_code: Optional[str] = None
+    status_checked_at: Optional[str] = None
+    needs_relogin: bool = False
 
 
 class QrLoginStatusResponse(BaseModel):
@@ -687,7 +692,7 @@ def export_account_logs(
 
     return Response(
         content=content,
-        media_type="text/plain",
+        media_type="text/plain; charset=utf-8",
         headers={
             "Content-Disposition": 'attachment; filename="account_logs.txt"'
         },
