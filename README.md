@@ -441,6 +441,12 @@ tg-signer monitor run my_monitor
 
 ### 版本变动日志
 
+#### 0.9.0b1
+- 监控配置支持 `send_text_template`，可将正则捕获结果或消息文本渲染到自动回复内容中
+- 修复图片消息中的计算题无法识别 `caption` 的问题
+- `回复计算题` 动作在存在 InlineKeyboard 选项时，会将按钮选项传给大模型并点击匹配按钮
+- `根据图片选择选项` 动作会将消息文本或 `caption` 作为图片识别问题，并校验大模型返回的选项序号
+
 #### 0.8.6
 - 支持 Telegram 论坛群组话题 `message_thread_id`
 - 登录时可发现群组话题，新增 `list-topics` 用于查询话题 ID

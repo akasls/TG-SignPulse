@@ -458,6 +458,12 @@ Continue configuring? (y/N): n
 
 ### Changelog
 
+#### 0.9.0b1
+- Add `send_text_template` support for monitor configs, allowing regex captures or message text to be rendered into automatic replies
+- Fix calculation questions in image messages not being detected from `caption`
+- When `ReplyByCalculationProblemAction` sees InlineKeyboard options, pass those options to the LLM and click the matching button
+- Pass message text or `caption` as the image-recognition question for `ChooseOptionByImageAction`, and validate the returned option index
+
 #### 0.8.6
 - Support Telegram forum group topics via `message_thread_id`
 - Discover group topics during login, and add `list-topics` for querying topic IDs
