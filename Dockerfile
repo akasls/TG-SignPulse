@@ -24,21 +24,23 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Install system runtime dependencies
+# Install system runtime & build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libffi-dev \
     ca-certificates \
     curl \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy python project definition and install dependencies
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir .
-
-# Copy application source code
+# Copy package metadata and source files required by setuptools
+COPY pyproject.toml README.md LICENSE ./
 COPY backend/ ./backend/
 COPY tg_signer/ ./tg_signer/
 COPY tools/ ./tools/
+
+# Install python dependencies and package
+RUN pip install --no-cache-dir .
 
 # Copy built frontend assets to /web
 COPY --from=frontend-builder /app/frontend/dist /web
