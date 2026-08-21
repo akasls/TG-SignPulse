@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
 from backend.core.auth import get_current_user
@@ -17,8 +17,20 @@ router = APIRouter()
 
 async def _logs_event_stream(
     current_user,
+    since_id: Optional[int] = None,
 ) -> AsyncGenerator[bytes, None]:
-    last_id = 0
+    if since_id is not None:
+        last_id = since_id
+    else:
+        # Start from the latest log by default to avoid flooding client with historical logs
+        session_local = get_session_local()
+        db = session_local()
+        try:
+            latest = db.query(TaskLog.id).order_by(TaskLog.id.desc()).first()
+            last_id = latest[0] if latest else 0
+        finally:
+            db.close()
+
     last_heartbeat = time.monotonic()
     try:
         while True:
@@ -58,10 +70,11 @@ async def _logs_event_stream(
 
 @router.get("/logs")
 async def logs_events(
+    since_id: Optional[int] = Query(None),
     current_user=Depends(get_current_user),
 ):
     async def event_generator():
-        async for chunk in _logs_event_stream(current_user):
+        async for chunk in _logs_event_stream(current_user, since_id=since_id):
             yield chunk
 
     return StreamingResponse(

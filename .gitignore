@@ -154,5 +154,5 @@ next-dev.*.log
 bandit_report*.json
 ruff_errors.txt
 git_show_head*.txt
-test_*.py
+/test_*.py
 

@@ -17,6 +17,7 @@ from backend.utils.storage import (
     load_data_dir_override,
     save_data_dir_override,
 )
+from tg_signer.utils import atomic_write_json
 
 settings = get_settings()
 
@@ -145,8 +146,7 @@ class ConfigService:
         config_file = task_dir / "config.json"
 
         try:
-            with open(config_file, "w", encoding="utf-8") as f:
-                json.dump(config, f, ensure_ascii=False, indent=2)
+            atomic_write_json(config_file, config, indent=2)
             return True
         except OSError:
             return False
@@ -400,8 +400,7 @@ class ConfigService:
 
                 task_dir.mkdir(parents=True, exist_ok=True)
                 try:
-                    with open(config_file, "w", encoding="utf-8") as f:
-                        json.dump(config, f, ensure_ascii=False, indent=2)
+                    atomic_write_json(config_file, config, indent=2)
                     result["monitors_imported"] += 1
                 except OSError:
                     result["errors"].append(
@@ -518,8 +517,7 @@ class ConfigService:
         config_file = self._get_ai_config_file()
 
         try:
-            with open(config_file, "w", encoding="utf-8") as f:
-                json.dump(config, f, ensure_ascii=False, indent=2)
+            atomic_write_json(config_file, config, indent=2)
             return True
         except OSError:
             return False
@@ -662,8 +660,7 @@ class ConfigService:
             merged["data_dir"] = None
 
         try:
-            with open(config_file, "w", encoding="utf-8") as f:
-                json.dump(merged, f, ensure_ascii=False, indent=2)
+            atomic_write_json(config_file, merged, indent=2)
         except OSError:
             return False
 
@@ -738,8 +735,7 @@ class ConfigService:
         config_file = self._get_telegram_config_file()
 
         try:
-            with open(config_file, "w", encoding="utf-8") as f:
-                json.dump(config, f, ensure_ascii=False, indent=2)
+            atomic_write_json(config_file, config, indent=2)
             return True
         except OSError:
             return False

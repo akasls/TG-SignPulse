@@ -1,6 +1,19 @@
 import re
+from typing import Optional
 
 from httpx import AsyncClient
+
+_sc_client: Optional[AsyncClient] = None
+
+
+def _get_sc_client() -> AsyncClient:
+    global _sc_client
+    if _sc_client is None or _sc_client.is_closed:
+        _sc_client = AsyncClient(
+            headers={"Content-Type": "application/json;charset=utf-8"},
+            timeout=10,
+        )
+    return _sc_client
 
 
 async def sc_send(sendkey, title, desp="", options=None):
@@ -17,8 +30,6 @@ async def sc_send(sendkey, title, desp="", options=None):
     else:
         url = f"https://sctapi.ftqq.com/{sendkey}.send"
     params = {"title": title, "desp": desp, **options}
-    headers = {"Content-Type": "application/json;charset=utf-8"}
-    async with AsyncClient(headers=headers) as client:
-        response = await client.post(url, json=params)
-        result = response.json()
-    return result
+    client = _get_sc_client()
+    response = await client.post(url, json=params)
+    return response.json()

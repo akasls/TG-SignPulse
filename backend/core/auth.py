@@ -51,9 +51,14 @@ def verify_totp(secret: str, code: str) -> bool:
         return False
 
 
+_DUMMY_BCRYPT_HASH = "$2b$12$e8uq5eGqK.G2qFjX7eA7.OF5c9G5g6s8D7.yZ9u7b.F9i.wK9.e2a"
+
+
 def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
     user = db.query(User).filter(User.username == username).first()
     if not user:
+        # Perform constant-time computation to prevent timing attacks on username enumeration
+        verify_password(password, _DUMMY_BCRYPT_HASH)
         return None
     if not verify_password(password, user.password_hash):
         return None

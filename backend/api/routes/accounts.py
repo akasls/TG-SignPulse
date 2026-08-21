@@ -16,6 +16,7 @@ from backend.core.auth import get_current_user
 from backend.core.rate_limit import compose_rate_limit_key, get_rate_limiter
 from backend.models.user import User
 from backend.services.telegram import get_telegram_service
+from backend.utils.names import validate_storage_name
 from backend.utils.task_logs import extract_last_target_message
 
 router = APIRouter()
@@ -572,6 +573,7 @@ async def delete_account(
     注意：删除后无法恢复，需要重新登录
     """
     try:
+        account_name = validate_storage_name(account_name, field_name="account_name")
         success = await get_telegram_service().delete_account(account_name)
 
         if success:
@@ -584,6 +586,8 @@ async def delete_account(
                 detail=f"账号 {account_name} 不存在",
             )
 
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -598,6 +602,10 @@ def check_account_exists(
     account_name: str, current_user: User = Depends(get_current_user)
 ):
     """检查账号是否存在"""
+    try:
+        account_name = validate_storage_name(account_name, field_name="account_name")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     exists = get_telegram_service().account_exists(account_name)
     return {"exists": exists, "account_name": account_name}
 
@@ -611,6 +619,11 @@ async def get_account_avatar(
 
     from fastapi.responses import FileResponse, Response
     from backend.core.config import get_settings
+
+    try:
+        account_name = validate_storage_name(account_name, field_name="account_name")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     settings = get_settings()
     avatar_cache_dir = settings.resolve_workdir() / "avatars"
@@ -658,6 +671,13 @@ async def update_account(
     """
     更新账号备注/代理（不影响登录状态）
     """
+    try:
+        account_name = validate_storage_name(account_name, field_name="account_name")
+        if request.new_account_name:
+            validate_storage_name(request.new_account_name, field_name="new_account_name")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
     service = get_telegram_service()
     accounts = service.list_accounts(force_refresh=True)
     current_account = next(
@@ -793,6 +813,11 @@ def get_account_logs(
     """获取账号的任务执行历史日志"""
     from backend.services.sign_tasks import get_sign_task_service
 
+    try:
+        account_name = validate_storage_name(account_name, field_name="account_name")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
     if limit < 1:
         limit = 1
     if limit > 200:
@@ -830,6 +855,11 @@ def clear_account_logs(
     account_name: str, current_user: User = Depends(get_current_user)
 ):
     """清理账号的历史日志"""
+    try:
+        account_name = validate_storage_name(account_name, field_name="account_name")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
     if not get_telegram_service().account_exists(account_name):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -857,9 +887,15 @@ def export_account_logs(
     account_name: str, current_user: User = Depends(get_current_user)
 ):
     """导出账号日志为 txt 文件"""
+    import re
     from fastapi.responses import Response
 
     from backend.services.sign_tasks import get_sign_task_service
+
+    try:
+        account_name = validate_storage_name(account_name, field_name="account_name")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     history = get_sign_task_service().get_account_history_logs(account_name)
 
@@ -874,10 +910,11 @@ def export_account_logs(
             content += f"Message: {item.get('message')}\n"
         content += "-" * 20 + "\n"
 
+    safe_name = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", account_name) or "account"
     return Response(
         content=content,
         media_type="text/plain; charset=utf-8",
         headers={
-            "Content-Disposition": 'attachment; filename="account_logs.txt"'
+            "Content-Disposition": f'attachment; filename="{safe_name}_logs.txt"'
         },
     )

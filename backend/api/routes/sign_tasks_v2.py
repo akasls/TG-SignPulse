@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 from backend.core.auth import get_current_user, verify_token
 from backend.core.database import get_db
 from backend.services.sign_tasks import get_sign_task_service
+from backend.utils.names import validate_storage_name
 
 router = APIRouter()
 
@@ -506,6 +507,7 @@ async def get_account_chats(
     current_user=Depends(get_current_user),
 ):
     try:
+        account_name = validate_storage_name(account_name, field_name="account_name")
         return await get_sign_task_service().get_account_chats(
             account_name,
             force_refresh=force_refresh,
@@ -521,7 +523,7 @@ async def get_account_chats(
                 status_code=status.HTTP_409_CONFLICT,
                 content={"detail": detail, "code": "ACCOUNT_SESSION_INVALID"},
             )
-        raise HTTPException(status_code=404, detail=detail)
+        raise HTTPException(status_code=400, detail=detail)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取对话列表失败: {str(e)}")
 
@@ -535,12 +537,15 @@ def search_account_chats(
     current_user=Depends(get_current_user),
 ):
     try:
+        account_name = validate_storage_name(account_name, field_name="account_name")
         return get_sign_task_service().search_account_chats(
             account_name,
             q,
             limit=limit,
             offset=offset,
         )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"搜索对话列表失败: {str(e)}")
 
@@ -564,6 +569,11 @@ async def get_chat_avatar(
     from fastapi.responses import FileResponse, Response
 
     from backend.core.config import get_settings
+
+    try:
+        account_name = validate_storage_name(account_name, field_name="account_name")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     settings = get_settings()
     avatar_cache_dir = settings.resolve_workdir() / "avatars" / "chats"

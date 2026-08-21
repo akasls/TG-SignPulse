@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import logging
@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Union
 from backend.core.config import get_settings
 from backend.services.push_notifications import send_keyword_push
 from backend.utils.account_locks import get_account_lock
+from backend.utils.memory import trim_memory
 from backend.utils.proxy import build_proxy_dict
 from backend.utils.tg_session import (
     get_account_proxy,
@@ -1804,6 +1805,7 @@ class KeywordMonitorService:
         self._handler_refs = []
         self._rules = []
         self._active_key = ""
+        trim_memory()
 
 
 _keyword_monitor_service: Optional[KeywordMonitorService] = None

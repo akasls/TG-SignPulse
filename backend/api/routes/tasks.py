@@ -15,6 +15,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from backend.core.auth import get_current_user, verify_token
+from backend.core.config import get_settings
 from backend.core.database import get_db
 from backend.models.account import Account
 from backend.models.task_log import TaskLog
@@ -200,11 +201,26 @@ def get_log_output(
     if not log:
         raise HTTPException(status_code=404, detail="Log not found")
 
-    if not log.log_path or not Path(log.log_path).exists():
+    if not log.log_path:
+        return {"output": log.output or "No detailed log file available."}
+
+    settings = get_settings()
+    logs_dir = settings.resolve_logs_dir().resolve()
+    target_path = Path(log.log_path).resolve()
+
+    try:
+        target_path.relative_to(logs_dir)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access to log file outside logs directory is forbidden",
+        )
+
+    if not target_path.exists() or not target_path.is_file():
         return {"output": log.output or "No detailed log file available."}
 
     try:
-        with open(log.log_path, "r", encoding="utf-8") as f:
+        with open(target_path, "r", encoding="utf-8") as f:
             content = f.read()
         return {"output": content}
     except Exception as e:

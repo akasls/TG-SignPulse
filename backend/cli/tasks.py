@@ -24,7 +24,7 @@ def _base_args(account_name: str) -> list[str]:
 async def async_run_task_cli(
     account_name: str,
     task_name: str,
-    num_of_dialogs: int = 50,
+    num_of_dialogs: int = 0,
     callback: Optional[Callable[[str], None]] = None,
 ) -> tuple[int, str, str]:
     """
@@ -58,17 +58,25 @@ async def async_run_task_cli(
     )
 
     full_output = []
-    while True:
-        line = await process.stdout.readline()
-        if not line:
-            break
-        decoded_line = line.decode("utf-8", errors="replace").rstrip()
-        if decoded_line:
-            full_output.append(decoded_line)
-            if callback:
-                callback(decoded_line)
+    try:
+        while True:
+            line = await process.stdout.readline()
+            if not line:
+                break
+            decoded_line = line.decode("utf-8", errors="replace").rstrip()
+            if decoded_line:
+                full_output.append(decoded_line)
+                if callback:
+                    callback(decoded_line)
 
-    await process.wait()
+        await process.wait()
+    except asyncio.CancelledError:
+        try:
+            process.kill()
+            await process.wait()
+        except Exception:
+            pass
+        raise
 
     return (
         process.returncode or 0,

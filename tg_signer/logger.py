@@ -38,7 +38,11 @@ def configure_logger(
     level = log_level.strip().upper()
     level_no: int = logging.getLevelName(level)
     logger = logging.getLogger(name)
-    logger.setLevel(level_no)
+    for h in list(logger.handlers):
+        try:
+            h.close()
+        except Exception:
+            pass
     logger.handlers.clear()
     logger.propagate = False
 

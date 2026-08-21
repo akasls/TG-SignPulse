@@ -1,0 +1,17 @@
+.git
+.github
+.gitignore
+.env
+.pytest_cache
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.session
+*.session_string
+data/
+logs/
+tests/
+frontend/node_modules/
+node_modules/

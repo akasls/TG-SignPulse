@@ -1,4 +1,4 @@
-﻿"""
+"""
 Telegram 服务层
 提供 Telegram 账号管理和操作的核心功能
 """
@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 
 from backend.core.config import get_settings
 from backend.utils.account_locks import get_account_lock
+from backend.utils.memory import trim_memory
 from backend.utils.names import validate_storage_name
 from backend.utils.proxy import build_proxy_dict
 from backend.utils.tg_session import (
@@ -320,6 +321,8 @@ class TelegramService:
         except Exception as e:
             logger.debug("Failed to download avatar for %s: %s", account_name, e)
             return None
+        finally:
+            trim_memory()
 
     async def download_chat_avatar(
         self, account_name: str, chat_id: int
@@ -397,6 +400,8 @@ class TelegramService:
                 e,
             )
             return None
+        finally:
+            trim_memory()
 
     async def check_account_status(
         self,
@@ -492,12 +497,11 @@ class TelegramService:
             }
 
         try:
-            # Reuse shared clients and avoid context-manager disconnect on each refresh.
+            # Reuse shared clients with proper ref-counting context manager.
             lock = get_account_lock(account_name)
             async with lock:
-                if not getattr(client, "is_connected", False):
-                    await client.connect()
-                me = await asyncio.wait_for(client.get_me(), timeout=timeout_seconds)
+                async with client:
+                    me = await asyncio.wait_for(client.get_me(), timeout=timeout_seconds)
             set_account_status(
                 account_name,
                 status="connected",
@@ -636,6 +640,8 @@ class TelegramService:
                 "checked_at": checked_at,
                 "needs_relogin": False,
             }
+        finally:
+            trim_memory()
 
     async def delete_account(self, account_name: str) -> bool:
         """
@@ -1355,6 +1361,7 @@ class TelegramService:
         lock = data.get("lock")
         if lock and lock.locked():
             lock.release()
+        trim_memory()
 
     def _extend_qr_expires(self, data: Dict[str, Any], min_seconds: int = 300) -> None:
         now = int(time.time())

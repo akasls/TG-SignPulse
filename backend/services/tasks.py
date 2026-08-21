@@ -38,23 +38,24 @@ def cleanup_old_logs(db: Session, days: int = 3) -> int:
     """清理超过指定天数的任务日志和文件"""
     cutoff = utc_now_naive() - timedelta(days=days)
 
-    # 获取旧日志
-    old_logs = db.query(TaskLog).filter(TaskLog.started_at < cutoff).all()
+    # 仅查询文件路径以删除磁盘文件，避免加载大对象到内存
+    old_log_paths = (
+        db.query(TaskLog.log_path)
+        .filter(TaskLog.started_at < cutoff, TaskLog.log_path.isnot(None))
+        .all()
+    )
 
-    count = 0
-    for log in old_logs:
-        # 删除文件
-        if log.log_path:
+    for (log_path,) in old_log_paths:
+        if log_path:
             try:
-                p = Path(log.log_path)
+                p = Path(log_path)
                 if p.exists():
                     p.unlink()
             except Exception:
                 pass
-        # 从数据库删除
-        db.delete(log)
-        count += 1
 
+    # 批量删除数据库记录
+    count = db.query(TaskLog).filter(TaskLog.started_at < cutoff).delete(synchronize_session=False)
     if count > 0:
         db.commit()
     return count

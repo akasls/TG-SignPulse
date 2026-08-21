@@ -285,3 +285,47 @@ def print_to_user(*args, sep=" ", end="\n", flush=False, **kwargs):
             stream.flush()
         except Exception:
             pass
+
+
+def atomic_write_json(file_path, data, **kwargs) -> None:
+    """Safely write JSON data using atomic replace to prevent corrupt 0-byte files."""
+    import contextlib
+    import json
+    import os
+    import time
+    from pathlib import Path
+
+    path = Path(file_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_file = path.with_suffix(f".tmp.{os.getpid()}.{time.time_ns()}")
+    try:
+        kwargs.setdefault("ensure_ascii", False)
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, **kwargs)
+        os.replace(temp_file, path)
+    except Exception:
+        if temp_file.exists():
+            with contextlib.suppress(Exception):
+                temp_file.unlink()
+        raise
+
+
+def atomic_write_text(file_path, text: str, encoding: str = "utf-8") -> None:
+    """Safely write text data using atomic replace to prevent corrupt files."""
+    import contextlib
+    import os
+    import time
+    from pathlib import Path
+
+    path = Path(file_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_file = path.with_suffix(f".tmp.{os.getpid()}.{time.time_ns()}")
+    try:
+        with open(temp_file, "w", encoding=encoding) as f:
+            f.write(text)
+        os.replace(temp_file, path)
+    except Exception:
+        if temp_file.exists():
+            with contextlib.suppress(Exception):
+                temp_file.unlink()
+        raise

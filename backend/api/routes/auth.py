@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import secrets
 from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
@@ -67,10 +69,11 @@ def _append_login_log(
 
 
 class ResetTOTPRequest(BaseModel):
-    """重置 TOTP 请求（通过密码验证）"""
+    """重置 TOTP 请求"""
 
     username: str
     password: str
+    emergency_key: Optional[str] = None
 
 
 class ResetTOTPResponse(BaseModel):
@@ -135,9 +138,10 @@ def login(
                 detail="TOTP_REQUIRED_OR_INVALID",
             )
     rate_limiter.reset("auth.login", login_key)
+    expires_hours = settings.access_token_expire_hours
     access_token = create_access_token(
         data={"sub": user.username},
-        expires_delta=timedelta(hours=12),
+        expires_delta=timedelta(hours=expires_hours) if expires_hours else None,
     )
     try:
         from backend.services.config import get_config_service
@@ -175,12 +179,10 @@ def reset_totp(
     db: Session = Depends(get_db),
 ):
     """
-    强制重置 TOTP（不需要 TOTP 验证码，只需要密码）
-
-    用于解决用户启用了 TOTP 但无法登录的问题。
-    需要提供正确的用户名和密码。
+    应急重置 TOTP 两步验证。
+    为了保障双因素认证安全，必须提供正确的密码以及服务端配置的应急密钥 APP_EMERGENCY_RESET_KEY。
+    若未配置应急密钥，请在服务器终端使用命令行工具重置：python -m backend.cli reset-totp <username>
     """
-    # 验证用户名和密码
     reset_key = compose_rate_limit_key(http_request, request.username)
     rate_limiter.hit(
         scope="auth.reset_totp",
@@ -190,6 +192,22 @@ def reset_totp(
         block_seconds=1800,
         detail=RESET_TOTP_RATE_LIMIT_DETAIL,
     )
+
+    configured_emergency_key = (os.getenv("APP_EMERGENCY_RESET_KEY") or "").strip()
+    if not configured_emergency_key:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="出于安全考虑，未配置 APP_EMERGENCY_RESET_KEY 时禁止通过 API 重置两步验证。请登录服务器终端执行 CLI 命令: python -m backend.cli reset-totp <username>",
+        )
+
+    provided_emergency_key = (request.emergency_key or "").strip()
+    if not provided_emergency_key or not secrets.compare_digest(
+        provided_emergency_key, configured_emergency_key
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="应急重置密钥无效",
+        )
 
     user = db.query(User).filter(User.username == request.username).first()
     if not user:
@@ -219,4 +237,4 @@ def reset_totp(
             message="该用户未启用两步验证，待确认设置已清理",
         )
 
-    return ResetTOTPResponse(success=True, message="两步验证已重置，现在可以正常登录")
+    return ResetTOTPResponse(success=True, message="两步验证已安全重置，现在可以正常登录")

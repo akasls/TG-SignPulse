@@ -35,7 +35,10 @@ _FALLBACK_PNG = (
     b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc`\x00\x01"
     b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
 )
+from threading import Lock
+
 _PENDING_TOTP_TTL_SECONDS = 10 * 60
+_pending_totp_lock = Lock()
 
 
 @dataclass
@@ -49,33 +52,37 @@ _pending_totp_secrets: dict[int, PendingTOTPSecret] = {}
 
 def _cleanup_expired_pending_totp_secrets(now: Optional[float] = None) -> None:
     current = time.monotonic() if now is None else now
-    expired_user_ids = [
-        user_id
-        for user_id, entry in _pending_totp_secrets.items()
-        if current - entry.created_at >= _PENDING_TOTP_TTL_SECONDS
-    ]
-    for user_id in expired_user_ids:
-        _pending_totp_secrets.pop(user_id, None)
+    with _pending_totp_lock:
+        expired_user_ids = [
+            user_id
+            for user_id, entry in _pending_totp_secrets.items()
+            if current - entry.created_at >= _PENDING_TOTP_TTL_SECONDS
+        ]
+        for user_id in expired_user_ids:
+            _pending_totp_secrets.pop(user_id, None)
 
 
 def _set_pending_totp_secret(user_id: int, secret: str) -> None:
     _cleanup_expired_pending_totp_secrets()
-    _pending_totp_secrets[user_id] = PendingTOTPSecret(
-        secret=secret,
-        created_at=time.monotonic(),
-    )
+    with _pending_totp_lock:
+        _pending_totp_secrets[user_id] = PendingTOTPSecret(
+            secret=secret,
+            created_at=time.monotonic(),
+        )
 
 
 def get_pending_totp_secret(user_id: int) -> Optional[str]:
     _cleanup_expired_pending_totp_secrets()
-    entry = _pending_totp_secrets.get(user_id)
-    if entry is None:
-        return None
-    return entry.secret
+    with _pending_totp_lock:
+        entry = _pending_totp_secrets.get(user_id)
+        if entry is None:
+            return None
+        return entry.secret
 
 
 def clear_pending_totp_secret(user_id: int) -> None:
-    _pending_totp_secrets.pop(user_id, None)
+    with _pending_totp_lock:
+        _pending_totp_secrets.pop(user_id, None)
 
 
 class ChangePasswordRequest(BaseModel):
@@ -310,14 +317,21 @@ def disable_totp(
     db.commit()
     clear_pending_totp_secret(current_user.id)
 
-    return DisableTOTPResponse(success=True, message="两步验证已禁用")
+class ResetUserTOTPRequest(BaseModel):
+    password: str
 
 
 @router.post("/totp/reset", response_model=DisableTOTPResponse)
 def reset_totp(
+    request: ResetUserTOTPRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if not verify_password(request.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="密码错误",
+        )
     current_user.totp_secret = None
     db.commit()
     clear_pending_totp_secret(current_user.id)

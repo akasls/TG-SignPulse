@@ -7,6 +7,7 @@ import click
 from click import Context, HelpFormatter
 
 from tg_signer.core import UserSigner, get_proxy
+from tg_signer.memory import trim_memory
 
 
 class AliasedGroup(click.Group):
@@ -216,10 +217,10 @@ def logout(obj):
 @click.option(
     "--num-of-dialogs",
     "-n",
-    default=50,
+    default=0,
     show_default=True,
     type=int,
-    help="获取最近N个对话, 请确保想要签到的对话在最近N个对话内",
+    help="获取最近N个对话（默认0表示不拉取）",
 )
 @click.pass_obj
 def run(obj, task_names, num_of_dialogs):
@@ -227,11 +228,14 @@ def run(obj, task_names, num_of_dialogs):
         raise click.UsageError("At least one task name is required")
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    coros = []
-    for task_name in task_names:
-        signer = get_signer(task_name, obj, loop=loop)
-        coros.append(signer.run(num_of_dialogs))
-    loop.run_until_complete(asyncio.gather(*coros))
+    try:
+        coros = []
+        for task_name in task_names:
+            signer = get_signer(task_name, obj, loop=loop)
+            coros.append(signer.run(num_of_dialogs))
+        loop.run_until_complete(asyncio.gather(*coros))
+    finally:
+        trim_memory()
 
 
 @tg_signer.command(help="运行一次签到任务，即使该签到任务今日已执行过")
@@ -240,15 +244,18 @@ def run(obj, task_names, num_of_dialogs):
     "--num-of-dialogs",
     "-n",
     "num_of_dialogs",
-    default=50,
+    default=0,
     show_default=True,
     type=int,
-    help="获取最近N个对话, 请确保想要签到的对话在最近N个对话内",
+    help="获取最近N个对话（默认0表示不拉取）",
 )
 @click.pass_obj
 def run_once(obj, task_name, num_of_dialogs):
     signer = get_signer(task_name, obj)
-    signer.app_run(signer.run_once(num_of_dialogs))
+    try:
+        signer.app_run(signer.run_once(num_of_dialogs))
+    finally:
+        trim_memory()
 
 
 @tg_signer.command(help='发送一次文本消息, 请确保当前会话已经"见过"该`chat_id`')

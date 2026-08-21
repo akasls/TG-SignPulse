@@ -1,4 +1,4 @@
-﻿"""
+"""
 签到任务服务层
 提供签到任务的 CRUD 操作和执行功能
 """
@@ -19,6 +19,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from backend.core.config import get_settings
 from backend.utils.account_locks import get_account_lock
+from backend.utils.memory import trim_memory
 from backend.utils.names import validate_storage_name
 from backend.utils.proxy import build_proxy_dict
 from backend.utils.task_logs import extract_last_target_message, normalize_log_line
@@ -35,6 +36,7 @@ from backend.utils.tg_session import (
 from backend.utils.time import utc_now_iso
 from tg_signer.async_utils import create_logged_task
 from tg_signer.core import UserSigner, get_client
+from tg_signer.utils import atomic_write_json
 
 settings = get_settings()
 
@@ -1334,7 +1336,7 @@ class SignTaskService:
         return {"removed_files": removed_files, "removed_entries": removed_entries}
 
     def clear_account_history_logs(self, account_name: str) -> Dict[str, int]:
-        """娓呯悊鏌愯处鍙风殑鍘嗗彶鏃ュ織锛屼笉褰卞搷鍏朵粬璐﹀彿"""
+        """清理某账号的历史日志，不影响其他账号"""
         account_name = validate_storage_name(account_name, field_name="account_name")
         removed_files = 0
         removed_entries = 0
@@ -1393,7 +1395,7 @@ class SignTaskService:
                     pass
                 continue
 
-            # legacy 鏂囦欢鍙兘娌℃湁 account_name 锛屾槸鏃х増鍗曡处鍙峰湺鏅?
+            # legacy 文件可能没有 account_name，是旧版单账号场景
             has_account_field = any(
                 isinstance(item, dict) and "account_name" in item for item in data_list
             )
@@ -2898,9 +2900,9 @@ class SignTaskService:
                             # 尝试获取用户信息，如果失败说明 session 无效
                             await active_client.get_me()
 
-                            # Try get_dialogs with async for
+                            # Try get_dialogs with async for with safety limit
                             try:
-                                async for dialog in active_client.get_dialogs():
+                                async for dialog in active_client.get_dialogs(limit=100):
                                     try:
                                         chat = getattr(dialog, "chat", None)
                                         if chat is None:
@@ -3003,16 +3005,14 @@ class SignTaskService:
             cache_file = account_dir / "chats_cache.json"
 
             try:
-                with open(cache_file, "w", encoding="utf-8") as f:
-                    json.dump(chats, f, ensure_ascii=False, indent=2)
+                atomic_write_json(cache_file, chats, indent=2)
             except Exception as e:
                 _service_logger.debug(f"保存 Chat 缓存失败: {e}")
 
             return chats
 
-        except Exception as e:
-            # client 上下文管理器会自动处理 disconnect/stop，这里只需要处理业务异常
-            raise e
+        finally:
+            trim_memory()
 
     async def run_task(self, account_name: str, task_name: str) -> Dict[str, Any]:
         """
@@ -3573,6 +3573,7 @@ class SignTaskService:
                         self._active_logs.pop(task_key, None)
                 finally:
                     self._cleanup_tasks.pop(task_key, None)
+                    trim_memory()
 
             self._cleanup_tasks[task_key] = create_logged_task(
                 cleanup(),
@@ -3582,6 +3583,7 @@ class SignTaskService:
 
         # Periodic pruning of stale entries to prevent memory growth
         self._prune_stale_entries()
+        trim_memory()
 
         return {
             "success": success,

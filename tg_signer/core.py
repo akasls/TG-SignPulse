@@ -54,8 +54,9 @@ from tg_signer.config import (
 
 from .ai_tools import AITools, OpenAIConfigManager
 from .async_utils import create_logged_task
+from .memory import trim_memory
 from .notification.server_chan import sc_send
-from .utils import UserInput, print_to_user
+from .utils import UserInput, atomic_write_json, atomic_write_text, print_to_user
 
 _PYDANTIC_V2 = hasattr(BaseModel, "model_validate")
 _PYROGRAM_IMPORT_ERROR: Exception | None = None
@@ -257,6 +258,15 @@ def _read_positive_int_env(name: str, default: int, minimum: int = 1) -> int:
 
 async def _patched_invoke(self, query, *args, **kwargs):
     if isinstance(query, (raw.functions.updates.GetChannelDifference, raw.functions.updates.GetDifference)):
+        # If client has updates disabled, drop immediately with empty response without network call
+        if getattr(self, "_tg_signpulse_no_updates", False):
+            if isinstance(query, raw.functions.updates.GetChannelDifference):
+                from pyrogram.raw.types.updates import ChannelDifferenceEmpty
+                return ChannelDifferenceEmpty(pts=query.pts, timeout=0, final=True)
+            elif isinstance(query, raw.functions.updates.GetDifference):
+                from pyrogram.raw.types.updates import DifferenceEmpty
+                return DifferenceEmpty(date=getattr(query, "date", 0), seq=getattr(query, "pts", 0))
+
         # Disable Pyrogram's internal sleep and retry mechanisms to prevent blocking the semaphore indefinitely
         kwargs.setdefault("sleep_threshold", 0)
         kwargs["retries"] = 0
@@ -441,6 +451,27 @@ class Client(BaseClient):
                         raise e
             return self
 
+    async def clear_client_cache(self):
+        """Clean up transient buffers, media sessions, and unneeded caches to keep memory minimal."""
+        try:
+            # Clean up media sessions (extra DC connections)
+            media_sessions = getattr(self, "media_sessions", None)
+            if isinstance(media_sessions, dict):
+                for dc_id, session in list(media_sessions.items()):
+                    try:
+                        if hasattr(session, "stop"):
+                            await session.stop()
+                    except Exception:
+                        pass
+                media_sessions.clear()
+
+            # Clean up channel difference tracker if not running keyword monitor
+            if getattr(self, "_tg_signpulse_no_updates", True):
+                if hasattr(self, "_channel_difference") and isinstance(self._channel_difference, dict):
+                    self._channel_difference.clear()
+        except Exception as exc:
+            logger.debug("clear_client_cache error: %s", exc)
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         lock = _CLIENT_ASYNC_LOCKS.get(self.key)
         if lock is None:
@@ -450,6 +481,10 @@ class Client(BaseClient):
             if _CLIENT_REFS[self.key] <= 0:
                 _CLIENT_REFS[self.key] = 0
                 try:
+                    await self.clear_client_cache()
+                except Exception:
+                    pass
+                try:
                     await self.stop()
                 except Exception:
                     pass
@@ -457,6 +492,7 @@ class Client(BaseClient):
                 _CLIENT_INSTANCES.pop(self.key, None)
                 _CLIENT_REFS.pop(self.key, None)
                 _CLIENT_ASYNC_LOCKS.pop(self.key, None)
+                trim_memory()
 
     @property
     def session_string_file(self):
@@ -571,45 +607,64 @@ async def close_client_by_name(name: str, workdir: Union[str, pathlib.Path] = ".
     """
     Forcefully close a client instance by its name and release resources.
     """
-    key = str(pathlib.Path(workdir).joinpath(name).resolve())
+    base_key = str(pathlib.Path(workdir).joinpath(name).resolve())
+    keys_to_clean = [base_key, f"{base_key}::memory"]
 
-    # Check if we have a lock for this client
-    lock = _CLIENT_ASYNC_LOCKS.get(key)
-    if lock:
-        # Acquire the lock to ensure we have exclusive access
-        # Note: This might block if a task is running.
-        # If we want to forceful kill, we might skip this, but that's dangerous.
-        # For deletion, waiting a moment is acceptable.
-        try:
-            # Try to acquire with timeout to avoid deadlocks if something is stuck
-            await asyncio.wait_for(lock.acquire(), timeout=5.0)
+    for key in keys_to_clean:
+        lock = _CLIENT_ASYNC_LOCKS.get(key)
+        if lock:
             try:
-                # Reset references to 0 to ensure proper cleanup
+                await asyncio.wait_for(lock.acquire(), timeout=5.0)
                 _CLIENT_REFS[key] = 0
-            finally:
-                # Even if we manipulated refs, release the lock we just acquired
                 lock.release()
-        except asyncio.TimeoutError:
-            logger.warning(
-                f"Timeout waiting for lock on client {name}, proceeding with forceful cleanup"
-            )
-            _CLIENT_REFS[key] = 0
+            except Exception:
+                _CLIENT_REFS[key] = 0
 
-    client = _CLIENT_INSTANCES.get(key)
-    if client:
-        try:
-            if client.is_connected:
-                await client.stop()
-        except Exception as e:
-            logger.warning(f"Error stopping client {name}: {e}")
-        finally:
-            _CLIENT_INSTANCES.pop(key, None)
+        client = _CLIENT_INSTANCES.get(key)
+        if client:
+            try:
+                await client.clear_client_cache()
+            except Exception:
+                pass
+            try:
+                if getattr(client, "is_connected", False):
+                    await client.stop()
+            except Exception as e:
+                logger.warning(f"Error stopping client {name}: {e}")
+            finally:
+                _CLIENT_INSTANCES.pop(key, None)
 
-    # Clean up locks
-    if key in _CLIENT_ASYNC_LOCKS:
-        _CLIENT_ASYNC_LOCKS.pop(key, None)
-    if key in _CLIENT_REFS:
-        _CLIENT_REFS.pop(key, None)
+        if key in _CLIENT_ASYNC_LOCKS:
+            _CLIENT_ASYNC_LOCKS.pop(key, None)
+        if key in _CLIENT_REFS:
+            _CLIENT_REFS.pop(key, None)
+
+    trim_memory()
+
+
+async def close_all_clients(workdir: Union[str, pathlib.Path] = None):
+    """
+    Forcefully close all cached clients and release resources.
+    """
+    keys = list(_CLIENT_INSTANCES.keys())
+    for key in keys:
+        client = _CLIENT_INSTANCES.get(key)
+        if client:
+            try:
+                await client.clear_client_cache()
+            except Exception:
+                pass
+            try:
+                if getattr(client, "is_connected", False):
+                    await client.stop()
+            except Exception as e:
+                logger.warning(f"Error stopping client {key}: {e}")
+            finally:
+                _CLIENT_INSTANCES.pop(key, None)
+
+    _CLIENT_ASYNC_LOCKS.clear()
+    _CLIENT_REFS.clear()
+    trim_memory()
 
 
 def get_now():
@@ -808,8 +863,7 @@ class BaseUserWorker(Generic[ConfigT]):
         raise NotImplementedError
 
     def write_config(self, config: BaseJSONConfig):
-        with open(self.config_file, "w", encoding="utf-8") as fp:
-            json.dump(config.to_jsonable(), fp, ensure_ascii=False)
+        atomic_write_json(self.config_file, config.to_jsonable())
 
     def reconfig(self):
         config = self.ask_for_config()
@@ -842,65 +896,76 @@ class BaseUserWorker(Generic[ConfigT]):
 
     def set_me(self, user: User):
         self.user = user
-        with open(
-            self.get_user_dir(user).joinpath("me.json"), "w", encoding="utf-8"
-        ) as fp:
-            fp.write(str(user))
+        try:
+            atomic_write_text(
+                self.get_user_dir(user).joinpath("me.json"), str(user)
+            )
+        except Exception:
+            pass
 
-    async def login(self, num_of_dialogs=20, print_chat=True):
+    async def ensure_user(self) -> User:
+        if self.user is not None:
+            return self.user
+        if getattr(self.app, "is_connected", False):
+            me = await self.app.get_me()
+        else:
+            async with self.app:
+                me = await self.app.get_me()
+        self.set_me(me)
+        return me
+
+    async def login(self, num_of_dialogs: int = 0, print_chat: bool = False):
         self.log("开始登录...")
         app = self.app
         async with app:
             me = await app.get_me()
             self.set_me(me)
             latest_chats = []
-            try:
-                async for dialog in app.get_dialogs(num_of_dialogs):
-                    try:
-                        chat = getattr(dialog, "chat", None)
-                        if chat is None:
-                            self.log("get_dialogs 返回空 chat，已跳过", level="WARNING")
+            if num_of_dialogs and num_of_dialogs > 0:
+                try:
+                    async for dialog in app.get_dialogs(num_of_dialogs):
+                        try:
+                            chat = getattr(dialog, "chat", None)
+                            if chat is None:
+                                self.log("get_dialogs 返回空 chat，已跳过", level="WARNING")
+                                continue
+                            chat_id = getattr(chat, "id", None)
+                            if chat_id is None:
+                                self.log("get_dialogs 返回 chat.id 为空，已跳过", level="WARNING")
+                                continue
+                            latest_chats.append(
+                                {
+                                    "id": chat_id,
+                                    "title": chat.title,
+                                    "type": chat.type,
+                                    "username": chat.username,
+                                    "first_name": chat.first_name,
+                                    "last_name": chat.last_name,
+                                }
+                            )
+                            if print_chat:
+                                print_to_user(readable_chat(chat))
+                        except Exception as e:
+                            self.log(
+                                f"处理 dialog 失败，已跳过: {type(e).__name__}: {e}",
+                                level="WARNING",
+                            )
                             continue
-                        chat_id = getattr(chat, "id", None)
-                        if chat_id is None:
-                            self.log("get_dialogs 返回 chat.id 为空，已跳过", level="WARNING")
-                            continue
-                        latest_chats.append(
-                            {
-                                "id": chat_id,
-                                "title": chat.title,
-                                "type": chat.type,
-                                "username": chat.username,
-                                "first_name": chat.first_name,
-                                "last_name": chat.last_name,
-                            }
-                        )
-                        if print_chat:
-                            print_to_user(readable_chat(chat))
-                    except Exception as e:
-                        self.log(
-                            f"处理 dialog 失败，已跳过: {type(e).__name__}: {e}",
-                            level="WARNING",
-                        )
-                        continue
-            except Exception as e:
-                self.log(
-                    f"get_dialogs 中断，返回已获取结果: {type(e).__name__}: {e}",
-                    level="WARNING",
-                )
+                except Exception as e:
+                    self.log(
+                        f"get_dialogs 中断，返回已获取结果: {type(e).__name__}: {e}",
+                        level="WARNING",
+                    )
 
-            with open(
-                self.get_user_dir(me).joinpath("latest_chats.json"),
-                "w",
-                encoding="utf-8",
-            ) as fp:
-                json.dump(
-                    latest_chats,
-                    fp,
-                    indent=4,
-                    default=Object.default,
-                    ensure_ascii=False,
-                )
+                try:
+                    atomic_write_json(
+                        self.get_user_dir(me).joinpath("latest_chats.json"),
+                        latest_chats,
+                        indent=4,
+                        default=Object.default,
+                    )
+                except Exception:
+                    pass
             await self.app.save_session_string()
 
     async def logout(self):
@@ -1556,7 +1621,7 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
         ) from last_error
 
     async def run(
-        self, num_of_dialogs=20, only_once: bool = False, force_rerun: bool = False
+        self, num_of_dialogs: int = 0, only_once: bool = False, force_rerun: bool = False
     ):
         if self.app.in_memory or self.app.session_string:
             return await self.in_memory_run(
@@ -1567,7 +1632,7 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
         )
 
     async def in_memory_run(
-        self, num_of_dialogs=20, only_once: bool = False, force_rerun: bool = False
+        self, num_of_dialogs: int = 0, only_once: bool = False, force_rerun: bool = False
     ):
         # Use the proper async context manager to integrate with ref counting
         # This avoids "Client is already terminated" when normal_run's internal
@@ -1578,10 +1643,10 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
             )
 
     async def normal_run(
-        self, num_of_dialogs=20, only_once: bool = False, force_rerun: bool = False
+        self, num_of_dialogs: int = 0, only_once: bool = False, force_rerun: bool = False
     ):
         if self.user is None:
-            await self.login(num_of_dialogs, print_chat=True)
+            await self.ensure_user()
 
         config = self.load_config(self.cfg_cls)
         if config.requires_ai:
@@ -1619,8 +1684,7 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                 raise RuntimeError("所有会话均执行失败（详细请看运行日志）")
 
             sign_record[str(now.date())] = now.isoformat()
-            with open(self.sign_record_file, "w", encoding="utf-8") as fp:
-                json.dump(sign_record, fp)
+            atomic_write_json(self.sign_record_file, sign_record)
 
         def need_sign(last_date_str):
             if force_rerun:
@@ -1697,15 +1761,19 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
             if hasattr(self, 'context') and self.context is not None:
                 self.context.chat_messages.clear()
                 self.context.sign_chats.clear()
+                self.context.waiting_message = None
+                if hasattr(self.context, 'logged_action_message_markers'):
+                    self.context.logged_action_message_markers.clear()
+            trim_memory()
 
-    async def run_once(self, num_of_dialogs):
+    async def run_once(self, num_of_dialogs: int = 0):
         return await self.run(num_of_dialogs, only_once=True, force_rerun=True)
 
     async def send_text(
         self, chat_id: int, text: str, delete_after: int = None, **kwargs
     ):
         if self.user is None:
-            await self.login(print_chat=False)
+            await self.ensure_user()
         async with self.app:
             await self.send_message(chat_id, text, delete_after, **kwargs)
 
@@ -1717,7 +1785,7 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
         **kwargs,
     ):
         if self.user is None:
-            await self.login(print_chat=False)
+            await self.ensure_user()
         async with self.app:
             await self.send_dice(chat_id, emoji, delete_after, **kwargs)
 
@@ -2520,14 +2588,22 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
         image_buffer: BinaryIO = await self.app.download_media(
             message.photo.file_id, in_memory=True
         )
-        image_buffer.seek(0)
-        image_bytes = image_buffer.read()
+        try:
+            image_buffer.seek(0)
+            image_bytes = image_buffer.read()
+        finally:
+            if hasattr(image_buffer, "close"):
+                image_buffer.close()
+            image_buffer = None
+            trim_memory()
+
         if (action.ai_prompt or "").strip():
             self.log("当前 AI 动作使用自定义提示词")
         text = await self.get_ai_tools().extract_text_by_image(
             image_bytes,
             system_prompt=action.ai_prompt,
         )
+        del image_bytes
         text = (text or "").strip()
         if not text:
             self.log("AI 未识别到可发送文本", level="WARNING")
@@ -2567,8 +2643,15 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
             image_buffer: BinaryIO = await self.app.download_media(
                 message.photo.file_id, in_memory=True
             )
-            image_buffer.seek(0)
-            image_bytes = image_buffer.read()
+            try:
+                image_buffer.seek(0)
+                image_bytes = image_buffer.read()
+            finally:
+                if hasattr(image_buffer, "close"):
+                    image_buffer.close()
+                image_buffer = None
+                trim_memory()
+
             options = [button_text for _, _, button_text in clickable_buttons]
             if not options:
                 self.log("未找到可供点击的按钮", level="WARNING")
@@ -2584,6 +2667,7 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
                 list(enumerate(options, start=1)),
                 system_prompt=action.ai_prompt,
             )
+            del image_bytes
             if not result_indexes:
                 self.log("AI 未返回可点击选项", level="WARNING")
                 return False
@@ -2963,7 +3047,7 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
         now = get_now()
         it = croniter(crontab, start_time=now)
         if self.user is None:
-            await self.login(print_chat=False)
+            await self.ensure_user()
         results = []
         async with self.app:
             for n in range(next_times):
@@ -2986,7 +3070,7 @@ class UserSigner(BaseUserWorker[SignConfigV3]):
 
     async def get_schedule_messages(self, chat_id):
         if self.user is None:
-            await self.login(print_chat=False)
+            await self.ensure_user()
         async with self.app:
             messages = await self.app.get_scheduled_messages(chat_id)
             for message in messages:
@@ -3245,9 +3329,9 @@ class UserMonitor(BaseUserWorker[MonitorConfig]):
             )
         return send_text
 
-    async def run(self, num_of_dialogs=20):
+    async def run(self, num_of_dialogs: int = 0):
         if self.user is None:
-            await self.login(num_of_dialogs, print_chat=True)
+            await self.ensure_user()
 
         cfg = self.load_config(self.cfg_cls)
         if cfg.requires_ai:
@@ -3256,9 +3340,12 @@ class UserMonitor(BaseUserWorker[MonitorConfig]):
         self.app.add_handler(
             MessageHandler(self.on_message, filters.text & filters.chat(cfg.chat_ids)),
         )
-        async with self.app:
-            self.log("开始监控...")
-            await idle()
+        try:
+            async with self.app:
+                self.log("开始监控...")
+                await idle()
+        finally:
+            trim_memory()
 
 
 class _UDPProtocol(asyncio.DatagramProtocol):

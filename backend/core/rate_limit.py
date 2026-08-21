@@ -16,6 +16,7 @@ class InMemoryRateLimiter:
         self._lock = Lock()
         self._attempts: Dict[BucketKey, Deque[float]] = {}
         self._blocked_until: Dict[BucketKey, float] = {}
+        self._last_prune = time.monotonic()
 
     def reset(self, scope: str, key: str) -> None:
         bucket = (scope, key)
@@ -27,6 +28,28 @@ class InMemoryRateLimiter:
         with self._lock:
             self._attempts.clear()
             self._blocked_until.clear()
+
+    def _prune_expired_locked(self, now: float) -> None:
+        if now - self._last_prune < 300 and len(self._attempts) < 500:
+            return
+        self._last_prune = now
+
+        # Prune attempts with no entries or older than 1 hour
+        stale_cutoff = now - 3600
+        expired_buckets = [
+            b for b, deq in self._attempts.items()
+            if not deq or deq[-1] < stale_cutoff
+        ]
+        for b in expired_buckets:
+            self._attempts.pop(b, None)
+
+        # Prune expired block entries
+        expired_blocks = [
+            b for b, blocked_time in self._blocked_until.items()
+            if blocked_time <= now
+        ]
+        for b in expired_blocks:
+            self._blocked_until.pop(b, None)
 
     def hit(
         self,
@@ -42,6 +65,8 @@ class InMemoryRateLimiter:
         now = time.monotonic()
 
         with self._lock:
+            self._prune_expired_locked(now)
+
             blocked_until = self._blocked_until.get(bucket, 0.0)
             if blocked_until > now:
                 retry_after = max(int(math.ceil(blocked_until - now)), 1)
@@ -70,18 +95,31 @@ class InMemoryRateLimiter:
             )
 
 
+import ipaddress
+
+
+def _is_valid_ip(val: str) -> bool:
+    if not val:
+        return False
+    try:
+        ipaddress.ip_address(val)
+        return True
+    except ValueError:
+        return False
+
+
 def get_client_identifier(request: Request) -> str:
     forwarded_for = request.headers.get("x-forwarded-for", "")
     if forwarded_for:
         first_hop = forwarded_for.split(",", 1)[0].strip()
-        if first_hop:
+        if _is_valid_ip(first_hop):
             return first_hop
 
     real_ip = request.headers.get("x-real-ip", "").strip()
-    if real_ip:
+    if _is_valid_ip(real_ip):
         return real_ip
 
-    if request.client and request.client.host:
+    if request.client and request.client.host and _is_valid_ip(request.client.host):
         return request.client.host
     return "unknown"
 

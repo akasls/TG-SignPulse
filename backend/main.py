@@ -101,8 +101,12 @@ def ready_check(response: Response) -> dict[str, str]:
 
 
 # 静态前端托管（Mode A: 单容器，FastAPI 提供静态文件）
-# 挂载 Next.js 静态资源
 web_dir = Path("/web")
+if not web_dir.exists():
+    local_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    if local_dist.exists():
+        web_dir = local_dist
+
 next_static_dir = web_dir / "_next"
 frontend_dev_url = os.getenv("FRONTEND_DEV_SERVER_URL", "http://127.0.0.1:3000")
 
@@ -121,22 +125,23 @@ async def serve_spa(full_path: str):
     SPA fallback: 对于所有非 API 路由，返回 index.html
     这样刷新页面时不会 404
     """
-    # 检查是否是静态文件请求
-    file_path = web_dir / full_path
+    # 检查是否是静态文件请求（严格防御路径穿越）
+    if web_dir.exists():
+        try:
+            resolved_web = web_dir.resolve()
+            file_path = (web_dir / full_path).resolve()
+            if str(file_path).startswith(str(resolved_web)) and file_path.is_file():
+                return FileResponse(file_path)
 
-    # 如果文件存在且不是目录，直接返回文件
-    if file_path.exists() and file_path.is_file():
-        return FileResponse(file_path)
+            html_path = (web_dir / f"{full_path}.html").resolve()
+            if str(html_path).startswith(str(resolved_web)) and html_path.is_file():
+                return FileResponse(html_path)
 
-    # 尝试添加 .html 后缀（Next.js 导出通常会生成 .html 文件）
-    html_path = web_dir / f"{full_path}.html"
-    if html_path.exists() and html_path.is_file():
-        return FileResponse(html_path)
-
-    # 否则返回 index.html（SPA 路由）
-    index_path = web_dir / "index.html"
-    if index_path.exists():
-        return FileResponse(index_path)
+            index_path = resolved_web / "index.html"
+            if index_path.exists() and index_path.is_file():
+                return FileResponse(index_path)
+        except Exception:
+            pass
 
     # 如果 index.html 也不存在，开发模式下重定向到前端开发服务器，生产环境返回 404
     if os.getenv("FRONTEND_DEV_SERVER_URL"):
@@ -243,3 +248,12 @@ async def on_shutdown() -> None:
         await get_keyword_monitor_service().stop()
     except Exception:
         pass
+    try:
+        from tg_signer.core import close_all_clients
+
+        await close_all_clients()
+    except Exception:
+        pass
+    from backend.utils.memory import trim_memory
+
+    trim_memory()

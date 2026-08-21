@@ -55,10 +55,10 @@ def list_(obj):
 @click.option(
     "--num-of-dialogs",
     "-n",
-    default=20,
+    default=0,
     show_default=True,
     type=int,
-    help="获取最近N个对话, 请确保想要监控的对话在最近N个对话内",
+    help="获取最近N个对话(0表示不获取), 请确保想要监控的对话在最近N个对话内",
 )
 @click.pass_obj
 def run(obj, task_name, num_of_dialogs):
