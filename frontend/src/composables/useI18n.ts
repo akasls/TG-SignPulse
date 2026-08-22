@@ -340,6 +340,12 @@ const messages: Record<string, Record<string, string>> = {
     'logs.detail.INVALID_USERNAME_OR_PASSWORD': '用户名或密码错误',
     'logs.detail.TOTP_REQUIRED_OR_INVALID': '两步验证码错误或缺失',
     'logs.detail.RATE_LIMITED': '请求过于频繁，已被限流',
+
+    // 404 Not Found
+    'notFound.title': '页面未找到',
+    'notFound.desc': '抱歉，您访问的页面不存在或已被移除。',
+    'notFound.backHome': '返回控制台',
+    'notFound.goToLogin': '前往登录',
   },
   en: {
     // Navigation
@@ -678,6 +684,12 @@ const messages: Record<string, Record<string, string>> = {
     'logs.detail.INVALID_USERNAME_OR_PASSWORD': 'Invalid username or password',
     'logs.detail.TOTP_REQUIRED_OR_INVALID': '2FA code invalid or missing',
     'logs.detail.RATE_LIMITED': 'Too many requests, rate limited',
+
+    // 404 Not Found
+    'notFound.title': 'Page Not Found',
+    'notFound.desc': 'Sorry, the page you are looking for does not exist or has been moved.',
+    'notFound.backHome': 'Back to Dashboard',
+    'notFound.goToLogin': 'Go to Login',
   }
 }
 

@@ -20,26 +20,44 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: () => import('../views/Login.vue')
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('../views/NotFound.vue')
     }
   ]
 })
 
 router.beforeEach((to) => {
   const token = localStorage.getItem('tg-signer-token')
-  if (to.name !== 'login' && !token) {
-    return { name: 'login' }
-  } else if (to.name === 'login' && token) {
-    // Basic JWT expiry check
+  let isValidToken = false
+  if (token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]))
-      if (payload.exp && payload.exp * 1000 < Date.now()) {
+      if (!payload.exp || payload.exp * 1000 >= Date.now()) {
+        isValidToken = true
+      } else {
         localStorage.removeItem('tg-signer-token')
-        return { name: 'login' }
       }
     } catch {
-      // If token is malformed, let the server reject it
+      localStorage.removeItem('tg-signer-token')
     }
-    return { name: 'dashboard' }
+  }
+
+  if (to.name === 'login') {
+    if (isValidToken) {
+      return { name: 'dashboard' }
+    }
+    return
+  }
+
+  if (to.name === 'not-found') {
+    return
+  }
+
+  if (!isValidToken) {
+    return { name: 'login' }
   }
 })
 
