@@ -20,7 +20,8 @@ FROM python:3.12-slim-bookworm
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     APP_DATA_DIR=/data \
-    TZ=Asia/Shanghai
+    TZ=Asia/Shanghai \
+    PORT=8080
 
 WORKDIR /app
 
@@ -48,8 +49,12 @@ COPY --from=frontend-builder /app/frontend/dist /web
 # Create persistent data directory
 RUN mkdir -p /data
 
+EXPOSE 8080
 EXPOSE 3000
 
 VOLUME ["/data"]
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "3000"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.getenv(\"PORT\", \"8080\")}/healthz').read()"
+
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
