@@ -145,3 +145,21 @@ def test_login_flow_with_and_without_2fa(client_with_user):
     res_ok_totp = client.post("/api/auth/login", json={"username": user.username, "password": "ValidPassword123!", "totp_code": valid_code})
     assert res_ok_totp.status_code == 200
     assert "access_token" in res_ok_totp.json()
+
+
+def test_fastapi_docs_endpoints_disabled(client_with_user):
+    from backend.main import app
+    client, headers, user, db = client_with_user
+
+    # In production/hardened mode, docs, redoc, openapi.json should be disabled
+    assert app.docs_url is None
+    assert app.redoc_url is None
+    assert app.openapi_url is None
+
+    # Requesting /openapi.json should not return OpenAPI schema JSON
+    res_openapi = client.get("/openapi.json")
+    if res_openapi.status_code == 200:
+        # If caught by SPA fallback, content-type is text/html, not application/json
+        assert "application/json" not in res_openapi.headers.get("content-type", "")
+    else:
+        assert res_openapi.status_code in (404, 405)

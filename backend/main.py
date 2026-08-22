@@ -63,7 +63,13 @@ logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
 
 settings = get_settings()
 
-app = FastAPI(title=settings.app_name, version="0.1.0")
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 app.state.ready = False
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
