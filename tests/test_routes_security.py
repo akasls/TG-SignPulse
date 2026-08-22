@@ -111,3 +111,37 @@ def test_totp_reset_requires_password(client_with_user):
 
     db.refresh(user)
     assert user.totp_secret is None
+
+
+def test_login_flow_with_and_without_2fa(client_with_user):
+    import pyotp
+    client, headers, user, db = client_with_user
+
+    # 1. Login without 2FA
+    user.totp_secret = None
+    db.commit()
+
+    res = client.post("/api/auth/login", json={"username": user.username, "password": "ValidPassword123!"})
+    assert res.status_code == 200
+    assert "access_token" in res.json()
+
+    # 2. Login with 2FA enabled
+    secret = pyotp.random_base32()
+    user.totp_secret = secret
+    db.commit()
+
+    # Without TOTP code
+    res_no_totp = client.post("/api/auth/login", json={"username": user.username, "password": "ValidPassword123!"})
+    assert res_no_totp.status_code == 401
+    assert res_no_totp.json()["detail"] == "TOTP_REQUIRED_OR_INVALID"
+
+    # With invalid TOTP code
+    res_bad_totp = client.post("/api/auth/login", json={"username": user.username, "password": "ValidPassword123!", "totp_code": "000000"})
+    assert res_bad_totp.status_code == 401
+    assert res_bad_totp.json()["detail"] == "TOTP_REQUIRED_OR_INVALID"
+
+    # With valid TOTP code
+    valid_code = pyotp.TOTP(secret).now()
+    res_ok_totp = client.post("/api/auth/login", json={"username": user.username, "password": "ValidPassword123!", "totp_code": valid_code})
+    assert res_ok_totp.status_code == 200
+    assert "access_token" in res_ok_totp.json()

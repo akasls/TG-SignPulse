@@ -138,20 +138,18 @@ def login(
                 detail="TOTP_REQUIRED_OR_INVALID",
             )
     rate_limiter.reset("auth.login", login_key)
-    expires_hours = settings.access_token_expire_hours
     access_token = create_access_token(
         data={"sub": user.username},
-        expires_delta=timedelta(hours=expires_hours) if expires_hours else None,
     )
     try:
         from backend.services.config import get_config_service
         from backend.services.push_notifications import send_login_notification
 
         ip_address = _resolve_request_ip(request)
-        settings = get_config_service().get_global_settings()
+        config_settings = get_config_service().get_global_settings()
         background_tasks.add_task(
             send_login_notification,
-            settings,
+            config_settings,
             username=user.username,
             ip_address=ip_address,
         )
